@@ -1,0 +1,34 @@
+package preoyectRecuperacion;
+
+
+	import java.io.*;
+
+	public class GestorArchivo {
+
+	    private static final String NOMBRE_ARCHIVO = "estado_caja.dat";
+
+	    public static void guardar(CajaDiaria caja) {
+	        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(NOMBRE_ARCHIVO))) {
+	            oos.writeObject(caja);
+	        } catch (IOException e) {
+	            System.err.println("ALERTA: No se pudo autoguardar el estado de la caja.");
+	            e.printStackTrace();
+	        }
+	    }
+
+	    public static CajaDiaria cargar() {
+	        File archivo = new File(NOMBRE_ARCHIVO);
+	        if (archivo.exists()) {
+	            try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(NOMBRE_ARCHIVO))) {
+	                return (CajaDiaria) ois.readObject();
+	            } catch (IOException | ClassNotFoundException e) {
+	                System.err.println("ALERTA: No se pudo cargar el estado anterior. Se creará una caja nueva.");
+	                return null;
+	            }
+	        }
+	        return null; // No hay archivo de guardado
+	    }
+
+	
+	}
+
