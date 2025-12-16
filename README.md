@@ -75,12 +75,16 @@ Clonar el repositorio:
 
 Bash
 
-git clone [https://github.com/tu-usuario/tu-repositorio.git](https://github.com/tu-usuario/tu-repositorio.git)
+## Instalación
+
+Clona este repositorio:
+bash
+git clone [https://github.com/11thiagolopez/sistema-Caja-D13-1.5.git](https://github.com/11thiagolopez/sistema-Caja-D13-1.5.git)
 Navegar al directorio:
 
 Bash
 
-cd tu-repositorio/src/preoyectRecuperacion
+cd sistema-Caja-D13-1.5
 Compilar el código:
 
 Bash
@@ -115,10 +119,3 @@ Opción 6: Cierra el programa y guarda automáticamente los cambios en disco.
 
 Hecho con ☕ y Java.
 
-
-### 💡 Un par de sugerencias extra:
-
-1.  **En el paso de "Instalación":** Revisa que la ruta `cd tu-repositorio/src/preoyectRecuperacion` sea la correcta en tu GitHub real. Si la carpeta se llama diferente, cámbiala antes de subirlo.
-2.  **Enlace al repositorio:** En el comando `git clone`, no olvides reemplazar `tu-usuario/tu-repositorio` por la URL real de tu GitHub.
-
-¿Te gustaría que agreguemos una sección de "Próximas mejoras" (roadmap) para mostrar ambición de crecimiento del proyecto?
