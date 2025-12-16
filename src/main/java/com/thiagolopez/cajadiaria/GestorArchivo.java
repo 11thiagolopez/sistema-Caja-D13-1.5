@@ -1,5 +1,4 @@
-package preoyectRecuperacion;
-
+package com.thiagolopez.cajadiaria;
 
 	import java.io.*;
 

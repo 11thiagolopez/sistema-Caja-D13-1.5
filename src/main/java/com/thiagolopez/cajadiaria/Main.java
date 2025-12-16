@@ -1,5 +1,4 @@
-package preoyectRecuperacion;
-
+package com.thiagolopez.cajadiaria;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;

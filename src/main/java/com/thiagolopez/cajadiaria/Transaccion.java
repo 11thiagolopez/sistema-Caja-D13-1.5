@@ -1,4 +1,4 @@
-package preoyectRecuperacion;
+package com.thiagolopez.cajadiaria;
 import java.io.Serializable;
 
 public class Transaccion implements Serializable {
