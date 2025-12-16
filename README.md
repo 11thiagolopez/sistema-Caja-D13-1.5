@@ -95,27 +95,24 @@ Ejecutar la aplicación:
 Bash
 
 java Main
-💻 Uso
-Al iniciar, el sistema cargará el estado previo o solicitará un monto inicial. El menú principal permite la navegación fluida:
+## 💻 Uso
 
-Plaintext
+La aplicación está diseñada para ser rápida. No utiliza un menú numérico lento, sino un flujo de entrada directo optimizado para cajeros:
 
-========================================
-     SISTEMA DE GESTIÓN DE CAJA
-========================================
-1. Registrar Venta
-2. Realizar Retiro de Efectivo
-3. Realizar Retiro por Transferencia
-4. Ver Reporte de Caja
-5. Ver Detalle de Ventas
-6. Salir
-========================================
-Seleccione una opción:
-Opción 1: Solicita producto, precio y medio de pago.
+1. **Venta Rápida:** Simplemente escribe el precio y presiona Enter.
+   * El sistema te pedirá el medio de pago y el nombre del producto.
+2. **Retiro de Dinero:** Escribe `R` (o `r`) y presiona Enter.
+   * Selecciona si es Efectivo (E) o Transferencia (T).
+3. **Salir:** Escribe `0` para cerrar la caja y generar el reporte final.
 
-Opción 4: Muestra el balance general (Auditoría).
-
-Opción 6: Cierra el programa y guarda automáticamente los cambios en disco.
+**Ejemplo de flujo:**
+> 📦 Ingrese precio del producto ($) o (R) para retirar dinero:
+> 1500.50
+> 💳 Ingrese medio de pago 1/ef 2/trans 3/tarj:
+> 1
+> 🏷️ Ingrese nombre del producto vendido:
+> Bebida Energética
+> ✅ Venta registrada.
 
 Hecho con ☕ y Java.
 
