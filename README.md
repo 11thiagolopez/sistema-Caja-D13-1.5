@@ -1,12 +1,15 @@
 # Sistema de Gestión de Caja Diaria 💰
 
-![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white) ![Console](https://img.shields.io/badge/Interface-Console-4EAA25?style=for-the-badge)
+[![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com/)
+[![Maven](https://img.shields.io/badge/Maven-C71A36?style=for-the-badge&logo=apache-maven&logoColor=white)](https://maven.apache.org/)
+[![Console](https://img.shields.io/badge/Interface-Console-4EAA25?style=for-the-badge)]()
+[![Descargar Release](https://img.shields.io/badge/⬇️_Descargar-v1.0_Estable-blue?style=for-the-badge&logo=github)](https://github.com/11thiagolopez/sistema-Caja-D13-1.5/releases/tag/v1.0.0)
 
 ## 📖 Descripción del Proyecto
 
 Aplicación de consola desarrollada en **Java** para la gestión eficiente del flujo de caja diario en un comercio. El sistema automatiza el registro de operaciones (ventas, retiros, transferencias) y garantiza la integridad de los datos financieros al final del día.
 
-El proyecto sigue estrictamente los principios de la **Programación Orientada a Objetos (POO)**, encapsulando la lógica de negocio en clases definidas y utilizando patrones para la persistencia de datos mediante serialización.
+El proyecto sigue estrictamente los principios de la **Programación Orientada a Objetos (POO)** y utiliza **Maven** para la gestión de dependencias y construcción.
 
 ## ✨ Características Principales
 
@@ -23,96 +26,85 @@ El proyecto sigue estrictamente los principios de la **Programación Orientada a
 
 ## 🏗️ Arquitectura del Sistema
 
-El software se estructura en 4 componentes principales, cada uno con responsabilidad única (SRP):
+El software se estructura en componentes con responsabilidad única (SRP), organizados bajo el paquete `com.thiagolopez.cajadiaria`:
 
 ### 1. `Main`
-Punto de entrada de la aplicación. Orquesta la interacción entre el usuario y el sistema, gestiona el menú interactivo y coordina la carga inicial de datos.
+Punto de entrada. Orquesta la interacción usuario-sistema y gestiona el bucle principal.
 
 ### 2. `CajaDiaria` (Lógica de Negocio)
-El núcleo del sistema. Centraliza las operaciones y cálculos. Implementa `Serializable` para la persistencia.
+El núcleo del sistema. Centraliza operaciones y cálculos.
 
 ```java
 public class CajaDiaria implements Serializable {
     private double comienzoCaja;
     private List<Transaccion> transacciones;
-
-    // Métodos para registrar transacciones y calcular totales
-    // Uso de Streams para reportes
+    // Métodos con Streams para reportes en tiempo real
 }
 3. Transaccion (Modelo)
-Clase inmutable que modela cada operación. Utiliza Enums para garantizar la integridad de los tipos de datos (evitando errores de "strings mágicos").
+Clase inmutable que modela cada operación usando Enums para seguridad de tipos.
 
 Java
 
 public class Transaccion implements Serializable {
     public enum Tipo { VENTA, RETIRO }
     public enum MedioDePago { EFECTIVO, TRANSFERENCIA, TARJETA }
-
-    private final Tipo tipo;
-    private final MedioDePago medioDePago;
-    private final double monto;
-    private final String nombreProducto;
-
-    // Constructores y getters
+    // ...
 }
 4. GestorArchivo (Persistencia)
-Clase utilitaria (static) encargada del I/O. Maneja la serialización y deserialización de objetos, gestionando excepciones de entrada/salida.
+Maneja la serialización y deserialización de objetos (estado_caja.dat).
 
-Java
-
-public class GestorArchivo {
-    private static final String NOMBRE_ARCHIVO = "estado_caja.dat";
-
-    public static void guardar(CajaDiaria caja) { /* ... */ }
-    public static CajaDiaria cargar() { /* ... */ }
-}
 🚀 Instalación y Ejecución
-Requisitos Previos
-Java Development Kit (JDK) 8 o superior.
+Tienes dos formas de usar el programa:
 
-Pasos
+Opción A: Ejecutar el Binario (Recomendado para probar)
+No necesitas compilar nada. Solo necesitas tener Java instalado.
+
+Descarga el archivo .jar desde la sección de Releases.
+
+Abre tu terminal en la carpeta de descargas.
+
+Ejecuta:
+
+Bash
+
+java -jar sistema-gestion-caja-1.0-SNAPSHOT.jar
+
+Opción B: Compilar desde el Código Fuente (Maven)
+Si quieres ver el código y compilarlo tú mismo:
+
 Clonar el repositorio:
 
 Bash
 
-## Instalación
-
-Clona este repositorio:
-bash
 git clone [https://github.com/11thiagolopez/sistema-Caja-D13-1.5.git](https://github.com/11thiagolopez/sistema-Caja-D13-1.5.git)
-Navegar al directorio:
-
-Bash
-
 cd sistema-Caja-D13-1.5
-Compilar el código:
+Compilar con Maven:
 
 Bash
 
-javac *.java
-Ejecutar la aplicación:
+mvn clean package
+Ejecutar:
 
 Bash
 
-java Main
-## 💻 Uso
+java -jar target/sistema-gestion-caja-1.0-SNAPSHOT.jar
 
-La aplicación está diseñada para ser rápida. No utiliza un menú numérico lento, sino un flujo de entrada directo optimizado para cajeros:
+💻 Uso
+La aplicación está diseñada para ser rápida (Flujo de Cajero):
 
-1. **Venta Rápida:** Simplemente escribe el precio y presiona Enter.
-   * El sistema te pedirá el medio de pago y el nombre del producto.
-2. **Retiro de Dinero:** Escribe `R` (o `r`) y presiona Enter.
-   * Selecciona si es Efectivo (E) o Transferencia (T).
-3. **Salir:** Escribe `0` para cerrar la caja y generar el reporte final.
+Venta Rápida: Simplemente escribe el precio y presiona Enter.
 
-**Ejemplo de flujo:**
-> 📦 Ingrese precio del producto ($) o (R) para retirar dinero:
-> 1500.50
-> 💳 Ingrese medio de pago 1/ef 2/trans 3/tarj:
-> 1
-> 🏷️ Ingrese nombre del producto vendido:
-> Bebida Energética
-> ✅ Venta registrada.
+El sistema te pedirá el medio de pago y el nombre del producto.
+
+Retiro de Dinero: Escribe R (o r) y presiona Enter.
+
+Selecciona si es Efectivo (E) o Transferencia (T).
+
+Salir: Escribe 0 para cerrar la caja y generar el reporte final.
+
+Ejemplo de flujo:
+
+📦 Ingrese precio del producto ($) o (R) para retirar dinero: 1500.50 💳 Ingrese medio de pago 1/ef 2/trans 3/tarj: 1 🏷️ Ingrese nombre del producto vendido: Bebida Energética ✅ Venta registrada.
 
 Hecho con ☕ y Java.
 
