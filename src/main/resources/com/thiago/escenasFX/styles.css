@@ -1,0 +1,19 @@
+/* Estilo para el botón de Cargar */
+.button-cargar {
+    -fx-background-color: #27ae60;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 5;
+}
+
+/* Efecto cuando pasas el mouse */
+.button-cargar:hover {
+    -fx-background-color: #2ecc71;
+    -fx-cursor: hand;
+}
+
+/* Estilo para que la tabla no se vea tan gris */
+.table-view {
+    -fx-background-color: transparent;
+    -fx-border-color: #d3d3d3;
+}
