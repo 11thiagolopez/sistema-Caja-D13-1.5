@@ -4,6 +4,8 @@ import com.thiago.escenasFX.App;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.AnchorPane;
 import utils.Paths;
 
 public class Controller2 {
@@ -14,4 +16,5 @@ public class Controller2 {
 			App.app.setScene(Paths.SCENA1);
 
 	    }
+	   
 }
