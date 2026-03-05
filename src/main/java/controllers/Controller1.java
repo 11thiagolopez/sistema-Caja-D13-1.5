@@ -303,7 +303,10 @@ public class Controller1 {
 	    writer.println("┌──────────────────────────────────────────┐");
 	    writer.printf("│ %-25s │ %15.2f │\n", "💰 Caja inicial", caja.getComienzoCaja());
 	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Efectivo", caja.getVentasEfectivo());
+	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Transferencia", caja.getVentasTransferencia());
+	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Tarjeta", caja.getVentasTarjeta());
 	    writer.printf("│ %-25s │ %15.2f │\n", "💸 Retiros Efectivo", caja.getRetirosEfectivo());
+	    writer.printf("│ %-25s │ %15.2f │\n", "💸 Retiros Transferencia", caja.getRetirosTransferencia());
 	    writer.println("├──────────────────────────────────────────┤");
 	    writer.printf("│ %-25s │ %15.2f │\n", "🏦 CAJA FINAL (Efectivo)", caja.getCajaFinal());
 	    writer.println("└──────────────────────────────────────────┘");

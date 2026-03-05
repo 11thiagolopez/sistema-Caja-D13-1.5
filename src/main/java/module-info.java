@@ -4,6 +4,7 @@ module com.thiago.escenasFX {
     requires javafx.fxml;
     requires transitive javafx.graphics;
 	requires javafx.base;
+	requires java.sql;
 
     // 2. Permitimos que el cargador de FXML entre a tu carpeta de controladores
     opens controllers to javafx.fxml;
