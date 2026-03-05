@@ -27,8 +27,8 @@
             </Label>
             <MenuButton layoutY="38.0" mnemonicParsing="false" prefHeight="25.0" prefWidth="100.0" text="Menu">
               <items>
-                <MenuItem mnemonicParsing="false" text="Exportar TXT" />
-                <MenuItem mnemonicParsing="false" text="Gastos" />
+                  <MenuItem mnemonicParsing="false" onAction="#abrirVentanaRetiro" text="Retirar Dinero" />
+                <MenuItem mnemonicParsing="false" onAction="#exportarTXT" text="Exportar TXT" />
                   <MenuItem mnemonicParsing="false" text="Horas Extra" />
               </items>
             </MenuButton>

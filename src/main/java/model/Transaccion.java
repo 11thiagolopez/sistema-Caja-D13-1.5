@@ -12,7 +12,7 @@ public class Transaccion  implements Serializable {
 		    private final Tipo tipo;
 		    private final MedioDePago medioDePago;
 		    private final double monto;
-		    private final String nombreProducto; // Será null para los retiros
+		    private final String nombreProducto;
 
 		    // Constructor para Ventas
 		    public Transaccion(MedioDePago medio, double monto, String producto) {
@@ -22,15 +22,16 @@ public class Transaccion  implements Serializable {
 		        this.nombreProducto = producto;
 		    }
 
-		    // Constructor para Retiros
-		    public Transaccion(Tipo tipo, MedioDePago medio, double monto) {
+		  
+		 // Constructor para Retiros (Modificado para aceptar descripción)
+		    public Transaccion(Tipo tipo, MedioDePago medio, double monto, String motivo) {
 		        if (tipo == Tipo.VENTA) {
 		            throw new IllegalArgumentException("Usa el otro constructor para ventas.");
 		        }
 		        this.tipo = tipo;
 		        this.medioDePago = medio;
 		        this.monto = monto;
-		        this.nombreProducto = null;
+		        this.nombreProducto = motivo; // Guardamos el "por qué" aquí
 		    }
 
 		    // Getters para acceder a los datos desde otras clases
@@ -38,6 +39,7 @@ public class Transaccion  implements Serializable {
 		    public MedioDePago getMedioDePago() { return medioDePago; }
 		    public double getMonto() { return monto; }
 		    public String getNombreProducto() { return nombreProducto; }
+		    
 		}
 
 

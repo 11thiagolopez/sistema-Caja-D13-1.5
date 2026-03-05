@@ -25,19 +25,19 @@ public class CajaDiaria implements Serializable {
 		        this.transacciones.add(new Transaccion(medio, precio, nombreProducto));
 		    }
 
-		    public boolean realizarRetiroEfectivo(double monto) {
+		    public boolean realizarRetiroEfectivo(double monto, String motivo) {
 		        double efectivoDisponible = getComienzoCaja() + getVentasEfectivo() - getRetirosEfectivo();
 		        if (monto > 0 && monto <= efectivoDisponible) {
-		            this.transacciones.add(new Transaccion(Transaccion.Tipo.RETIRO, Transaccion.MedioDePago.EFECTIVO, monto));
+		            this.transacciones.add(new Transaccion(Transaccion.Tipo.RETIRO, Transaccion.MedioDePago.EFECTIVO, monto, motivo));
 		            return true;
 		        }
 		        return false;
 		    }
 
-		    public boolean realizarRetiroTransferencia(double monto) {
+		    public boolean realizarRetiroTransferencia(double monto, String motivo) {
 		        double transferenciaDisponible = getVentasTransferencia() - getRetirosTransferencia();
 		        if (monto > 0 && monto <= transferenciaDisponible) {
-		            this.transacciones.add(new Transaccion(Transaccion.Tipo.RETIRO, Transaccion.MedioDePago.TRANSFERENCIA, monto));
+		            this.transacciones.add(new Transaccion(Transaccion.Tipo.RETIRO, Transaccion.MedioDePago.TRANSFERENCIA, monto, motivo));
 		            return true;
 		        }
 		        return false;
@@ -47,7 +47,15 @@ public class CajaDiaria implements Serializable {
 		    
 		    public double getComienzoCaja() { return comienzoCaja; }
 
-		    // Este método filtra la lista y suma solo las ventas en efectivo.
+		    public List<Transaccion> getTransacciones() {
+				return transacciones;
+			}
+
+			public void setTransacciones(List<Transaccion> transacciones) {
+				this.transacciones = transacciones;
+			}
+
+			// Este método filtra la lista y suma solo las ventas en efectivo.
 		    public double getVentasEfectivo() {
 		        return transacciones.stream()
 		                .filter(t -> t.getTipo() == Transaccion.Tipo.VENTA && t.getMedioDePago() == Transaccion.MedioDePago.EFECTIVO)

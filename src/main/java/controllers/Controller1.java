@@ -1,21 +1,34 @@
 package controllers;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.URL;
+import java.text.SimpleDateFormat;
+
 import persistence.GestorArchivo; // Cambiá 'persistence' por el nombre real de tu paquete
 import model.CajaDiaria;
+import model.Transaccion;
+
+import java.util.Date;
+import java.util.Locale;
 import java.util.ResourceBundle;
 
 import com.thiago.escenasFX.App;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import model.CajaDiaria;
 import model.Venta;
@@ -167,4 +180,135 @@ public class Controller1 {
 
 		txtDescripcion.requestFocus();
 	}
-}
+	@FXML
+	private void abrirVentanaRetiro() {
+	    // 1. Configuración del Diálogo
+	    Dialog<ButtonType> dialog = new Dialog<>();
+	    dialog.setTitle("Retiro de Dinero - Sistema D13");
+	    dialog.setHeaderText("Complete los datos del retiro");
+
+	    // 2. Componentes: Monto, Motivo y el ComboBox que pediste
+	    TextField txtMonto = new TextField();
+	    txtMonto.setPromptText("Monto ($)");
+	    
+	    TextField txtMotivo = new TextField();
+	    txtMotivo.setPromptText("Descripción (ej: Pago Flete)");
+
+	    ComboBox<String> cbTipoRetiro = new ComboBox<>();
+	    cbTipoRetiro.getItems().addAll("Efectivo", "Transferencia");
+	    cbTipoRetiro.getSelectionModel().select(0); // Por defecto Efectivo
+
+	    // 3. Layout del Diálogo
+	    VBox layout = new VBox(10, 
+	        new Label("Monto:"), txtMonto, 
+	        new Label("Motivo/Descripción:"), txtMotivo,
+	        new Label("Medio de Retiro:"), cbTipoRetiro
+	    );
+	    layout.setPadding(new Insets(20));
+	    dialog.getDialogPane().setContent(layout);
+	    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+	    // 4. Lógica al presionar OK
+	    dialog.showAndWait().ifPresent(response -> {
+	        if (response == ButtonType.OK) {
+	            try {
+	                double monto = Double.parseDouble(txtMonto.getText());
+	                String motivo = txtMotivo.getText();
+	                String tipo = cbTipoRetiro.getValue();
+
+	                boolean exito = false;
+	                // Usamos la lógica que ya tenías en tu clase CajaDiaria
+	                if (tipo.equals("Efectivo")) {
+	                    exito = caja.realizarRetiroEfectivo(monto, motivo);
+	                } else {
+	                    exito = caja.realizarRetiroTransferencia(monto, motivo);
+	                }
+
+	                if (exito) {
+	                    GestorArchivo.guardar(caja);
+	                    System.out.println("✅ Retiro guardado: " + motivo);
+	                } else {
+	                    System.out.println("❌ Fondos insuficientes para el retiro.");
+	                }
+	            } catch (NumberFormatException e) {
+	                System.out.println("❌ Error: Ingrese un monto numérico válido.");
+	            }
+	        }
+	    });
+	}
+	
+	@FXML
+	void exportarTXT(ActionEvent event) {
+	    // 1. Cargamos la caja desde el archivo serializable
+	    CajaDiaria caja = GestorArchivo.cargar();
+	    
+	    if (caja != null) {
+	        exportarReporteTXT(caja);
+	        System.out.println("✅ Reporte generado con éxito.");
+	        
+	        // Cierre opcional: Si querés que el programa se cierre al exportar
+	        // System.exit(0); 
+	    } else {
+	        System.out.println("❌ No hay datos de caja para exportar.");
+	    }
+	}
+
+	private void exportarReporteTXT(CajaDiaria caja) {
+	    try {
+	        SimpleDateFormat dateFormatFile = new SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy - HH_mm_ss", new Locale("es", "ES"));
+	        String nombreArchivo = "reporte_caja_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".txt";
+	        PrintWriter writer = new PrintWriter(new FileWriter(nombreArchivo));
+
+	        // --- ENCABEZADO ---
+	        writer.println("╔══════════════════════════════════════════════╗");
+	        writer.println("║   REPORTE DE CAJA - SISTEMA D13");
+	        writer.println("║   Fecha: " + dateFormatFile.format(new Date()));
+	        writer.println("╚══════════════════════════════════════════════╝\n");
+
+	        // --- DETALLE DE VENTAS ---
+	        writer.println("📦 DETALLE DE PRODUCTOS VENDIDOS:");
+	        writer.println("┌──────────────────────────────────────────────┐");
+	        for (String detalle : caja.getDetalleVentas()) {
+	            writer.println("│ " + detalle);
+	        }
+	        writer.println("└──────────────────────────────────────────────┘\n");
+
+	        // --- DETALLE DE RETIROS (Aquí agregamos la descripción/motivo) ---
+	        writer.println("💸 DETALLE DE RETIROS Y SALIDAS:");
+	        writer.println("┌──────────────────────────────────────────────┐");
+	        // Nota: Asumimos que agregaste un getter para transacciones o usamos lógica interna
+	        for (Transaccion t : caja.getTransacciones()) {
+	            if (t.getTipo() == Transaccion.Tipo.RETIRO) {
+	                // Usamos t.getNombreProducto() porque ahí guardamos el motivo
+	                writer.printf("│ Motivo: %-20s | Monto: $%10.2f | Medio: %s\n", 
+	                    t.getNombreProducto(), t.getMonto(), t.getMedioDePago());
+	            }
+	        }
+	        writer.println("└──────────────────────────────────────────────┘\n");
+
+	        // --- RESUMEN DE TOTALES ---
+	        escribirSeccionTotales(writer, caja);
+
+	        writer.close();
+	        System.out.println("✅ Reporte exportado como: " + nombreArchivo);
+
+	    } catch (IOException e) {
+	        System.out.println("❌ Error al crear el archivo: " + e.getMessage());
+	    }
+	}
+
+	// Método auxiliar para no repetir código de totales
+	private void escribirSeccionTotales(PrintWriter writer, CajaDiaria caja) {
+	    writer.println("  💰 RESUMEN FINAL:");
+	    writer.println("┌──────────────────────────────────────────┐");
+	    writer.printf("│ %-25s │ %15.2f │\n", "💰 Caja inicial", caja.getComienzoCaja());
+	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Efectivo", caja.getVentasEfectivo());
+	    writer.printf("│ %-25s │ %15.2f │\n", "💸 Retiros Efectivo", caja.getRetirosEfectivo());
+	    writer.println("├──────────────────────────────────────────┤");
+	    writer.printf("│ %-25s │ %15.2f │\n", "🏦 CAJA FINAL (Efectivo)", caja.getCajaFinal());
+	    writer.println("└──────────────────────────────────────────┘");
+	}
+		  
+		
+    }
+
