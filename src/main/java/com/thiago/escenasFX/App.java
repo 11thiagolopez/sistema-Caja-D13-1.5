@@ -1,47 +1,40 @@
 package com.thiago.escenasFX;
 
-import java.io.IOException;
-
 import javafx.application.Application;
-import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import utils.Paths;
+import java.io.IOException;
 
 public class App extends Application {
 
-	public static App app;
-	private Stage stageWindow;
+    // 1. Guardamos el stage de forma estática para que sea accesible desde todo el sistema
+    private static Stage stage;
 
-	public static void main(String[] args) {
-		launch();
-	}
+    @Override
+    public void start(Stage primaryStage) throws IOException {
+        stage = primaryStage; // Guardamos la referencia
+        stage.setTitle("Sistema D13 - Gestión de Caja");
+        
+        // Arrancamos con la pantalla de Monto Inicial (Scene2)
+        setRoot(utils.Paths.SCENA2); 
+        stage.show();
+    }
 
-	public void start(Stage stage) {
-		app = this;
-		stageWindow = stage;
-		setScene(Paths.SCENA1);
+    public static void setRoot(String fxmlPath) throws IOException {
+        // Usamos directamente fxmlPath porque ya viene completo desde la clase Paths
+        FXMLLoader fxmlLoader = new FXMLLoader(App.class.getResource(fxmlPath)); 
+        Parent root = fxmlLoader.load();
+        
+        if (stage.getScene() == null) {
+            stage.setScene(new Scene(root));
+        } else {
+            stage.getScene().setRoot(root);
+        }
+    }
 
-	}
-
-	public void setScene(String path) {
-		FXMLLoader loader = new FXMLLoader(getClass().getResource(path));
-		try {
-			Parent root = loader.load();
-			Scene scene = new Scene(root);
-			scene.getStylesheets().add(getClass().getResource("/com/thiago/escenasFX/styles.css").toExternalForm());
-			stageWindow.setScene(scene);
-			stageWindow.show();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
+    public static void main(String[] args) {
+        launch();
+    }
 }

@@ -7,6 +7,7 @@ import java.net.URL;
 import java.text.SimpleDateFormat;
 
 import persistence.GestorArchivo; // Cambiá 'persistence' por el nombre real de tu paquete
+import persistence.ConexionDB;
 import model.CajaDiaria;
 import model.Transaccion;
 
@@ -74,6 +75,7 @@ public class Controller1 {
 	@FXML
 	public void initialize() {
 		caja = GestorArchivo.cargar();
+		ConexionDB.crearTablas();
 
 		if (caja == null) {
 			caja = new CajaDiaria(0); // Si no hay archivo, creamos una nueva con $0 inicial
@@ -149,26 +151,23 @@ public class Controller1 {
 	}
 
 	@FXML
-	void confirmarVenta(ActionEvent event) {
-		if (tablaVentas.getItems().isEmpty())
-			return;
+	private void confirmarVenta() {
+	    if (tablaVentas.getItems().isEmpty()) return;
 
-		// 3. Procesamos los datos de la tabla y los metemos en la lógica de CajaDiaria
-		int medioInt = convertirMedioAInt(cbMedioPago.getValue());
+	    String medioPago = cbMedioPago.getValue();
+	    int medioInt = convertirMedioAInt(medioPago); // Tu método del switch
 
-		for (Venta v : tablaVentas.getItems()) {
-			// El método registrarVenta ahora vive adentro de esta acción
-			double totalProducto = v.getPrecio() * v.getCantidad();
-			caja.registrarVenta(totalProducto, medioInt, v.getDescripcion());
-		}
+	    for (Venta v : tablaVentas.getItems()) {
+	        // 1. Guardamos en la Base de Datos Compartida
+	        ConexionDB.insertarVenta(v.getDescripcion(), v.getCantidad(), v.getPrecio(), medioPago, "VENTA");
+	        
+	        // 2. Registramos en la lógica de CajaDiaria (para el reporte TXT y labels)
+	        caja.registrarVenta(v.getPrecio() * v.getCantidad(), medioInt, v.getDescripcion());
+	    }
 
-		// 4. Guardamos el archivo Serializable (Autoguardado)
-		GestorArchivo.guardar(caja);
-
-		// 5. Limpiamos la pantalla para la siguiente venta
-		limpiarCampos();
-		resetearInterfaz();
-		System.out.println("✅ Venta confirmada y guardada en el archivo .dat");
+	    // 3. Limpiamos y actualizamos interfaz
+	    resetearInterfaz();
+	    System.out.println("🎯 Sincronización completa con la base de datos.");
 	}
 
 	private void resetearInterfaz() {

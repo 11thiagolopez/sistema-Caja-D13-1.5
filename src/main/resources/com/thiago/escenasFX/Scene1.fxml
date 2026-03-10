@@ -49,8 +49,8 @@
                   <Glow />
                </effect>
             </Label>
-            <Button mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="43.0" prefWidth="69.0" style="-fx-background-color: #DC143C; -fx-background-radius: 5;" text="Cancelar" />
-            <Button mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="45.0" prefWidth="69.0" style="-fx-background-color: #228B22; -fx-background-radius: 5;" text="Confirmar" />
+            <Button mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="43.0" prefWidth="69.0" style="-fx-background-color: #DC143C; -fx-background-radius: 5;" text="Cancelar" textFill="WHITE" />
+            <Button mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="45.0" prefWidth="69.0" style="-fx-background-color: #228B22; -fx-background-radius: 5;" text="Confirmar" textFill="WHITE" />
          </children>
          <BorderPane.margin>
             <Insets />
