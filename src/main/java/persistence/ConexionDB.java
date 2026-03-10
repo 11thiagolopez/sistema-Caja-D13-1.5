@@ -5,6 +5,7 @@
 import java.sql.Connection;
 	import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 	import java.sql.Statement;
 
@@ -26,6 +27,19 @@ import java.sql.SQLException;
 	            System.err.println("❌ Error al conectar: " + e.getMessage());
 	            return null;
 	        }
+	    }
+	    public static Double obtenerMontoInicialHoy() {
+	        // Buscamos una sesión abierta con la fecha de hoy
+	        String sql = "SELECT monto_inicial FROM sesiones WHERE fecha = date('now','localtime') AND estado = 'ABIERTA' LIMIT 1";
+
+	        try (Connection conn = conectar(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+	            if (rs.next()) {
+	                return rs.getDouble("monto_inicial"); // Encontró una sesión
+	            }
+	        } catch (SQLException e) {
+	            System.err.println("❌ Error al verificar sesión: " + e.getMessage());
+	        }
+	        return null; // No hay sesión abierta hoy
 	    }
 
 	    public static void crearTablas() {
