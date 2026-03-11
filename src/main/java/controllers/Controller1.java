@@ -147,8 +147,12 @@ public class Controller1 {
 
 	@FXML
 	void cancelarVenta(ActionEvent event) {
-
-	}
+		double totalInicial= 0.00;
+		Venta seleccionada = tablaVentas.getSelectionModel().getSelectedItem();
+		limpiarCampos();
+		tablaVentas.getItems().remove(seleccionada);
+		lblTotal.setText(String.format("$ %.2f", totalInicial));
+}
 
 	@FXML
 	private void confirmarVenta() {
