@@ -3,20 +3,10 @@ package controllers;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.URL;
 import java.text.SimpleDateFormat;
-
-import persistence.GestorArchivo; // Cambiá 'persistence' por el nombre real de tu paquete
-import persistence.ConexionDB;
-import model.CajaDiaria;
-import model.Transaccion;
-
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
-import java.util.ResourceBundle;
-
-import com.thiago.escenasFX.App;
-
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -28,77 +18,48 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import model.CajaDiaria;
 import model.Venta;
-import utils.Paths;
+import persistence.ConexionDB;
 
 public class Controller1 {
 
 	private CajaDiaria caja;
 
 	@FXML
-	private TableColumn<Venta, String> colPago;
-
+	private TableView<Venta> tablaVentas;
+	@FXML
+	private TableColumn<Venta, String> colDescripcion, colPago;
 	@FXML
 	private TableColumn<Venta, Integer> colCantidad;
-
-	@FXML
-	private TableColumn<Venta, String> colDescripcion;
-
 	@FXML
 	private TableColumn<Venta, Double> colPrecio;
 
 	@FXML
-	private TableView<Venta> tablaVentas;
-
-	@FXML
-	private AnchorPane paneSuperior;
-
-	@FXML
 	private ComboBox<String> cbMedioPago;
-
 	@FXML
-	private TextField txtCantidad;
-
-	@FXML
-	private TextField txtDescripcion;
-
-	@FXML
-	private TextField txtPrecio;
-
+	private TextField txtCantidad, txtDescripcion, txtPrecio;
 	@FXML
 	private Label lblTotal;
 
 	@FXML
 	public void initialize() {
-		caja = GestorArchivo.cargar();
+		// 1. Preparamos la Base de Datos
 		ConexionDB.crearTablas();
 
-		if (caja == null) {
-			caja = new CajaDiaria(0); // Si no hay archivo, creamos una nueva con $0 inicial
-		}
-		cbMedioPago.getItems().addAll("Efectivo", "Transferencia", "Tarjeta");
+		// 2. Buscamos el monto inicial de hoy en SQLite
+		double montoDeHoy = ConexionDB.obtenerMontoInicialHoy();
+		this.caja = new CajaDiaria(montoDeHoy);
 
-		// Dejamos "Efectivo" seleccionado por defecto para ahorrar un clic al vendedor
+		// 3. Configuramos la interfaz
+		cbMedioPago.getItems().addAll("Efectivo", "Transferencia", "Tarjeta");
 		cbMedioPago.getSelectionModel().select("Efectivo");
 
 		colCantidad.setCellValueFactory(new PropertyValueFactory<>("cantidad"));
 		colDescripcion.setCellValueFactory(new PropertyValueFactory<>("descripcion"));
 		colPrecio.setCellValueFactory(new PropertyValueFactory<>("precio"));
 		colPago.setCellValueFactory(new PropertyValueFactory<>("medioPago"));
-
-	}
-
-	private int convertirMedioAInt(String medio) {
-		return switch (medio) {
-		case "Efectivo" -> 1;
-		case "Transferencia" -> 2;
-		case "Tarjeta" -> 3;
-		default -> 1;
-		};
 	}
 
 	@FXML
@@ -107,32 +68,156 @@ public class Controller1 {
 			String desc = txtDescripcion.getText();
 			int cant = Integer.parseInt(txtCantidad.getText());
 			double prec = Double.parseDouble(txtPrecio.getText());
+			String medio = cbMedioPago.getValue();
 
-			// Capturamos el texto seleccionado (Efectivo, Transferencia, etc.)
-			String medioSeleccionado = cbMedioPago.getValue();
-
-			// Creamos la venta (Si querés ver el medio en la tabla, agregalo a tu clase
-			// Venta)
-			Venta v = new Venta(desc, cant, prec, medioSeleccionado);
+			// Agregamos a la tabla visual (todavía no a la DB)
+			Venta v = new Venta(desc, cant, prec, medio);
 			tablaVentas.getItems().add(0, v);
 
-			actualizarTotal();
+			actualizarTotalUI();
 			limpiarCampos();
-		} catch (Exception e) {
-			System.out.println("Error en la carga");
+		} catch (NumberFormatException e) {
+			System.out.println("⚠️ Error: Verifique que los números sean válidos.");
 		}
 	}
 
-	private void limpiarCampos() {
-		txtDescripcion.clear();
-		txtCantidad.clear();
-		txtPrecio.clear();
+	@FXML
+	private void confirmarVenta() {
+		if (tablaVentas.getItems().isEmpty())
+			return;
 
-		// El cursor vuelve solo a la descripción para la siguiente venta
-		txtDescripcion.requestFocus();
+		for (Venta v : tablaVentas.getItems()) {
+			// 1. Guardamos en SQLite de forma permanente
+			ConexionDB.insertarVenta(v.getDescripcion(), v.getCantidad(), v.getPrecio(), v.getMedioPago(), "VENTA");
+
+			// 2. Registramos en la lógica de CajaDiaria para el conteo actual
+			caja.registrarVenta(v.getPrecio() * v.getCantidad(), convertirMedioAInt(v.getMedioPago()),
+					v.getDescripcion());
+		}
+
+		resetearInterfaz();
+		System.out.println("🎯 Sincronización completa con SQLite.");
 	}
 
-	private void actualizarTotal() {
+	@FXML
+	private void abrirVentanaRetiro() {
+		Dialog<ButtonType> dialog = new Dialog<>();
+		dialog.setTitle("Retiro de Dinero - Sistema D13");
+		dialog.setHeaderText("Complete los datos del retiro");
+
+		TextField txtMonto = new TextField();
+		txtMonto.setPromptText("Monto ($)");
+		TextField txtMotivo = new TextField();
+		txtMotivo.setPromptText("Descripción (ej: Pago Flete)");
+		ComboBox<String> cbTipoRetiro = new ComboBox<>();
+		cbTipoRetiro.getItems().addAll("Efectivo", "Transferencia");
+		cbTipoRetiro.getSelectionModel().select(0);
+
+		VBox layout = new VBox(10, new Label("Monto:"), txtMonto, new Label("Motivo:"), txtMotivo, new Label("Medio:"),
+				cbTipoRetiro);
+		layout.setPadding(new Insets(20));
+		dialog.getDialogPane().setContent(layout);
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		dialog.showAndWait().ifPresent(response -> {
+			if (response == ButtonType.OK) {
+				try {
+					double monto = Double.parseDouble(txtMonto.getText());
+					String motivo = txtMotivo.getText();
+					String tipo = cbTipoRetiro.getValue();
+
+					boolean exito = tipo.equals("Efectivo") ? caja.realizarRetiroEfectivo(monto, motivo)
+							: caja.realizarRetiroTransferencia(monto, motivo);
+
+					if (exito) {
+						ConexionDB.insertarRetiro(motivo, monto, tipo);
+						System.out.println("✅ Retiro guardado en DB: " + motivo);
+					} else {
+						System.out.println("❌ Fondos insuficientes en " + tipo);
+					}
+				} catch (NumberFormatException e) {
+					System.out.println("❌ Error: Monto inválido.");
+				}
+			}
+		});
+	}
+
+	@FXML
+	public void exportarTXT() {
+
+		SimpleDateFormat dateFormatFile = new SimpleDateFormat("dd_MM_yyyy_HHmm");
+		SimpleDateFormat dateFormatHeader = new SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy", new Locale("es", "ES"));
+
+		// 1. Creamos la carpeta 'Historial' si no existe
+		java.io.File carpetaHistorial = new java.io.File("C:/CajaCompartida/Historial");
+		if (!carpetaHistorial.exists())
+			carpetaHistorial.mkdirs();
+
+		// 2. Guardamos el reporte adentro de esa carpeta
+		String nombreArchivo = "C:/CajaCompartida/Historial/Reporte_" + dateFormatFile.format(new Date()) + ".txt";
+
+		List<Venta> movimientos = ConexionDB.obtenerVentasDelDia();
+		double montoInicial = ConexionDB.obtenerMontoInicialHoy();
+
+		try (PrintWriter writer = new PrintWriter(new FileWriter(nombreArchivo))) {
+			writer.println("==========================================================");
+			writer.println("                SISTEMA D13 - REPORTE COMPLETO            ");
+			writer.println("   Fecha: " + dateFormatHeader.format(new Date()));
+			writer.println("==========================================================");
+			writer.printf("💰 Monto Inicial en Caja: $ %.2f\n", montoInicial);
+			writer.println("----------------------------------------------------------");
+			writer.printf("%-20s %-5s %-12s %-12s\n", "DESCRIPCIÓN", "CANT", "PRECIO", "PAGO");
+			writer.println("----------------------------------------------------------");
+
+			double vEf = 0, vTr = 0, vTj = 0;
+			double rEf = 0, rTr = 0;
+
+			for (Venta v : movimientos) {
+				double subtotal = v.getPrecio() * v.getCantidad();
+				String medio = v.getMedioPago();
+
+				// 1. Detalle de la fila (Agregamos el medio de pago al final)
+				writer.printf("%-20s x%-4d $ %-10.2f (%s)\n", v.getDescripcion(), v.getCantidad(), subtotal, medio);
+
+				// 2. Clasificación precisa de los totales
+				if (v.getDescripcion().startsWith("RETIRO")) {
+					if (medio.equalsIgnoreCase("Efectivo"))
+						rEf += subtotal;
+					else if (medio.equalsIgnoreCase("Transferencia"))
+						rTr += subtotal;
+				} else {
+					if (medio.equalsIgnoreCase("Efectivo"))
+						vEf += subtotal;
+					else if (medio.equalsIgnoreCase("Transferencia"))
+						vTr += subtotal;
+					else if (medio.equalsIgnoreCase("Tarjeta"))
+						vTj += subtotal;
+				}
+			}
+
+			writer.println("----------------------------------------------------------");
+			writer.println("                RESUMEN DE MOVIMIENTOS                    ");
+			writer.println("----------------------------------------------------------");
+			writer.printf("💵 EFECTIVO:      (+) $ %10.2f  (-) $ %10.2f\n", vEf, rEf);
+			writer.printf("📱 TRANSFERENCIA: (+) $ %10.2f  (-) $ %10.2f\n", vTr, rTr);
+			writer.printf("💳 TARJETA:       (+) $ %10.2f\n", vTj);
+			writer.println("----------------------------------------------------------");
+
+			// El Arqueo que le importa al jefe
+			double efectivoFinal = montoInicial + vEf - rEf;
+			writer.printf("✅ TOTAL EFECTIVO FÍSICO (CAJÓN):  $ %10.2f\n", efectivoFinal);
+			writer.printf("🏦 TOTAL DIGITAL (BANCO/APP):      $ %10.2f\n", (vTr - rTr + vTj));
+			writer.println("==========================================================");
+			writer.printf("🚀 CAJA TOTAL DEL DÍA:            $ %10.2f\n", (efectivoFinal + vTr - rTr + vTj));
+			writer.println("==========================================================");
+
+			System.out.println("✅ Reporte completo generado: " + nombreArchivo);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void actualizarTotalUI() {
 		double total = 0;
 		for (Venta v : tablaVentas.getItems()) {
 			total += v.getPrecio() * v.getCantidad();
@@ -140,181 +225,55 @@ public class Controller1 {
 		lblTotal.setText(String.format("$ %.2f", total));
 	}
 
-	@FXML
-	void onEnterPrecio(ActionEvent event) {
-		cargarProducto(); // Llama al mismo método del botón
-	}
-
-	@FXML
-	void cancelarVenta(ActionEvent event) {
-		double totalInicial= 0.00;
-		Venta seleccionada = tablaVentas.getSelectionModel().getSelectedItem();
-		limpiarCampos();
-		tablaVentas.getItems().remove(seleccionada);
-		lblTotal.setText(String.format("$ %.2f", totalInicial));
-}
-
-	@FXML
-	private void confirmarVenta() {
-	    if (tablaVentas.getItems().isEmpty()) return;
-
-	    String medioPago = cbMedioPago.getValue();
-	    int medioInt = convertirMedioAInt(medioPago); // Tu método del switch
-
-	    for (Venta v : tablaVentas.getItems()) {
-	        // 1. Guardamos en la Base de Datos Compartida
-	        ConexionDB.insertarVenta(v.getDescripcion(), v.getCantidad(), v.getPrecio(), medioPago, "VENTA");
-	        
-	        // 2. Registramos en la lógica de CajaDiaria (para el reporte TXT y labels)
-	        caja.registrarVenta(v.getPrecio() * v.getCantidad(), medioInt, v.getDescripcion());
-	    }
-
-	    // 3. Limpiamos y actualizamos interfaz
-	    resetearInterfaz();
-	    System.out.println("🎯 Sincronización completa con la base de datos.");
+	private void limpiarCampos() {
+		txtDescripcion.clear();
+		txtCantidad.clear();
+		txtPrecio.clear();
+		txtDescripcion.requestFocus();
 	}
 
 	private void resetearInterfaz() {
 		tablaVentas.getItems().clear();
-
-		// Usamos el formateador para asegurar los dos decimales (.2f)
-		double totalInicial = 0.0;
-		lblTotal.setText(String.format("$ %.2f", totalInicial));
-
+		lblTotal.setText("$ 0.00");
 		txtDescripcion.requestFocus();
 	}
+
+	private int convertirMedioAInt(String medio) {
+		return switch (medio) {
+		case "Transferencia" -> 2;
+		case "Tarjeta" -> 3;
+		default -> 1;
+		};
+	}
+
 	@FXML
-	private void abrirVentanaRetiro() {
-	    // 1. Configuración del Diálogo
-	    Dialog<ButtonType> dialog = new Dialog<>();
-	    dialog.setTitle("Retiro de Dinero - Sistema D13");
-	    dialog.setHeaderText("Complete los datos del retiro");
-
-	    // 2. Componentes: Monto, Motivo y el ComboBox que pediste
-	    TextField txtMonto = new TextField();
-	    txtMonto.setPromptText("Monto ($)");
-	    
-	    TextField txtMotivo = new TextField();
-	    txtMotivo.setPromptText("Descripción (ej: Pago Flete)");
-
-	    ComboBox<String> cbTipoRetiro = new ComboBox<>();
-	    cbTipoRetiro.getItems().addAll("Efectivo", "Transferencia");
-	    cbTipoRetiro.getSelectionModel().select(0); // Por defecto Efectivo
-
-	    // 3. Layout del Diálogo
-	    VBox layout = new VBox(10, 
-	        new Label("Monto:"), txtMonto, 
-	        new Label("Motivo/Descripción:"), txtMotivo,
-	        new Label("Medio de Retiro:"), cbTipoRetiro
-	    );
-	    layout.setPadding(new Insets(20));
-	    dialog.getDialogPane().setContent(layout);
-	    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
-	    // 4. Lógica al presionar OK
-	    dialog.showAndWait().ifPresent(response -> {
-	        if (response == ButtonType.OK) {
-	            try {
-	                double monto = Double.parseDouble(txtMonto.getText());
-	                String motivo = txtMotivo.getText();
-	                String tipo = cbTipoRetiro.getValue();
-
-	                boolean exito = false;
-	                // Usamos la lógica que ya tenías en tu clase CajaDiaria
-	                if (tipo.equals("Efectivo")) {
-	                    exito = caja.realizarRetiroEfectivo(monto, motivo);
-	                } else {
-	                    exito = caja.realizarRetiroTransferencia(monto, motivo);
-	                }
-
-	                if (exito) {
-	                    GestorArchivo.guardar(caja);
-	                    System.out.println("✅ Retiro guardado: " + motivo);
-	                } else {
-	                    System.out.println("❌ Fondos insuficientes para el retiro.");
-	                }
-	            } catch (NumberFormatException e) {
-	                System.out.println("❌ Error: Ingrese un monto numérico válido.");
-	            }
-	        }
-	    });
+	void cancelarVenta() {
+		Venta sel = tablaVentas.getSelectionModel().getSelectedItem();
+		if (sel != null) {
+			tablaVentas.getItems().remove(sel);
+			actualizarTotalUI();
+		}
 	}
-	
+
 	@FXML
-	void exportarTXT(ActionEvent event) {
-	    // 1. Cargamos la caja desde el archivo serializable
-	    CajaDiaria caja = GestorArchivo.cargar();
-	    
-	    if (caja != null) {
-	        exportarReporteTXT(caja);
-	        System.out.println("✅ Reporte generado con éxito.");
-	        
-	        // Cierre opcional: Si querés que el programa se cierre al exportar
-	        // System.exit(0); 
-	    } else {
-	        System.out.println("❌ No hay datos de caja para exportar.");
-	    }
+	void cerraCajaDiaria(ActionEvent event) {
+		// 1. Generamos el reporte en la carpeta Historial
+	    exportarTXT(); 
+
+	    // 2. Hacemos la copia de seguridad de la Base de Datos
+	    ConexionDB.respaldarBaseDeDatos();
+
+	    // 3. Cerramos la sesión en SQL
+	    ConexionDB.cerrarSesionActual();
+
+		// 3. Opcional: Podés cerrar el programa o mostrar un aviso
+		System.out.println("Caja cerrada exitosamente. El sistema se cerrará.");
+		System.exit(0); // Esto cierra la aplicación por completo
+
 	}
 
-	private void exportarReporteTXT(CajaDiaria caja) {
-	    try {
-	        SimpleDateFormat dateFormatFile = new SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy - HH_mm_ss", new Locale("es", "ES"));
-	        String nombreArchivo = "reporte_caja_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".txt";
-	        PrintWriter writer = new PrintWriter(new FileWriter(nombreArchivo));
-
-	        // --- ENCABEZADO ---
-	        writer.println("╔══════════════════════════════════════════════╗");
-	        writer.println("║   REPORTE DE CAJA - SISTEMA D13");
-	        writer.println("║   Fecha: " + dateFormatFile.format(new Date()));
-	        writer.println("╚══════════════════════════════════════════════╝\n");
-
-	        // --- DETALLE DE VENTAS ---
-	        writer.println("📦 DETALLE DE PRODUCTOS VENDIDOS:");
-	        writer.println("┌──────────────────────────────────────────────┐");
-	        for (String detalle : caja.getDetalleVentas()) {
-	            writer.println("│ " + detalle);
-	        }
-	        writer.println("└──────────────────────────────────────────────┘\n");
-
-	        // --- DETALLE DE RETIROS (Aquí agregamos la descripción/motivo) ---
-	        writer.println("💸 DETALLE DE RETIROS Y SALIDAS:");
-	        writer.println("┌──────────────────────────────────────────────┐");
-	        // Nota: Asumimos que agregaste un getter para transacciones o usamos lógica interna
-	        for (Transaccion t : caja.getTransacciones()) {
-	            if (t.getTipo() == Transaccion.Tipo.RETIRO) {
-	                // Usamos t.getNombreProducto() porque ahí guardamos el motivo
-	                writer.printf("│ Motivo: %-20s | Monto: $%10.2f | Medio: %s\n", 
-	                    t.getNombreProducto(), t.getMonto(), t.getMedioDePago());
-	            }
-	        }
-	        writer.println("└──────────────────────────────────────────────┘\n");
-
-	        // --- RESUMEN DE TOTALES ---
-	        escribirSeccionTotales(writer, caja);
-
-	        writer.close();
-	        System.out.println("✅ Reporte exportado como: " + nombreArchivo);
-
-	    } catch (IOException e) {
-	        System.out.println("❌ Error al crear el archivo: " + e.getMessage());
-	    }
+	@FXML
+	void onEnterPrecio(ActionEvent event) {
+		cargarProducto();
 	}
-
-	// Método auxiliar para no repetir código de totales
-	private void escribirSeccionTotales(PrintWriter writer, CajaDiaria caja) {
-	    writer.println("  💰 RESUMEN FINAL:");
-	    writer.println("┌──────────────────────────────────────────┐");
-	    writer.printf("│ %-25s │ %15.2f │\n", "💰 Caja inicial", caja.getComienzoCaja());
-	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Efectivo", caja.getVentasEfectivo());
-	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Transferencia", caja.getVentasTransferencia());
-	    writer.printf("│ %-25s │ %15.2f │\n", "💵 Ventas Tarjeta", caja.getVentasTarjeta());
-	    writer.printf("│ %-25s │ %15.2f │\n", "💸 Retiros Efectivo", caja.getRetirosEfectivo());
-	    writer.printf("│ %-25s │ %15.2f │\n", "💸 Retiros Transferencia", caja.getRetirosTransferencia());
-	    writer.println("├──────────────────────────────────────────┤");
-	    writer.printf("│ %-25s │ %15.2f │\n", "🏦 CAJA FINAL (Efectivo)", caja.getCajaFinal());
-	    writer.println("└──────────────────────────────────────────┘");
-	}
-		  
-		
-    }
-
+}

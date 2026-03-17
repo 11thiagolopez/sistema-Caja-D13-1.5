@@ -13,7 +13,7 @@ import persistence.ConexionDB;
 import utils.Paths;
 
 public class Controller2 {
-	CajaDiaria caja;
+	double montoInicial = 0;
 
 	@FXML
 	private TextField txtMonto;
@@ -25,6 +25,7 @@ public class Controller2 {
 	        if (texto.isEmpty()) return;
 
 	        double valor = Double.parseDouble(texto);
+	        montoInicial = valor;
 
 	        // 1. PERSISTENCIA: Guardamos en SQLite para que el otro usuario lo vea
 	        ConexionDB.insertarSesion(valor);
@@ -39,4 +40,18 @@ public class Controller2 {
 	        e.printStackTrace();
 	}
 	}
+	
+
+	public double getMontoInicial() {
+		return montoInicial;
+	}
+
+
+	public void setMontoInicial(double montoInicial) {
+		this.montoInicial = montoInicial;
+	}
+
+
+
+	
 }

@@ -4,19 +4,17 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
 public class CajaDiaria implements Serializable {
 	private static final long serialVersionUID = 2L; // Cambiamos la versión
+	private double montoInicial;
 
-	private double comienzoCaja;
 	// ¡EL GRAN CAMBIO! Ahora solo guardamos una lista de transacciones.
 	private List<Transaccion> transacciones;
 
 	public CajaDiaria(double montoInicial) {
-		this.comienzoCaja = montoInicial;
+		this.montoInicial = montoInicial;
 		this.transacciones = new ArrayList<>(); // Inicializamos la lista vacía
 	}
-
 	// --- MÉTODOS DE OPERACIÓN (MODIFICADOS) ---
 
 	public void registrarVenta(double precio, int medioDePagoInt, String nombreProducto) {
@@ -45,16 +43,16 @@ public class CajaDiaria implements Serializable {
 		return false;
 	}
 	
-
+	
 	// --- MÉTODOS GETTER (AHORA CALCULAN LOS TOTALES AL MOMENTO) ---
 	
 
 	public void setComienzoCaja(double comienzoCaja) {
-		this.comienzoCaja = comienzoCaja;
+		this.montoInicial = comienzoCaja;
 	}
 
 	public double getComienzoCaja() {
-		return comienzoCaja;
+		return montoInicial;
 	}
 
 	public List<Transaccion> getTransacciones() {

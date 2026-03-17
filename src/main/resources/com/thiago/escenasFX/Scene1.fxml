@@ -29,7 +29,7 @@
               <items>
                   <MenuItem mnemonicParsing="false" onAction="#abrirVentanaRetiro" text="Retirar Dinero" />
                 <MenuItem mnemonicParsing="false" onAction="#exportarTXT" text="Exportar TXT" />
-                  <MenuItem mnemonicParsing="false" text="Horas Extra" />
+                  <MenuItem mnemonicParsing="false" onAction="#cerraCajaDiaria" text="Cerrar caja" />
               </items>
             </MenuButton>
          </children>
