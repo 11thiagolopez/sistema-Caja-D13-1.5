@@ -16,7 +16,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<BorderPane xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controllers.Controller1">
+<BorderPane prefHeight="463.0" prefWidth="638.0" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controllers.Controller1">
    <top>
       <AnchorPane fx:id="paneSuperior" prefHeight="61.0" prefWidth="600.0" style="-fx-background-color: #4169E1;" BorderPane.alignment="CENTER">
          <children>
@@ -36,21 +36,13 @@
       </AnchorPane>
    </top>
    <right>
-      <VBox alignment="TOP_CENTER" prefHeight="400.0" prefWidth="129.0" spacing="6.0" style="-fx-background-color: #E0E0E0;" BorderPane.alignment="CENTER">
+      <VBox alignment="TOP_CENTER" prefHeight="400.0" prefWidth="159.0" spacing="6.0" style="-fx-background-color: #E0E0E0;" BorderPane.alignment="CENTER">
          <padding>
             <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
          </padding>
          <children>
-            <Label fx:id="lblTotal" contentDisplay="RIGHT" prefHeight="61.0" prefWidth="69.0" style="-fx-background-color: #E0E0E0; -fx-background-radius: 5;" text="\$ 0.00">
-               <font>
-                  <Font name="Bell MT" size="24.0" />
-               </font>
-               <effect>
-                  <Glow />
-               </effect>
-            </Label>
-            <Button mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="43.0" prefWidth="69.0" style="-fx-background-color: #DC143C; -fx-background-radius: 5;" text="Cancelar" textFill="WHITE" />
-            <Button mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="45.0" prefWidth="69.0" style="-fx-background-color: #228B22; -fx-background-radius: 5;" text="Confirmar" textFill="WHITE" />
+            <Button alignment="CENTER" mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="43.0" prefWidth="71.0" style="-fx-background-color: #DC143C; -fx-background-radius: 5;" text="Cancelar" textFill="WHITE" />
+            <Button alignment="CENTER" mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="45.0" prefWidth="69.0" style="-fx-background-color: #228B22; -fx-background-radius: 5;" text="Confirmar" textFill="WHITE" />
          </children>
          <BorderPane.margin>
             <Insets />
@@ -58,7 +50,7 @@
       </VBox>
    </right>
    <center>
-      <VBox alignment="CENTER" prefHeight="400.0" prefWidth="367.0" spacing="15.0" style="-fx-background-color: #E0E0E0;" BorderPane.alignment="CENTER">
+      <VBox alignment="CENTER" prefHeight="400.0" prefWidth="420.0" spacing="15.0" style="-fx-background-color: #E0E0E0;" BorderPane.alignment="CENTER">
          <children>
             <HBox alignment="CENTER" prefHeight="67.0" prefWidth="385.0" spacing="10.0" VBox.vgrow="NEVER">
                <children>
@@ -86,4 +78,23 @@
          </padding>
       </VBox>
    </center>
+   <bottom>
+      <HBox prefHeight="100.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+         <children>
+            <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: #E0E0E0;" />
+            <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: #E0E0E0;" />
+            <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: #E0E0E0;" />
+            <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: #E0E0E0;" />
+            <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: #E0E0E0;" />
+            <Label fx:id="lblTotal" contentDisplay="RIGHT" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="58.0" prefWidth="136.0" style="-fx-background-color: #E0E0E0; -fx-background-radius: 5;" text="\$ 0.00">
+               <font>
+                  <Font name="Bell MT" size="24.0" />
+               </font>
+               <effect>
+                  <Glow />
+               </effect>
+            </Label>
+         </children>
+      </HBox>
+   </bottom>
 </BorderPane>
