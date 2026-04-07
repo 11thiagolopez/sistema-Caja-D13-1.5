@@ -9,11 +9,14 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.effect.DropShadow?>
 <?import javafx.scene.effect.Glow?>
+<?import javafx.scene.effect.InnerShadow?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.paint.Color?>
 <?import javafx.scene.text.Font?>
 
 <BorderPane prefHeight="463.0" prefWidth="608.0" style="-fx-background-color: #4169E1;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controllers.Controller1">
@@ -25,7 +28,7 @@
                   <Font name="Elephant" size="30.0" />
                </font>
             </Label>
-            <MenuButton alignment="CENTER" layoutY="36.0" mnemonicParsing="false" prefHeight="25.0" prefWidth="152.0" text="Menu">
+            <MenuButton alignment="TOP_LEFT" layoutX="12.0" layoutY="36.0" mnemonicParsing="false" prefHeight="25.0" prefWidth="152.0" style="-fx-background-radius: 5 5 5; -fx-border-radius: 5 5 5;" text="Menu">
               <items>
                   <MenuItem mnemonicParsing="false" onAction="#abrirVentanaRetiro" text="Retirar Dinero" />
                 <MenuItem mnemonicParsing="false" onAction="#exportarTXT" text="Exportar TXT" />
@@ -36,7 +39,7 @@
       </AnchorPane>
    </top>
    <center>
-      <VBox alignment="CENTER" prefHeight="302.0" prefWidth="623.0" spacing="15.0" style="-fx-background-color: B0C4DE;" BorderPane.alignment="CENTER">
+      <VBox alignment="CENTER" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="302.0" prefWidth="623.0" spacing="15.0" style="-fx-background-color: B0C4DE;" BorderPane.alignment="CENTER">
          <children>
             <HBox alignment="CENTER" prefHeight="67.0" prefWidth="385.0" spacing="10.0" VBox.vgrow="NEVER">
                <children>
@@ -70,14 +73,20 @@
             <VBox alignment="CENTER" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="100.0" prefWidth="151.0" style="-fx-background-color: B0C4DE;" HBox.hgrow="ALWAYS" />
             <VBox alignment="CENTER" fillWidth="false" maxHeight="-Infinity" maxWidth="-Infinity" prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: B0C4DE;" HBox.hgrow="NEVER">
                <children>
-                  <Button alignment="CENTER" mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="49.0" prefWidth="95.0" style="-fx-background-color: #DC143C; -fx-background-radius: 5;" text="Cancelar" textFill="WHITE">
+                  <Button alignment="CENTER" mnemonicParsing="false" onAction="#cancelarVenta" prefHeight="49.0" prefWidth="95.0" style="-fx-background-color: #E0E0E0; -fx-background-radius: 5;" text="Cancelar">
                      <VBox.margin>
                         <Insets bottom="3.0" />
-                     </VBox.margin></Button>
-                  <Button alignment="CENTER" mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="51.0" prefWidth="92.0" style="-fx-background-color: #228B22; -fx-background-radius: 5;" text="Confirmar" textFill="WHITE">
+                     </VBox.margin>
+                     <font>
+                        <Font name="System Bold Italic" size="12.0" />
+                     </font></Button>
+                  <Button alignment="CENTER" mnemonicParsing="false" onAction="#confirmarVenta" prefHeight="51.0" prefWidth="92.0" style="-fx-background-color: #4169E1; -fx-background-radius: 5;" text="Confirmar" wrapText="true">
                      <VBox.margin>
                         <Insets bottom="2.0" />
-                     </VBox.margin></Button>
+                     </VBox.margin>
+                     <font>
+                        <Font name="System Bold Italic" size="12.0" />
+                     </font></Button>
                </children></VBox>
             <Label fx:id="lblTotal" contentDisplay="RIGHT" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="72.0" prefWidth="157.0" style="-fx-background-color: B0C4DE;" text="\$ 0.00" HBox.hgrow="NEVER">
                <font>
@@ -91,16 +100,21 @@
       </HBox>
    </bottom>
    <right>
-      <VBox prefHeight="200.0" prefWidth="100.0" style="-fx-background-color: B0C4DE;" BorderPane.alignment="CENTER">
+      <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="302.0" prefWidth="139.0" style="-fx-background-color: B0C4DE;" BorderPane.alignment="CENTER">
          <children>
-            <VBox prefHeight="147.0" prefWidth="100.0" style="-fx-background-color: E0E0E0;">
+            <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="241.0" prefWidth="120.0" style="-fx-background-color: E0E0E0; -fx-background-radius: 10 10 0 0; -fx-border-radius: 10 10 0 0;;" VBox.vgrow="ALWAYS">
                <children>
-                  <Label alignment="CENTER" prefHeight="39.0" prefWidth="94.0" text="Resumen">
+                  <Label alignment="CENTER" prefHeight="35.0" prefWidth="130.0" text="Resumen">
                      <font>
                         <Font name="System Bold Italic" size="14.0" />
                      </font>
                   </Label>
-                  <Label text="Total Items : 0">
+                  <Label text="Total Items : ">
+                     <font>
+                        <Font name="System Bold" size="12.0" />
+                     </font>
+                  </Label>
+                  <Label layoutX="10.0" layoutY="84.0" prefHeight="53.0" prefWidth="88.0" text="0">
                      <font>
                         <Font name="System Bold" size="12.0" />
                      </font>
@@ -110,7 +124,7 @@
                         <Font name="System Bold" size="12.0" />
                      </font>
                   </Label>
-                  <Label prefHeight="29.0" prefWidth="88.0" text=" ">
+                  <Label prefHeight="53.0" prefWidth="88.0" text=" ">
                      <font>
                         <Font name="System Bold" size="12.0" />
                      </font>
@@ -120,16 +134,50 @@
                         <Font name="System Bold Italic" size="11.0" />
                      </font>
                   </Label>
-                  <Label prefHeight="31.0" prefWidth="95.0" text="\$00,0">
+                  <Label fx:id="lblSubTotal" prefHeight="41.0" prefWidth="115.0" text="\$0.00">
                      <font>
-                        <Font name="System Bold Italic" size="18.0" />
+                        <Font size="18.0" />
                      </font>
                   </Label>
                </children>
                <VBox.margin>
                   <Insets />
                </VBox.margin>
+               <effect>
+                  <InnerShadow>
+                     <color>
+                        <Color red="0.2879999876022339" green="0.3456000089645386" blue="0.7200000286102295" opacity="0.20812182128429413" />
+                     </color>
+                  </InnerShadow>
+               </effect>
             </VBox>
+            <Button fx:id="btnCambioCliente" alignment="CENTER" contentDisplay="CENTER" onAction="#cambioCliente" prefHeight="24.0" prefWidth="119.0" style="-fx-border-radius: 5 5 5; -fx-background-radius: 5 5 5;" text="_Cambiar Cliente (F12)" textAlignment="CENTER">
+               <VBox.margin>
+                  <Insets top="5.0" />
+               </VBox.margin>
+               <font>
+                  <Font size="11.0" />
+               </font>
+               <effect>
+                  <DropShadow blurType="GAUSSIAN">
+                     <color>
+                        <Color red="0.10999999940395355" green="0.14249999821186066" blue="0.5" />
+                     </color>
+                  </DropShadow>
+               </effect>
+            </Button>
+            <Button mnemonicParsing="false" prefHeight="25.0" prefWidth="121.0" style="-fx-background-radius: 5 5 5; -fx-border-radius: 5 5 5;" text="Ingresar cupón (f5)">
+               <VBox.margin>
+                  <Insets top="6.0" />
+               </VBox.margin>
+               <effect>
+                  <InnerShadow blurType="GAUSSIAN">
+                     <color>
+                        <Color red="0.1535087674856186" green="0.10916179418563843" blue="0.5526315569877625" />
+                     </color>
+                  </InnerShadow>
+               </effect>
+            </Button>
          </children>
       </VBox>
    </right>

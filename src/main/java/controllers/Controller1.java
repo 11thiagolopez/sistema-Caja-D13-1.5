@@ -7,9 +7,17 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+
+import com.thiago.escenasFX.App;
+
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
@@ -18,14 +26,25 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import model.CajaDiaria;
 import model.Venta;
 import persistence.ConexionDB;
+import utils.Paths;
 
 public class Controller1 {
 
 	private CajaDiaria caja;
+
+	@FXML
+	private Button btnCambioCliente;
+
+	@FXML
+	private Label lblSubTotal;
 
 	@FXML
 	private TableView<Venta> tablaVentas;
@@ -47,7 +66,7 @@ public class Controller1 {
 	public void initialize() {
 		// 1. Preparamos la Base de Datos
 		ConexionDB.crearTablas();
-
+		
 		// 2. Buscamos el monto inicial de hoy en SQLite
 		double montoDeHoy = ConexionDB.obtenerMontoInicialHoy();
 		this.caja = new CajaDiaria(montoDeHoy);
@@ -60,6 +79,8 @@ public class Controller1 {
 		colDescripcion.setCellValueFactory(new PropertyValueFactory<>("descripcion"));
 		colPrecio.setCellValueFactory(new PropertyValueFactory<>("precio"));
 		colPago.setCellValueFactory(new PropertyValueFactory<>("medioPago"));
+		setupAccelerators();
+
 	}
 
 	@FXML
@@ -223,6 +244,8 @@ public class Controller1 {
 			total += v.getPrecio() * v.getCantidad();
 		}
 		lblTotal.setText(String.format("$ %.2f", total));
+		lblSubTotal.setText(String.format("$ %.2f", total));
+
 	}
 
 	private void limpiarCampos() {
@@ -258,13 +281,13 @@ public class Controller1 {
 	@FXML
 	void cerraCajaDiaria(ActionEvent event) {
 		// 1. Generamos el reporte en la carpeta Historial
-	    exportarTXT(); 
+		exportarTXT();
 
-	    // 2. Hacemos la copia de seguridad de la Base de Datos
-	    ConexionDB.respaldarBaseDeDatos();
+		// 2. Hacemos la copia de seguridad de la Base de Datos
+		ConexionDB.respaldarBaseDeDatos();
 
-	    // 3. Cerramos la sesión en SQL
-	    ConexionDB.cerrarSesionActual();
+		// 3. Cerramos la sesión en SQL
+		ConexionDB.cerrarSesionActual();
 
 		// 3. Opcional: Podés cerrar el programa o mostrar un aviso
 		System.out.println("Caja cerrada exitosamente. El sistema se cerrará.");
@@ -275,5 +298,42 @@ public class Controller1 {
 	@FXML
 	void onEnterPrecio(ActionEvent event) {
 		cargarProducto();
+	}
+
+	@FXML
+	void cambioCliente(ActionEvent event) {
+
+		Stage stage = new Stage();
+		Parent root = null;
+		try {
+			// Esto ayuda al cajero a identificar las ventas pendientes
+	        stage.setTitle("Venta en Espera - " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
+			root = FXMLLoader.load(getClass().getResource(Paths.SCENA1));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		Scene scene = new Scene(root);
+		stage = new Stage(StageStyle.DECORATED);
+		stage.setScene(scene);
+		stage.show();
+
+	}
+
+	public void setupAccelerators() {
+		Platform.runLater(() -> {
+			Scene scene = btnCambioCliente.getScene();
+			if (scene != null) {
+				// El Filter es más "poderoso" que el Accelerator para teclas de función
+				scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+					if (event.getCode() == KeyCode.F5) {
+						System.out.println("⌨️ F12 presionado: Abriendo nueva ventana de espera...");
+						btnCambioCliente.fire();
+						event.consume(); // Evita que la tecla haga otra cosa
+					}
+				});
+				System.out.println("✅ Atajo F12 configurado correctamente.");
+			}
+		});
 	}
 }
