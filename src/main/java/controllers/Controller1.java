@@ -44,9 +44,6 @@ public class Controller1 {
 	private Button btnCambioCliente;
 
 	@FXML
-	private Label lblSubTotal;
-
-	@FXML
 	private TableView<Venta> tablaVentas;
 	@FXML
 	private TableColumn<Venta, String> colDescripcion, colPago;
@@ -57,16 +54,24 @@ public class Controller1 {
 
 	@FXML
 	private ComboBox<String> cbMedioPago;
+	
 	@FXML
 	private TextField txtCantidad, txtDescripcion, txtPrecio;
+	
 	@FXML
 	private Label lblTotal;
+	@FXML
+	private Label lblTotalItems;
+	@FXML
+	private Label lblUltimoItem;
+	@FXML
+	private Label lblSubTotal;
 
 	@FXML
 	public void initialize() {
 		// 1. Preparamos la Base de Datos
 		ConexionDB.crearTablas();
-		
+
 		// 2. Buscamos el monto inicial de hoy en SQLite
 		double montoDeHoy = ConexionDB.obtenerMontoInicialHoy();
 		this.caja = new CajaDiaria(montoDeHoy);
@@ -307,7 +312,7 @@ public class Controller1 {
 		Parent root = null;
 		try {
 			// Esto ayuda al cajero a identificar las ventas pendientes
-	        stage.setTitle("Venta en Espera - " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
+			stage.setTitle("Venta en Espera - " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
 			root = FXMLLoader.load(getClass().getResource(Paths.SCENA1));
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -326,7 +331,7 @@ public class Controller1 {
 			if (scene != null) {
 				// El Filter es más "poderoso" que el Accelerator para teclas de función
 				scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
-					if (event.getCode() == KeyCode.F5) {
+					if (event.getCode() == KeyCode.F12) {
 						System.out.println("⌨️ F12 presionado: Abriendo nueva ventana de espera...");
 						btnCambioCliente.fire();
 						event.consume(); // Evita que la tecla haga otra cosa

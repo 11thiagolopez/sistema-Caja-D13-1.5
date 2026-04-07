@@ -33,6 +33,7 @@
                   <MenuItem mnemonicParsing="false" onAction="#abrirVentanaRetiro" text="Retirar Dinero" />
                 <MenuItem mnemonicParsing="false" onAction="#exportarTXT" text="Exportar TXT" />
                   <MenuItem mnemonicParsing="false" onAction="#cerraCajaDiaria" text="Cerrar caja" />
+                  <MenuItem mnemonicParsing="false" text="Unspecified Action" />
               </items>
             </MenuButton>
          </children>
@@ -114,7 +115,7 @@
                         <Font name="System Bold" size="12.0" />
                      </font>
                   </Label>
-                  <Label layoutX="10.0" layoutY="84.0" prefHeight="53.0" prefWidth="88.0" text="0">
+                  <Label fx:id="lblTotalItems" layoutX="10.0" layoutY="84.0" prefHeight="53.0" prefWidth="88.0" text="0">
                      <font>
                         <Font name="System Bold" size="12.0" />
                      </font>
@@ -124,7 +125,7 @@
                         <Font name="System Bold" size="12.0" />
                      </font>
                   </Label>
-                  <Label prefHeight="53.0" prefWidth="88.0" text=" ">
+                  <Label fx:id="lblUltimoItem" prefHeight="53.0" prefWidth="88.0" text=" ">
                      <font>
                         <Font name="System Bold" size="12.0" />
                      </font>
@@ -151,7 +152,7 @@
                   </InnerShadow>
                </effect>
             </VBox>
-            <Button fx:id="btnCambioCliente" alignment="CENTER" contentDisplay="CENTER" onAction="#cambioCliente" prefHeight="24.0" prefWidth="119.0" style="-fx-border-radius: 5 5 5; -fx-background-radius: 5 5 5;" text="_Cambiar Cliente (F12)" textAlignment="CENTER">
+            <Button fx:id="btnCambioCliente" alignment="CENTER" contentDisplay="CENTER" onAction="#cambioCliente" prefHeight="24.0" prefWidth="119.0" style="-fx-border-radius: 5 5 5; -fx-background-radius: 5 5 5;" text="_Cambiar Cliente (F12)" textAlignment="CENTER" VBox.vgrow="ALWAYS">
                <VBox.margin>
                   <Insets top="5.0" />
                </VBox.margin>
@@ -166,7 +167,7 @@
                   </DropShadow>
                </effect>
             </Button>
-            <Button mnemonicParsing="false" prefHeight="25.0" prefWidth="121.0" style="-fx-background-radius: 5 5 5; -fx-border-radius: 5 5 5;" text="Ingresar cupón (f5)">
+            <Button mnemonicParsing="false" prefHeight="25.0" prefWidth="121.0" style="-fx-background-radius: 5 5 5; -fx-border-radius: 5 5 5;" text="Ingresar cupón (f5)" VBox.vgrow="ALWAYS">
                <VBox.margin>
                   <Insets top="6.0" />
                </VBox.margin>
