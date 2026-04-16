@@ -54,10 +54,10 @@ public class Controller1 {
 
 	@FXML
 	private ComboBox<String> cbMedioPago;
-	
+
 	@FXML
 	private TextField txtCantidad, txtDescripcion, txtPrecio;
-	
+
 	@FXML
 	private Label lblTotal;
 	@FXML
@@ -89,6 +89,45 @@ public class Controller1 {
 	}
 
 	@FXML
+	private void totalItems() {
+		var items = tablaVentas.getItems();
+		int cantItems = 0;
+		int acumuladorTotal = 0;
+
+		// Verificamos que no esté vacía para evitar errores
+		if (items != null && !items.isEmpty()) {
+
+			cantItems = items.size();
+
+			for (int i = 0; i < cantItems; i++) {
+				int totalItems = items.get(i).getCantidad();
+				acumuladorTotal += totalItems;
+				lblTotalItems.setText(acumuladorTotal + "");
+
+			}
+		}else {
+			lblTotalItems.setText("00");
+		}
+	}
+
+	@FXML
+	private void ultimoItem() {
+		// Obtenemos la lista de items de la tabla
+		var items = tablaVentas.getItems();
+
+		// Verificamos que no esté vacía para evitar errores
+		if (items != null && !items.isEmpty()) {
+			// Obtenemos el último índice: (total de elementos - 1)
+			Venta ultima = items.get(0);
+
+			String u = ultima.getDescripcion();
+			lblUltimoItem.setText(u);
+		} else {
+			lblUltimoItem.setText("Sin ventas");
+		}
+	}
+
+	@FXML
 	private void cargarProducto() {
 		try {
 			String desc = txtDescripcion.getText();
@@ -102,6 +141,8 @@ public class Controller1 {
 
 			actualizarTotalUI();
 			limpiarCampos();
+			ultimoItem();
+			totalItems();
 		} catch (NumberFormatException e) {
 			System.out.println("⚠️ Error: Verifique que los números sean válidos.");
 		}
@@ -243,6 +284,16 @@ public class Controller1 {
 		}
 	}
 
+	private void cancelarUltimoItem() {
+		var items = tablaVentas.getItems();
+		if (items != null) {
+			Venta sel = tablaVentas.getSelectionModel().getSelectedItem();
+            
+
+		}
+
+	}
+
 	private void actualizarTotalUI() {
 		double total = 0;
 		for (Venta v : tablaVentas.getItems()) {
@@ -250,6 +301,7 @@ public class Controller1 {
 		}
 		lblTotal.setText(String.format("$ %.2f", total));
 		lblSubTotal.setText(String.format("$ %.2f", total));
+		
 
 	}
 
@@ -263,6 +315,7 @@ public class Controller1 {
 	private void resetearInterfaz() {
 		tablaVentas.getItems().clear();
 		lblTotal.setText("$ 0.00");
+
 		txtDescripcion.requestFocus();
 	}
 
@@ -279,6 +332,8 @@ public class Controller1 {
 		Venta sel = tablaVentas.getSelectionModel().getSelectedItem();
 		if (sel != null) {
 			tablaVentas.getItems().remove(sel);
+			totalItems();
+			ultimoItem();
 			actualizarTotalUI();
 		}
 	}
