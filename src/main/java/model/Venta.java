@@ -1,52 +1,34 @@
 package model;
 
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "ventas")
 public class Venta {
 
-	private String descripcion;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_venta")
+    private Long idVenta;
 
-	private int cantidad;
+    private LocalDateTime fecha = LocalDateTime.now();
 
-	private double precio;
-	
-	private String MedioPago;
+    @ManyToOne
+    @JoinColumn(name = "id_empleado")
+    private Empleado empleado;
 
-	public Venta(String descripcion, int cantidad, double precio, String medioPago) {
-		this.descripcion = descripcion;
-		this.cantidad = cantidad;
-		this.precio = precio;
-		this.MedioPago = medioPago;
-	}
+    @Column(name = "medio_pago")
+    private String medioPago;
 
-	public String getMedioPago() {
-		return MedioPago;
-	}
+    @Column(name = "tipo_comprobante")
+    private String tipoComprobante;
 
-	public void setMedioPago(String medioPago) {
-		MedioPago = medioPago;
-	}
+    @Column(name = "total_venta")
+    private double totalVenta;
 
-	public String getDescripcion() {
-		return descripcion;
-	}
-
-	public void setDescripcion(String descripcion) {
-		this.descripcion = descripcion;
-	}
-
-	public int getCantidad() {
-		return cantidad;
-	}
-
-	public void setCantidad(int cantidad) {
-		this.cantidad = cantidad;
-	}
-
-	public double getPrecio() {
-		return precio;
-	}
-
-	public void setPrecio(double precio) {
-		this.precio = precio;
-	}
-
+    @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DetalleVenta> detalles = new ArrayList<>();
 }
