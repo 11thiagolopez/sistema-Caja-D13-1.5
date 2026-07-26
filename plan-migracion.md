@@ -149,19 +149,17 @@ sí siguen sumando correctamente en el total por fecha, no se perdió ningún da
       "aprobados" por construcción, no hace falta un flag extra.
 - [x] **No se crearon** entidades/tablas/controladores de `Cliente` ni `CuentaCorriente`, según lo
       pedido explícitamente: las ventas no llevan cliente asociado.
-- [ ] **Pendiente de tu lado antes de levantar la app**: correr el SQL de la sección 9 (más abajo)
-      en Supabase — hay columnas y una tabla nueva que Hibernate va a validar contra el esquema real
-      (`ddl-auto=validate`) y si no están, la app no arranca.
-- [ ] **Pendiente de configuración** (variables de entorno nuevas, ninguna tiene default salvo lo
-      indicado): `JWT_SECRET` (string largo y random, sin default — obligatorio), `JWT_EXPIRATION_MS`
-      (default 28800000 = 8h), `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (default `587`),
-      `SMTP_USERNAME`, `SMTP_PASSWORD` (para Gmail: una "contraseña de aplicación", no la contraseña
-      normal de la cuenta).
-- [ ] **Pendiente de datos**: cargar el campo `email` en los `Empleado` con `rol='ADMIN'` (sin esto,
-      `EmailService` tira `IllegalStateException` al intentar mandar cualquier OTP) y opcionalmente
-      `precioCompra` en `Producto` (si queda `null`, el reporte de balance lo trata como 0, así que
-      el costo de mercadería va a dar de menos hasta que se cargue).
-- [ ] Paso 8 — Tests: **pendiente**.
+- [x] SQL de la sección 9 en Supabase — hecho.
+- [x] Variables de entorno (`JWT_SECRET`, `SUPABASE_DB_PASSWORD`/`GMAIL_APP_PASSWORD`) — hecho,
+      seteadas como variables de usuario de Windows en la máquina de desarrollo.
+- [x] Email de los `Empleado` con `rol='ADMIN'` cargado — hecho (probado con OTP real por email).
+- [x] Paso 8 — Tests: **hecho parcialmente**. `VentaServiceTest` (11) y `CajaServiceTest` (11)
+      cubren la lógica de negocio más sensible (validación de stock, reglas del descuento manual,
+      los dos flujos de OTP, y el arqueo por turno) con Mockito, sin tocar la base real. **Sigue
+      pendiente**: tests de integración con `@SpringBootTest` + H2/Testcontainers para repositorios
+      y controladores (la otra mitad del Paso 8 original).
+- [ ] `Producto.precioCompra` sigue sin cargarse en la mayoría de los productos (si queda `null`, el
+      reporte de balance lo trata como 0, así que el costo de mercadería da de menos).
 - **Nota (no es un bug, pero vale la pena revisarlo más adelante)**: `CajaService.calcularResumenDelDia()`
       no está anotado `@Transactional`, y devuelve entidades `Venta` cuya colección `detalles`
       (`@OneToMany`, `LAZY`) se recorre recién en `VentaMapper`, dentro del controller. Esto funciona
