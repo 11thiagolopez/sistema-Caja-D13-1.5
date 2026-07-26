@@ -31,6 +31,11 @@ public class MovimientoCaja {
     @JoinColumn(name = "id_empleado")
     private Empleado empleado;
 
+    // Turno/caja bajo el que se registró el movimiento (nullable, igual que en Venta).
+    @ManyToOne
+    @JoinColumn(name = "id_sesion")
+    private SesionCaja sesion;
+
     private String tipo; // "RETIRO"
 
     @Column(name = "medio_pago")

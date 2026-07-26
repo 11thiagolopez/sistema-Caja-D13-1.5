@@ -35,6 +35,12 @@ public class Venta {
     @JoinColumn(name = "id_empleado")
     private Empleado empleado;
 
+    // Turno/caja bajo el que se registró la venta (nullable: puede no haber una caja abierta).
+    // Permite el arqueo por turno individual además del arqueo por rango de fechas.
+    @ManyToOne
+    @JoinColumn(name = "id_sesion")
+    private SesionCaja sesion;
+
     @Column(name = "medio_pago")
     private String medioPago;
 

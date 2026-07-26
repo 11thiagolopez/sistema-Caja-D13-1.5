@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
@@ -11,6 +12,7 @@ import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.ProductoRepository;
+import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 
 @Service
@@ -20,13 +22,15 @@ public class VentaService {
     private final ProductoRepository productoRepo;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final SesionCajaRepository sesionRepo;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo, OtpService otpService,
-            EmailService emailService) {
+            EmailService emailService, SesionCajaRepository sesionRepo) {
         this.ventaRepo = ventaRepo;
         this.productoRepo = productoRepo;
         this.otpService = otpService;
         this.emailService = emailService;
+        this.sesionRepo = sesionRepo;
     }
 
     /**
@@ -36,6 +40,10 @@ public class VentaService {
      */
     @Transactional
     public Venta registrarVenta(Venta venta) {
+        // Vincula la venta a la caja abierta en este momento, si hay una. Permite el arqueo por
+        // turno; no es obligatorio tener una caja abierta para vender (no se pidió esa regla).
+        sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA").ifPresent(venta::setSesion);
+
         BigDecimal totalBruto = BigDecimal.ZERO;
 
         for (DetalleVenta d : venta.getDetalles()) {

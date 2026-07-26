@@ -36,10 +36,37 @@ hace falta migrar a sesión por empleado/turno.
    OTP, retiro de caja + OTP, y arqueo diario con efectivo/transferencia/tarjeta, todo contra datos
    reales de Supabase.
 
-**Lo que sigue pendiente** (sin bloquear nada de lo anterior): Paso 8 (tests, nunca se empezó),
-Flyway (opcional), y la decisión abierta que queda en la sección 7 (conservar rama `legacy-javafx`
-con el código JavaFX viejo antes de que se pierda del working tree — sigue en el historial, commit
-`8e61c95`, pero nunca se decidió explícitamente si además amerita una rama aparte).
+**Lo que sigue pendiente** (sin bloquear nada de lo anterior): Paso 8 (tests, arrancando ahora) y
+Flyway (opcional).
+
+**Segunda vuelta de la misma sesión**: se creó la rama `legacy-javafx` (apunta a `8e61c95`, el
+último commit con el código JavaFX completo) para conservar el histórico sin ensuciar
+`migracion-web`. Y surgió un caso real que la sección 7 punto 4 no contemplaba del todo: la
+distribuidora opera con **dos vendedores por día, uno de mañana y otro de tarde, nunca
+simultáneos** (no contradice "una sola caja a la vez" — son secuenciales, no concurrentes). Esto
+reveló:
+
+1. Un bug real en `calcularResumenDelDia()`: el monto inicial se buscaba solo en la sesión
+   **ABIERTA** de hoy; en cuanto se cerraba la última sesión del día, caía a `$0` silenciosamente.
+2. No había forma de separar cuánto vendió/retiró cada turno — `Venta` y `MovimientoCaja` no
+   estaban vinculados a ninguna `SesionCaja`.
+3. El arqueo (`/api/caja/resumen-dia`) tampoco soportaba rango de fechas (solo "hoy"), a diferencia
+   del ranking de productos y el balance financiero, que sí — un problema para pedir un arqueo de
+   un mes completo.
+
+**Se implementó**: `Venta` y `MovimientoCaja` ahora tienen `idSesion` (nullable, requiere la
+migración SQL de más abajo). Cada venta/retiro se vincula automáticamente a la sesión ABIERTA en
+ese momento (o queda sin vincular si no hay ninguna — vender sin caja abierta sigue permitido, no
+se agregó esa restricción). Nuevo endpoint `GET /api/caja/resumen?desde=&hasta=`: devuelve el total
+combinado del rango (mismo formato que `/resumen-dia`, y de paso resuelve el bug del punto 1 porque
+el monto inicial del total ahora suma el de **cada** sesión del rango, esté abierta o cerrada) más
+un desglose por cada turno individual dentro de ese rango (`sesiones: [...]`, cada uno con su propio
+arqueo). Probado con dos turnos reales el mismo día (mañana $24.000 cerrada, tarde $5.000 abierta)
+— el total y cada desglose dieron matemáticamente correctos.
+
+**Nota**: las ventas/retiros registrados *antes* de este cambio no tienen `idSesion` (la columna no
+existía), así que no aparecen retroactivamente en el desglose por turno de sesiones viejas — pero
+sí siguen sumando correctamente en el total por fecha, no se perdió ningún dato.
 
 ---
 
@@ -486,3 +513,15 @@ UPDATE empleados SET email = 'admin@tu-dominio.com' WHERE rol = 'ADMIN';
 - `SMTP_HOST` / `SMTP_PORT`: opcionales, default `smtp.gmail.com` / `587`.
 - `SMTP_USERNAME` / `SMTP_PASSWORD`: obligatorias para poder enviar los OTP (con Gmail, generar una
   "contraseña de aplicación" en vez de usar la contraseña normal de la cuenta).
+
+---
+
+## 10. SQL: `id_sesion` en `ventas` y `movimientos_caja` (arqueo por turno) — ✅ ejecutado
+
+Vincula cada venta/retiro a la `SesionCaja` que estaba abierta al momento de registrarse. Nullable
+porque vender sin caja abierta sigue estando permitido (no se agregó esa restricción).
+
+```sql
+ALTER TABLE ventas ADD COLUMN id_sesion INTEGER REFERENCES sesiones_caja(id_sesion);
+ALTER TABLE movimientos_caja ADD COLUMN id_sesion INTEGER REFERENCES sesiones_caja(id_sesion);
+```

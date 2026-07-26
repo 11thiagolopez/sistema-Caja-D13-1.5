@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
+import com.thiago.escenasFX.dto.ResumenRangoDTO;
+import com.thiago.escenasFX.dto.ResumenSesionDTO;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.MovimientoCaja;
@@ -126,23 +128,66 @@ public class CajaService {
         movimiento.setMonto(monto);
         movimiento.setMotivo(motivo);
         movimiento.setEmpleado(empleado);
+        sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA").ifPresent(movimiento::setSesion);
         return movRepo.save(movimiento);
     }
 
+    /**
+     * Arqueo de hoy. Delegado en calcularResumenPorRango(hoy, hoy) para que el monto inicial se
+     * calcule igual en los dos casos (sumando cada sesión del período, no solo la que esté
+     * ABIERTA en este instante — antes se perdía el monto inicial apenas se cerraba la última
+     * sesión del día).
+     */
     public ResumenDiaDTO calcularResumenDelDia() {
         LocalDate hoy = LocalDate.now();
-        LocalDateTime desde = hoy.atStartOfDay();
-        LocalDateTime hasta = hoy.atTime(23, 59, 59);
+        return calcularResumenPorRango(hoy, hoy).getTotal();
+    }
 
-        // Solo ventas CONFIRMADA: una venta con descuento aún PENDIENTE_AUTORIZACION todavía
-        // no es un ingreso real, no debe inflar el arqueo de caja del día.
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde, hasta, ESTADO_CONFIRMADA);
-        List<MovimientoCaja> retiros = movRepo.findByFechaBetween(desde, hasta);
+    /**
+     * Arqueo de un turno puntual (una SesionCaja), para saber exactamente cuánto vendió y qué
+     * diferencia de caja tuvo un vendedor específico.
+     */
+    public ResumenDiaDTO calcularResumenDeSesion(Integer idSesion) {
+        SesionCaja sesion = sesionRepo.findById(idSesion)
+            .orElseThrow(() -> new IllegalArgumentException("Sesión de caja no existe: " + idSesion));
 
-        BigDecimal montoInicial = sesionRepo.findByFechaAndEstado(hoy, "ABIERTA")
+        List<Venta> ventas = ventaRepo.findBySesion_IdSesionAndEstado(idSesion, ESTADO_CONFIRMADA);
+        List<MovimientoCaja> retiros = movRepo.findBySesion_IdSesion(idSesion);
+
+        return armarResumen(ventas, retiros, sesion.getMontoInicial());
+    }
+
+    /**
+     * Arqueo de un rango de fechas (ej. un mes entero): el total combinado del período, más el
+     * desglose de cada sesión/turno individual dentro de ese rango.
+     */
+    public ResumenRangoDTO calcularResumenPorRango(LocalDate desde, LocalDate hasta) {
+        List<SesionCaja> sesiones = sesionRepo.findByFechaBetweenOrderByFechaAscIdSesionAsc(desde, hasta);
+
+        List<ResumenSesionDTO> resumenesPorSesion = sesiones.stream()
+            .map(s -> new ResumenSesionDTO(s, calcularResumenDeSesion(s.getIdSesion())))
+            .toList();
+
+        // El monto inicial del total del período es la suma de lo declarado en cada sesión
+        // abierta durante ese rango (cada turno arranca con su propio efectivo físico).
+        BigDecimal montoInicialTotal = sesiones.stream()
             .map(SesionCaja::getMontoInicial)
-            .orElse(BigDecimal.ZERO);
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        LocalDateTime desdeDT = desde.atStartOfDay();
+        LocalDateTime hastaDT = hasta.atTime(23, 59, 59);
+
+        // Ventas CONFIRMADA por fecha (no por sesión): más inclusivo, no depende de que la venta
+        // haya tenido una caja abierta al momento de registrarse.
+        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desdeDT, hastaDT, ESTADO_CONFIRMADA);
+        List<MovimientoCaja> retiros = movRepo.findByFechaBetween(desdeDT, hastaDT);
+
+        ResumenDiaDTO total = armarResumen(ventas, retiros, montoInicialTotal);
+
+        return new ResumenRangoDTO(desde, hasta, total, resumenesPorSesion);
+    }
+
+    private ResumenDiaDTO armarResumen(List<Venta> ventas, List<MovimientoCaja> retiros, BigDecimal montoInicial) {
         BigDecimal ventasEfectivo = sumarVentasPorMedio(ventas, "EFECTIVO");
         BigDecimal ventasTransferencia = sumarVentasPorMedio(ventas, "TRANSFERENCIA");
         BigDecimal ventasTarjeta = sumarVentasPorMedio(ventas, "TARJETA");
@@ -152,10 +197,10 @@ public class CajaService {
 
         BigDecimal efectivoFinal = montoInicial.add(ventasEfectivo).subtract(retirosEfectivo);
         BigDecimal totalDigital = ventasTransferencia.subtract(retirosTransferencia).add(ventasTarjeta);
-        BigDecimal cajaTotalDelDia = efectivoFinal.add(totalDigital);
+        BigDecimal cajaTotal = efectivoFinal.add(totalDigital);
 
         return new ResumenDiaDTO(ventas, retiros, montoInicial, ventasEfectivo, ventasTransferencia, ventasTarjeta,
-            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotalDelDia);
+            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal);
     }
 
     private BigDecimal sumarVentasPorMedio(List<Venta> ventas, String medioPago) {
