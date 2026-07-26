@@ -2,31 +2,44 @@
 
 ## Para retomar mañana
 
-**Qué se hizo hoy** (detalle completo en "Estado de avance" más abajo): se agregó seguridad JWT
-por roles (`ADMIN`/`VENDEDOR`) reemplazando el `permitAll()` temporal, y dos flujos nuevos de
-autorización por OTP (código por email): uno para retiros de caja y otro para descuentos manuales
-en ventas — en ambos casos solo el `ADMIN` puede aprobar. También se agregó `ReportesController`
-(solo ADMIN) con ranking de productos más vendidos y balance financiero (ingresos − costo de
-mercadería − gastos operativos = ganancia neta). No se tocó nada de Cliente/Cuenta Corriente
-(no se pidió y no aplica a este negocio).
+**Qué se hizo hoy** (sesión de verificación end-to-end, ver commits `cc87f43` y `a1dc129`): se
+compiló y levantó la app por primera vez contra Supabase real, se probaron los dos flujos de OTP
+(descuento en venta y retiro de caja) con emails reales, se probó el arqueo diario con múltiples
+medios de pago (efectivo/transferencia/tarjeta), y se agregó configuración CORS (bloqueante para
+cualquier frontend en otro origen — sin esto el browser rechaza las requests aunque el backend
+responda bien). También se resolvió la decisión abierta de `SesionCaja` (ver sección 7, punto 4):
+**se opera con una sola caja/cajero a la vez, así que el modelo global actual es correcto**, no
+hace falta migrar a sesión por empleado/turno.
+
+**Fixes de esta sesión** (no eran bugs de lógica de negocio, sino de entorno/config):
+- `application.properties` estaba guardado en ISO-8859-1 en vez de UTF-8 (rompía el filtrado de
+  recursos de Maven) — corregido, y se restauró el mapeo de encoding en `.settings/` que lo causó.
+- `sesiones_caja.id_sesion`/`id_empleado_apertura` habían quedado como `bigint` en Supabase en vez
+  de `int4` (la sección 8 ya lo documentaba) — corregido en Supabase.
+- Un producto tenía `stock_actual = NULL` en Supabase, lo que rompía la deserialización porque el
+  campo es un `int` primitivo — se corrigió el dato y se agregó `NOT NULL DEFAULT 0` a la columna.
+- Ojo con Eclipse: este workspace tiene Eclipse abierto, y su compilador incremental (sin Lombok
+  configurado) a veces pisa el build de Maven en `target/classes` con clases rotas
+  (`Unresolved compilation problems` al levantar). Si pasa, alcanza con `mvn clean spring-boot:run`
+  en vez de `compile` + `spring-boot:run` por separado.
 
 **Para que la app arranque y se pueda probar, en este orden:**
 
 1. Correr el SQL de la **sección 9** (columnas nuevas en `empleados`/`productos`/`ventas` + tabla
-   `solicitudes_retiro`) en Supabase.
-2. Configurar variables de entorno: `JWT_SECRET` (obligatoria), `SMTP_USERNAME` y `SMTP_PASSWORD`
-   (para que salgan los emails de OTP — con Gmail, usar una "contraseña de aplicación").
-3. Cargar el `email` real de los empleados con `rol='ADMIN'` en Supabase (el `UPDATE` de ejemplo
-   en la sección 9 tiene un placeholder, hay que poner el email verdadero).
-4. Compilar el proyecto (`mvn compile` o build desde Eclipse) — no se pudo verificar la compilación
-   en esta sesión porque no hay Maven instalado en este entorno; es lo primero a chequear.
-5. Levantar la app y probar el flujo completo: login (¿devuelve `token`?) → `POST /api/ventas` con
-   y sin descuento → `POST /api/caja/retiro/solicitar` + `/confirmar` → `GET /api/reportes/balance`.
+   `solicitudes_retiro`) en Supabase — ✅ hecho.
+2. Configurar variables de entorno: `JWT_SECRET`, `SUPABASE_DB_PASSWORD`, `GMAIL_APP_PASSWORD` —
+   ✅ hecho (seteadas como variables de usuario de Windows en esta máquina; si se despliega a un
+   hosting, hay que configurarlas también ahí).
+3. Cargar el `email` real de los empleados con `rol='ADMIN'` en Supabase — ✅ hecho.
+4. Compilar el proyecto (`mvn clean compile`) — ✅ compila limpio, 52 archivos fuente.
+5. Levantar la app y probar el flujo completo — ✅ probado: login con roles, venta con descuento +
+   OTP, retiro de caja + OTP, y arqueo diario con efectivo/transferencia/tarjeta, todo contra datos
+   reales de Supabase.
 
-**Después de eso, lo que sigue pendiente** (sin bloquear lo anterior): Paso 8 (tests, nunca se
-empezó), Flyway (opcional), y las dos decisiones abiertas de la sección 7 (conservar rama
-`legacy-javafx` con el código JavaFX viejo, y si `SesionCaja` sigue siendo una caja global por día
-o pasa a ser por empleado/turno).
+**Lo que sigue pendiente** (sin bloquear nada de lo anterior): Paso 8 (tests, nunca se empezó),
+Flyway (opcional), y la decisión abierta que queda en la sección 7 (conservar rama `legacy-javafx`
+con el código JavaFX viejo antes de que se pierda del working tree — sigue en el historial, commit
+`8e61c95`, pero nunca se decidió explícitamente si además amerita una rama aparte).
 
 ---
 
@@ -390,9 +403,12 @@ el `pom.xml` actual, solo verificar que no se reintroduzcan).
 3. ~~**Autenticación**: ¿sesión de servidor o JWT?~~ **Resuelto**: JWT por roles. Rol `ADMIN` es el
    único que puede ver ventas, retirar dinero de caja, etc.; el detalle fino de qué puede hacer
    cada rol se termina de definir durante el Paso 7.
-4. **`SesionCaja` por empleado o por local**: en el sistema viejo la sesión de caja era global (una
-   por día). Confirmar si ahora, siendo multiusuario vía web, sigue siendo una caja compartida por
-   día o pasa a ser una por empleado/turno.
+4. ~~**`SesionCaja` por empleado o por local**~~ **Resuelto**: se opera con una sola caja/cajero
+   activo a la vez (no hay cajas simultáneas), así que el modelo global actual (una sesión por
+   día, compartida) es correcto tal cual está. No hace falta migrar a sesión por empleado/turno —
+   eso solo sería necesario si en el futuro hubiera más de un vendedor cobrando en paralelo, en
+   cuyo caso habría que agregar `idSesion` a `Venta`/`MovimientoCaja` y permitir arqueo por sesión
+   además de por día.
 
 Ninguno de estos puntos bloquea empezar el Paso 1 y 2 (housekeeping + completar entidades), pero sí
 conviene resolverlos antes del Paso 4 (servicios) y Paso 7 (seguridad).
