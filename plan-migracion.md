@@ -2,71 +2,68 @@
 
 ## Para retomar mañana
 
-**Qué se hizo hoy** (sesión de verificación end-to-end, ver commits `cc87f43` y `a1dc129`): se
-compiló y levantó la app por primera vez contra Supabase real, se probaron los dos flujos de OTP
-(descuento en venta y retiro de caja) con emails reales, se probó el arqueo diario con múltiples
-medios de pago (efectivo/transferencia/tarjeta), y se agregó configuración CORS (bloqueante para
-cualquier frontend en otro origen — sin esto el browser rechaza las requests aunque el backend
-responda bien). También se resolvió la decisión abierta de `SesionCaja` (ver sección 7, punto 4):
-**se opera con una sola caja/cajero a la vez, así que el modelo global actual es correcto**, no
-hace falta migrar a sesión por empleado/turno.
+**Estado al 2026-07-26: el backend está completo, compilando, corriendo contra Supabase real, y
+verificado end-to-end.** Esta fue la primera sesión en que la app efectivamente arrancó (antes
+nunca se había probado más allá de la lectura del código). Commits de la sesión, en orden:
+`cc87f43`, `a1dc129`, `2309d21`, `30897f4`, `48f5086`, `d642ee9`.
 
-**Fixes de esta sesión** (no eran bugs de lógica de negocio, sino de entorno/config):
+### Qué se verificó y quedó funcionando
+
+- **Compilación**: limpia, sin errores de sintaxis en ningún controller/service/entidad (el
+  problema real para arrancar nunca fue el código, sino config/entorno — ver más abajo).
+- **Conexión a Supabase**: vía Session Pooler IPv4 (`aws-1-us-east-1.pooler.supabase.com:5432`,
+  usuario `postgres.jyumiicapspsxgucirjd`) — la conexión directa (`db.<ref>.supabase.co:5432`) es
+  IPv6-only y no funciona en esta red.
+- **Auth JWT por roles** (ADMIN/VENDEDOR): login, tokens, y las reglas de `SecurityConfig`
+  probadas con un usuario ADMIN real (`Aleja`).
+- **CORS**: configurado (`app.cors.allowed-origins`, default puertos Vite/CRA) — bloqueante para
+  cualquier frontend en otro origen, ya resuelto antes de que haga falta.
+- **Los dos flujos de OTP** (descuento manual en venta y retiro de caja): probados de punta a
+  punta con emails reales, código de 6 dígitos, hash bcrypt, expiración de 10 minutos.
+- **Arqueo de caja**: con múltiples medios de pago (efectivo/transferencia/tarjeta), y **por
+  turno** — la distribuidora opera con dos vendedores por día (mañana/tarde, secuenciales, nunca
+  simultáneos), así que se agregó `idSesion` a `Venta`/`MovimientoCaja` y un endpoint nuevo
+  `GET /api/caja/resumen?desde=&hasta=` con el total del período + desglose por turno. De paso se
+  corrigió un bug real: el monto inicial del arqueo caía a `$0` en cuanto se cerraba la última
+  sesión del día (buscaba solo la sesión ABIERTA; ahora suma todas las del rango).
+- **Rama `legacy-javafx`**: creada apuntando a `8e61c95` (último commit con el código JavaFX
+  completo), para no perder ese histórico aunque seguir purgándolo de `migracion-web`.
+- **Paso 8 (tests) — arrancado**: 22 tests unitarios (Mockito) en `VentaServiceTest` y
+  `CajaServiceTest`, cubriendo validación de stock, reglas del descuento, ambos flujos de OTP, y
+  el arqueo por turno (incluye el caso de dos turnos el mismo día que expuso el bug de arriba).
+
+### Fixes de entorno encontrados en el camino (no eran bugs de lógica de negocio)
+
 - `application.properties` estaba guardado en ISO-8859-1 en vez de UTF-8 (rompía el filtrado de
-  recursos de Maven) — corregido, y se restauró el mapeo de encoding en `.settings/` que lo causó.
-- `sesiones_caja.id_sesion`/`id_empleado_apertura` habían quedado como `bigint` en Supabase en vez
-  de `int4` (la sección 8 ya lo documentaba) — corregido en Supabase.
-- Un producto tenía `stock_actual = NULL` en Supabase, lo que rompía la deserialización porque el
-  campo es un `int` primitivo — se corrigió el dato y se agregó `NOT NULL DEFAULT 0` a la columna.
-- Ojo con Eclipse: este workspace tiene Eclipse abierto, y su compilador incremental (sin Lombok
+  recursos de Maven) — corregido, y se restauró el mapeo de encoding en `.settings/` que lo causaba.
+- `sesiones_caja.id_sesion`/`id_empleado_apertura` habían quedado como `bigint` en vez de `int4`
+  en Supabase — corregido.
+- Un producto tenía `stock_actual = NULL`, lo que rompía la deserialización (`int` primitivo) —
+  corregido el dato y agregado `NOT NULL DEFAULT 0` a la columna.
+- **Ojo con Eclipse**: este workspace lo tiene abierto, y su compilador incremental (sin Lombok
   configurado) a veces pisa el build de Maven en `target/classes` con clases rotas
-  (`Unresolved compilation problems` al levantar). Si pasa, alcanza con `mvn clean spring-boot:run`
-  en vez de `compile` + `spring-boot:run` por separado.
+  (`Unresolved compilation problems` al levantar). Si pasa: `mvn clean spring-boot:run` en un solo
+  comando, no `compile` + `spring-boot:run` por separado.
 
-**Para que la app arranque y se pueda probar, en este orden:**
+### Config ya resuelta (para no volver a perder tiempo en esto)
 
-1. Correr el SQL de la **sección 9** (columnas nuevas en `empleados`/`productos`/`ventas` + tabla
-   `solicitudes_retiro`) en Supabase — ✅ hecho.
-2. Configurar variables de entorno: `JWT_SECRET`, `SUPABASE_DB_PASSWORD`, `GMAIL_APP_PASSWORD` —
-   ✅ hecho (seteadas como variables de usuario de Windows en esta máquina; si se despliega a un
-   hosting, hay que configurarlas también ahí).
-3. Cargar el `email` real de los empleados con `rol='ADMIN'` en Supabase — ✅ hecho.
-4. Compilar el proyecto (`mvn clean compile`) — ✅ compila limpio, 52 archivos fuente.
-5. Levantar la app y probar el flujo completo — ✅ probado: login con roles, venta con descuento +
-   OTP, retiro de caja + OTP, y arqueo diario con efectivo/transferencia/tarjeta, todo contra datos
-   reales de Supabase.
+- `JWT_SECRET`, `SUPABASE_DB_PASSWORD`, `GMAIL_APP_PASSWORD`: seteadas como variables de usuario
+  de Windows en esta máquina. **Si se despliega a un hosting, hay que configurarlas también ahí**
+  — no están en el repo.
+- Emails de `Empleado` con `rol='ADMIN'` cargados en Supabase (incluye a Alejandro y a THIAGO11).
+- Todo el SQL de las secciones 8, 9 y 10 de este documento ya está corrido en Supabase.
 
-**Lo que sigue pendiente** (sin bloquear nada de lo anterior): Paso 8 (tests, arrancando ahora) y
-Flyway (opcional).
+### Pendiente para la próxima sesión, en orden sugerido de prioridad
 
-**Segunda vuelta de la misma sesión**: se creó la rama `legacy-javafx` (apunta a `8e61c95`, el
-último commit con el código JavaFX completo) para conservar el histórico sin ensuciar
-`migracion-web`. Y surgió un caso real que la sección 7 punto 4 no contemplaba del todo: la
-distribuidora opera con **dos vendedores por día, uno de mañana y otro de tarde, nunca
-simultáneos** (no contradice "una sola caja a la vez" — son secuenciales, no concurrentes). Esto
-reveló:
-
-1. Un bug real en `calcularResumenDelDia()`: el monto inicial se buscaba solo en la sesión
-   **ABIERTA** de hoy; en cuanto se cerraba la última sesión del día, caía a `$0` silenciosamente.
-2. No había forma de separar cuánto vendió/retiró cada turno — `Venta` y `MovimientoCaja` no
-   estaban vinculados a ninguna `SesionCaja`.
-3. El arqueo (`/api/caja/resumen-dia`) tampoco soportaba rango de fechas (solo "hoy"), a diferencia
-   del ranking de productos y el balance financiero, que sí — un problema para pedir un arqueo de
-   un mes completo.
-
-**Se implementó**: `Venta` y `MovimientoCaja` ahora tienen `idSesion` (nullable, requiere la
-migración SQL de más abajo). Cada venta/retiro se vincula automáticamente a la sesión ABIERTA en
-ese momento (o queda sin vincular si no hay ninguna — vender sin caja abierta sigue permitido, no
-se agregó esa restricción). Nuevo endpoint `GET /api/caja/resumen?desde=&hasta=`: devuelve el total
-combinado del rango (mismo formato que `/resumen-dia`, y de paso resuelve el bug del punto 1 porque
-el monto inicial del total ahora suma el de **cada** sesión del rango, esté abierta o cerrada) más
-un desglose por cada turno individual dentro de ese rango (`sesiones: [...]`, cada uno con su propio
-arqueo). Probado con dos turnos reales el mismo día (mañana $24.000 cerrada, tarde $5.000 abierta)
-— el total y cada desglose dieron matemáticamente correctos.
-
-**Nota**: las ventas/retiros registrados *antes* de este cambio no tienen `idSesion` (la columna no
-existía), así que no aparecen retroactivamente en el desglose por turno de sesiones viejas — pero
-sí siguen sumando correctamente en el total por fecha, no se perdió ningún dato.
+1. **Tests de integración** (la otra mitad del Paso 8): `@SpringBootTest` + H2 o Testcontainers
+   Postgres para repositorios y controladores. Los unitarios de hoy cubren la lógica de negocio
+   pura; falta la capa de persistencia/HTTP real.
+2. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
+   balance financiero (`GET /api/reportes/balance`) da el costo de mercadería de menos.
+3. **Empezar el frontend**: el backend ya soporta un consumidor externo (CORS resuelto). Definir
+   stack (React/Vue/Angular) y arrancar contra `http://localhost:8080`.
+4. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
+   versionadas — recomendado antes de tener datos de producción reales, cada vez más caro después.
 
 ---
 
