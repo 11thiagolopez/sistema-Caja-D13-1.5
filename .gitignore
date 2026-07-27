@@ -1,13 +1,1 @@
-# Compilados y temporales
-*.class
-target/
-*.jar
-
-# Archivos de datos locales (para no subirlos por error)
-*.dat
-reporte_caja_*.txt
-
-# Configuración de editores
-.idea/
-.vscode/
-*.iml
+/target/

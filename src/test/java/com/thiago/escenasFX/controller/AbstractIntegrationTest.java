@@ -1,0 +1,78 @@
+package com.thiago.escenasFX.controller;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.repository.EmpleadoRepository;
+
+/**
+ * Base para los tests de integración HTTP: levanta el contexto Spring completo (controller ->
+ * service -> repository -> H2 real) con seguridad JWT activa, y mockea el envío de emails
+ * (JavaMailSender) para no depender de un SMTP real en los flujos de OTP.
+ *
+ * Cada test corre dentro de una transacción que se revierte al final (@Transactional), así que
+ * los datos que crea un test no afectan a los demás sin necesidad de limpieza manual.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+abstract class AbstractIntegrationTest {
+
+    @Autowired
+    protected MockMvc mockMvc;
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    @Autowired
+    protected EmpleadoRepository empleadoRepo;
+
+    @Autowired
+    protected PasswordEncoder passwordEncoder;
+
+    @MockBean
+    protected JavaMailSender javaMailSender;
+
+    protected Empleado crearEmpleado(String usuario, String passwordPlano, String rol, String email) {
+        Empleado empleado = new Empleado();
+        empleado.setNombre("Test " + usuario);
+        empleado.setUsuario(usuario);
+        empleado.setPasswordHash(passwordEncoder.encode(passwordPlano));
+        empleado.setRol(rol);
+        empleado.setEmail(email);
+        return empleadoRepo.save(empleado);
+    }
+
+    /**
+     * Hace login real contra AuthController y devuelve el JWT emitido, para ejercitar el flujo de
+     * autenticación completo en vez de simularlo con @WithMockUser.
+     */
+    protected String login(String usuario, String passwordPlano) throws Exception {
+        String body = objectMapper.writeValueAsString(new LoginPayload(usuario, passwordPlano));
+
+        String respuesta = mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        JsonNode json = objectMapper.readTree(respuesta);
+        return json.get("token").asText();
+    }
+
+    private record LoginPayload(String usuario, String password) {
+    }
+}
