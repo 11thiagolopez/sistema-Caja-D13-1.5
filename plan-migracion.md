@@ -55,15 +55,14 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
 
 ### Pendiente para la próxima sesión, en orden sugerido de prioridad
 
-1. **Tests de integración** (la otra mitad del Paso 8): `@SpringBootTest` + H2 o Testcontainers
-   Postgres para repositorios y controladores. Los unitarios de hoy cubren la lógica de negocio
-   pura; falta la capa de persistencia/HTTP real.
-2. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
+1. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
    balance financiero (`GET /api/reportes/balance`) da el costo de mercadería de menos.
-3. **Empezar el frontend**: el backend ya soporta un consumidor externo (CORS resuelto). Definir
+2. **Empezar el frontend**: el backend ya soporta un consumidor externo (CORS resuelto). Definir
    stack (React/Vue/Angular) y arrancar contra `http://localhost:8080`.
-4. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
+3. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
    versionadas — recomendado antes de tener datos de producción reales, cada vez más caro después.
+
+(Paso 8 — tests de integración — ya está completo, ver sección "Estado de avance" abajo.)
 
 ---
 
@@ -150,11 +149,25 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
 - [x] Variables de entorno (`JWT_SECRET`, `SUPABASE_DB_PASSWORD`/`GMAIL_APP_PASSWORD`) — hecho,
       seteadas como variables de usuario de Windows en la máquina de desarrollo.
 - [x] Email de los `Empleado` con `rol='ADMIN'` cargado — hecho (probado con OTP real por email).
-- [x] Paso 8 — Tests: **hecho parcialmente**. `VentaServiceTest` (11) y `CajaServiceTest` (11)
-      cubren la lógica de negocio más sensible (validación de stock, reglas del descuento manual,
-      los dos flujos de OTP, y el arqueo por turno) con Mockito, sin tocar la base real. **Sigue
-      pendiente**: tests de integración con `@SpringBootTest` + H2/Testcontainers para repositorios
-      y controladores (la otra mitad del Paso 8 original).
+- [x] Paso 8 — Tests: **completo**. Unitarios (Mockito, sin tocar base real): `VentaServiceTest`
+      (11) y `CajaServiceTest` (11). Integración (`@SpringBootTest`/`@DataJpaTest` + H2 en memoria
+      real, `src/test/resources/application.properties` pisa la config de Supabase en el classpath
+      de test):
+      - Repositorios (`@DataJpaTest`, 12 tests): `EmpleadoRepositoryTest`, `VentaRepositoryTest`
+        (incluye cascada `Venta`→`DetalleVenta` y `orphanRemoval`), `CajaRepositoriesTest`
+        (`SesionCaja`+`MovimientoCaja`).
+      - HTTP de punta a punta (`@SpringBootTest`+`MockMvc`, 26 tests, JWT real vía login, sin
+        `@WithMockUser`): `AuthControllerIntegrationTest`, `SecurityIntegrationTest` (401/403 por
+        rol), `VentaControllerIntegrationTest`, `CajaControllerIntegrationTest`. Los dos flujos de
+        OTP (descuento de venta, retiro de caja) se prueban completos: `JavaMailSender` se
+        mockea con `@MockBean` (sin SMTP real) y el test extrae el código de 6 dígitos del cuerpo
+        del email capturado con `ArgumentCaptor`, para después confirmarlo por HTTP igual que
+        haría un usuario real.
+      - Se agregaron `h2` y `spring-security-test` al `pom.xml` (scope test). Nota de nomenclatura:
+        las clases de integración HTTP quedaron con sufijo `...IntegrationTest`, no `...IT` —
+        Surefire (bindeado a `mvn test`) solo recoge `*Test`/`*Tests` por default; `*IT` es la
+        convención de Failsafe, que no está configurado en este proyecto.
+      - 60/60 tests verdes (`mvn test`).
 - [ ] `Producto.precioCompra` sigue sin cargarse en la mayoría de los productos (si queda `null`, el
       reporte de balance lo trata como 0, así que el costo de mercadería da de menos).
 - **Nota (no es un bug, pero vale la pena revisarlo más adelante)**: `CajaService.calcularResumenDelDia()`
@@ -431,6 +444,16 @@ el `pom.xml` actual, solo verificar que no se reintroduzcan).
    eso solo sería necesario si en el futuro hubiera más de un vendedor cobrando en paralelo, en
    cuyo caso habría que agregar `idSesion` a `Venta`/`MovimientoCaja` y permitir arqueo por sesión
    además de por día.
+5. **Resuelto (2026-07-27)**: el dueño del negocio confirmó explícitamente que el rol `VENDEDOR`
+   **no debe poder ver el historial de ventas bajo ninguna forma, ni siquiera el de su propio
+   turno**. Ya estaba así de hecho (`GET /api/ventas` y todo `/api/caja/**` — incluye
+   `resumen-dia` y `resumen` por rango/turno — ya exigían `hasRole("ADMIN")` en
+   `SecurityConfig`), pero no había test que cubriera específicamente el caso "vendedor pide el
+   resumen de un turno que no es el suyo (o del que participó)". Se agregó esa cobertura en
+   `CajaControllerIntegrationTest` (`resumenDelDia_comoVendedor_devuelve403`,
+   `resumenPorRango_comoVendedor_devuelve403_niSiquieraElDeSuPropioTurno`) y se documentó la regla
+   como comentario en `SecurityConfig`, para que quede explícito que no se debe agregar a futuro
+   un endpoint tipo "mis ventas" o "resumen de mi turno" para `VENDEDOR`.
 
 Ninguno de estos puntos bloquea empezar el Paso 1 y 2 (housekeeping + completar entidades), pero sí
 conviene resolverlos antes del Paso 4 (servicios) y Paso 7 (seguridad).
