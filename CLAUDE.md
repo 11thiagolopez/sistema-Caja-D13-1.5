@@ -11,6 +11,11 @@ Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente 
 
 Estado Actual (Actualizado al 2026-07-27):
 
+**Reorganización a monorepo (2026-07-28)**: el repo pasó a tener `backend/` (todo el proyecto
+Java/Maven/Eclipse, movido desde la raíz con `git mv` preservando el historial) y `frontend/`
+(vacía, lista para el scaffold). Los comandos de Maven/Eclipse ahora corren desde `backend/`, no
+desde la raíz del repo.
+
 El backend Spring Boot está completo, compila limpio, y quedó verificado end-to-end contra
 Supabase real (login JWT por roles, ventas con descuento + OTP, retiro de caja + OTP, arqueo de
 caja por turno y por rango de fechas, CORS). Paso 8 (tests) ya está completo: 22 unitarios

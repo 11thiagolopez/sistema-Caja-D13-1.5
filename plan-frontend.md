@@ -2,7 +2,7 @@
 
 ## Contexto y decisión
 
-El backend (Spring Boot, este mismo repo, raíz del proyecto) está completo, migrado y con
+El backend (Spring Boot, este mismo repo, carpeta `backend/`) está completo, migrado y con
 62 tests verdes (ver `plan-migracion.md`). Corre en `http://localhost:8080` y ya tiene CORS
 resuelto para un frontend en otro origen.
 
@@ -15,8 +15,10 @@ de descubrir a los golpes en runtime.
 Se eligió React (en vez de Vue) porque hay más ejemplos/documentación disponibles para este tipo
 de CRUD con JWT + roles, que es exactamente el caso de este proyecto.
 
-**Ubicación**: se recomienda un monorepo — carpeta nueva `frontend/` en la raíz de este mismo
-repo, al lado de `pom.xml` y `src/` (el backend Java). No se creó todavía.
+**Ubicación**: monorepo — carpeta `frontend/` en la raíz de este mismo repo, al lado de
+`backend/` (que contiene `pom.xml` y `src/`, el backend Java). Reorganizado el 2026-07-28: el
+backend, que antes vivía en la raíz del repo, se movió a `backend/` con `git mv` para preservar
+el historial; `frontend/` se creó vacía, lista para el scaffold de abajo.
 
 ---
 

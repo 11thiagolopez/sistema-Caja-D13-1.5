@@ -44,6 +44,31 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
   configurado) a veces pisa el build de Maven en `target/classes` con clases rotas
   (`Unresolved compilation problems` al levantar). Si pasa: `mvn clean spring-boot:run` en un solo
   comando, no `compile` + `spring-boot:run` por separado.
+- **(2026-07-28) JDK 24 rompía Lombok y Mockito silenciosamente**: la máquina de desarrollo tiene
+  JDK 24 instalado (`java -version` → `24.0.2`), y las versiones que gestiona
+  `spring-boot-starter-parent 3.3.4` no lo soportan:
+  - **Lombok 1.18.34**: `@Getter`/`@Setter` no generaban nada — sin error, sin warning, el
+    procesador ni se registraba (`mvn clean compile` fallaba con `cannot find symbol getX()` por
+    todos lados, en cualquier clase que usara una entidad/DTO con Lombok). Reproducido standalone
+    con `javac` fuera de Maven: sin `-processorpath` explícito, el procesador ni se intenta cargar
+    bajo este JDK (antes alcanzaba con tenerlo en el classpath); forzando `-processorpath` sí
+    corre, pero explota con `NoSuchFieldException: com.sun.tools.javac.code.TypeTag :: UNKNOWN`
+    (los internals de `javac` cambiaron en JDK 24 y 1.18.34 no los conoce).
+  - **Mockito 5.11.0 / byte-buddy 1.14.19**: los tests unitarios con `@Mock` fallaban con
+    `MockitoException: Could not modify all classes` ("Mockito cannot mock this class") — mismo
+    motivo, byte-buddy viejo no sabe instrumentar bytecode de JDK 24.
+  - **Fix**: en `backend/pom.xml`, se agregaron tres properties que pisan lo que gestiona
+    `spring-boot-starter-parent` (`lombok.version=1.18.46`, `mockito.version=5.23.0`,
+    `byte-buddy.version=1.17.7` — las últimas disponibles en Maven Central al momento del fix, ya
+    con soporte JDK 24 confirmado) y un `maven-compiler-plugin` explícito con
+    `annotationProcessorPaths` apuntando a Lombok (para forzar el `-processorpath` que este JDK
+    dejó de inferir del classpath). Sin el `byte-buddy.version` explícito no alcanza con subir
+    Mockito solo: el BOM de Spring Boot vuelve a bajarlo a 1.14.19 por la versión que usa
+    Hibernate, hay que pisarlo aparte. Verificado con `mvn clean compile` y `mvn test` (62/62
+    verdes) después del fix.
+  - Si en el futuro se sube la versión de `spring-boot-starter-parent` a una que ya gestione
+    versiones de Lombok/Mockito/byte-buddy compatibles con el JDK en uso, estas tres properties se
+    pueden quitar (no hacen daño dejarlas, pero quedarían redundantes).
 
 ### Config ya resuelta (para no volver a perder tiempo en esto)
 

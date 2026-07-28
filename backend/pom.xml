@@ -24,6 +24,19 @@
 		<maven.compiler.source>21</maven.compiler.source>
 		<maven.compiler.target>21</maven.compiler.target>
 		<mainClassName>com.thiago.escenasFX.SistemaD13Application</mainClassName>
+		<!-- spring-boot-starter-parent 3.3.4 gestiona 1.18.34, que no soporta el javac de JDK 24
+		     (la máquina de desarrollo tiene JDK 24 instalado): la anotación @Getter/@Setter no
+		     generaba nada, sin error, porque el procesador ni se registraba. 1.18.46 es la última
+		     disponible en Maven Central y sí soporta JDK 24. -->
+		<lombok.version>1.18.46</lombok.version>
+		<!-- Mismo problema que Lombok: mockito-core 5.11.0 (el que gestiona spring-boot-starter-parent
+		     3.3.4) trae un byte-buddy que no sabe instrumentar clases bajo JDK 24 ("Mockito cannot
+		     mock this class"). 5.23.0 es la última en Maven Central y sí lo soporta. -->
+		<mockito.version>5.23.0</mockito.version>
+		<!-- El BOM de Spring Boot fuerza byte-buddy a 1.14.19 (para que coincida con lo que usa
+		     Hibernate), pisando la versión más nueva que mockito-core 5.23.0 necesita (1.17.7) para
+		     poder instrumentar clases bajo JDK 24. -->
+		<byte-buddy.version>1.17.7</byte-buddy.version>
 	</properties>
 
 	<dependencies>
@@ -114,6 +127,19 @@
 
 	<build>
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<annotationProcessorPaths>
+						<path>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+							<version>${lombok.version}</version>
+						</path>
+					</annotationProcessorPaths>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
