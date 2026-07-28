@@ -153,24 +153,45 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Paso a paso para arrancar (próxima sesión)
+## Estado actual (Actualizado al 2026-07-28)
 
-1. `npm create vite@latest frontend -- --template react-ts` en la raíz del repo.
-2. Instalar `react-router-dom` para el ruteo y los guards por rol.
-3. Armar el cliente API (`fetch` con `Authorization: Bearer` desde el contexto de auth) y los
-   tipos de la sección "Contrato de API".
-4. Pantalla de Login primero (consume `/api/auth/login`, guarda token+rol).
-5. Guard de rutas: componente que redirige o bloquea si el `rol` en contexto no tiene permiso
-   (reflejar exactamente la tabla de arriba, sobre todo el bloqueo total de VENDEDOR a historial
-   de ventas y caja).
-6. Productos + Registrar venta (ambos roles).
-7. Recién después, las pantallas exclusivas de ADMIN.
+**El frontend ya está scaffoldeado y funcionando**, no es solo un plan. Se hizo el paso a paso de
+abajo completo, incluidas las pantallas de ADMIN (no se dejaron para después como decía el plan
+original):
+
+- [x] `npm create vite@latest frontend -- --template react-ts`, `react-router-dom` instalado
+      (pineado a `7.18.1`, la última publicada — tiene 2 advisories abiertos de la librería, pero
+      son específicos de su modo RSC/SSR que esta app no usa al ser un SPA 100% client-side; no
+      hay ninguna versión limpia publicada todavía).
+- [x] Cliente API (`src/api/client.ts` + un módulo por recurso: `auth.ts`, `productos.ts`,
+      `ventas.ts`, `caja.ts`, `reportes.ts`) con `Authorization: Bearer` inyectado desde el token
+      guardado en el contexto de auth. Tipos completos del contrato en `src/types/api.ts`,
+      chequeados contra los DTOs reales del backend (no solo contra este documento).
+- [x] `src/auth/AuthContext.tsx`: sesión (`idEmpleado`, `nombre`, `usuario`, `rol`, `token`)
+      persistida en `localStorage`.
+- [x] `src/auth/ProtectedRoute.tsx`: `RequireAuth` y `RequireRole` bloquean **a nivel de router**
+      (no solo ocultan botones) — `VENDEDOR` no puede llegar a `/ventas/historial`, `/caja` ni
+      `/reportes` aunque escriba la URL a mano, cumpliendo la regla no negociable de arriba.
+- [x] Las 6 pantallas: `Login`, `Productos`, `RegistrarVenta` (con aviso de
+      `PENDIENTE_AUTORIZACION` cuando hay descuento), y las de ADMIN — `HistorialVentas` (con
+      input de código para confirmar el OTP del descuento), `Caja` (abrir/cerrar sesión, retiro en
+      dos pasos, resumen del día), `Reportes` (balance + productos ganadores).
+- [x] `tsc -b` y `npm run build` sin errores, `oxlint` limpio. Verificado con `curl` contra el
+      backend real corriendo (`mvn spring-boot:run`): login con credenciales inválidas devuelve
+      `401 {"message": "..."}` (el shape que espera `ApiRequestError`), preflight CORS desde
+      `http://localhost:5173` responde `200` con los headers esperados.
+- [ ] **Falta probar en el navegador con un usuario real** (login válido de ADMIN y de VENDEDOR,
+      ver que el guard de roles y los flujos de OTP se vean bien) — no se pudo hacer en esta
+      sesión por no tener acceso a un navegador.
 
 ## Pendientes / decisiones abiertas
 
-- ¿`.env` con la URL del backend va a variar entre dev/prod? Por ahora alcanza con
-  `http://localhost:8080` fijo en `.env.example`, ajustar cuando haya despliegue real.
+- Probar el login real en el navegador (ver punto arriba).
+- Pulir estilos/UX: lo que hay es funcional pero básico (sin librería de componentes, formularios
+  simples).
 - Sigue pendiente (ver `plan-migracion.md`): cargar `Producto.precioCompra` en Supabase (afecta
   la pantalla de Reportes → Balance, que hoy subestima el costo de mercadería).
 - No se decidió todavía manejo de estado global (Context alcanza para el tamaño actual de la
   app; evaluar Zustand/Redux solo si la cantidad de estado compartido crece).
+- ¿`.env` con la URL del backend va a variar entre dev/prod? Por ahora alcanza con
+  `http://localhost:8080` fijo (`.env` y `.env.example`), ajustar cuando haya despliegue real.

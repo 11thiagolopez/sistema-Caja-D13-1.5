@@ -78,13 +78,34 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
 - Emails de `Empleado` con `rol='ADMIN'` cargados en Supabase (incluye a Alejandro y a THIAGO11).
 - Todo el SQL de las secciones 8, 9 y 10 de este documento ya está corrido en Supabase.
 
+### Reorganización a monorepo + frontend arrancado (2026-07-28)
+
+- El repo pasó a monorepo: todo el proyecto Java/Maven/Eclipse se movió de la raíz a `backend/`
+  con `git mv` (historial preservado), y se creó `frontend/` — ver detalle completo del stack,
+  contrato de API y pantallas en `plan-frontend.md`.
+- El frontend (React + Vite + TypeScript) ya no es solo un plan: está scaffoldeado y funcionando
+  — Login, Productos, Registrar venta, y las tres pantallas de ADMIN (Historial con confirmación
+  de OTP, Caja, Reportes), con guards de rutas por rol reales (no solo UI). Detalle completo en
+  `plan-frontend.md`.
+- Verificado backend + frontend corriendo juntos: `mvn spring-boot:run` contra Supabase real en
+  `:8080`, `npm run dev` en `:5173`, login con credenciales inválidas devuelve
+  `401 {"message": "..."}`, preflight CORS desde `localhost:5173` responde `200`. **No se probó
+  todavía un login real desde el navegador con un usuario válido** (falta abrir la UI a mano y
+  loguearse).
+- Commits `101a6ea` (reorg a monorepo + fix Lombok/Mockito) y `efa692e` (scaffold del frontend) ya
+  están pusheados a `origin/migracion-web`, pero **todavía no mergeados a `main`** (2 commits de
+  diferencia) — falta abrir el PR si se quiere llevarlos a `main` como se hizo con el PR #1.
+
 ### Pendiente para la próxima sesión, en orden sugerido de prioridad
 
-1. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
-   balance financiero (`GET /api/reportes/balance`) da el costo de mercadería de menos.
-2. **Empezar el frontend**: el backend ya soporta un consumidor externo (CORS resuelto). Definir
-   stack (React/Vue/Angular) y arrancar contra `http://localhost:8080`.
-3. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
+1. **Probar el frontend en el navegador** con un usuario real (ADMIN y VENDEDOR) para confirmar
+   que el guard de roles y los flujos de OTP se ven y funcionan bien de punta a punta.
+2. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
+   balance financiero (`GET /api/reportes/balance`) da el costo de mercadería de menos (afecta
+   también a la pantalla de Reportes del frontend).
+3. **Abrir el PR de `migracion-web` → `main`** para los dos commits pendientes (reorg a monorepo +
+   scaffold de frontend), si se quiere mantener `main` al día como con el PR #1.
+4. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
    versionadas — recomendado antes de tener datos de producción reales, cada vez más caro después.
 
 (Paso 8 — tests de integración — ya está completo, ver sección "Estado de avance" abajo.)
