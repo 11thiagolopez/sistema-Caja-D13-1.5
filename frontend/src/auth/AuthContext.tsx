@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
 import { login as loginRequest } from '../api/auth'
 import { setAuthToken } from '../api/client'
 import type { LoginResponse, Rol } from '../types/api'
@@ -34,7 +34,13 @@ function leerSesionGuardada(): Sesion | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesionGuardada())
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect): passive effects fire children-before-parent within a
+  // commit, so a plain useEffect here would let a just-mounted page's own fetch effect
+  // (e.g. Productos loading /api/productos on login redirect or page refresh) run before
+  // this one sets the token, sending that first request with no Authorization header.
+  // Layout effects across the whole tree complete before any passive effect runs, so this
+  // always wins the race.
+  useLayoutEffect(() => {
     setAuthToken(sesion?.token ?? null)
   }, [sesion])
 
