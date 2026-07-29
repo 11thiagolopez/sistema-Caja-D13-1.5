@@ -64,17 +64,19 @@ public class SecurityConfig {
 
     /**
      * JWT stateless por roles (ADMIN / VENDEDOR).
-     * - ADMIN: unico rol que ve ventas (GET), gestiona caja (abrir/cerrar/retiro) y accede
-     *   a reportes.
-     * - ADMIN y VENDEDOR: pueden listar productos y registrar ventas (POST).
-     * - Confirmar un descuento de venta requiere ser ADMIN (el OTP se le envía a él por email).
+     * - ADMIN: unico rol que ve ventas (GET), confirma descuentos/retiros y accede a reportes.
+     * - ADMIN y VENDEDOR: pueden listar productos, registrar ventas (POST), abrir/cerrar caja y
+     *   solicitar un retiro.
+     * - Confirmar un descuento de venta o un retiro de caja requiere ser ADMIN (el OTP se le
+     *   envía a él por email) — el VENDEDOR puede disparar la solicitud (venta con descuento,
+     *   retiro), pero el ADMIN es quien controla/autoriza con el código, nunca al revés.
+     * - Alta/baja de productos y carga de stock: solo ADMIN.
      *
      * Decisión de negocio (confirmada por el dueño del negocio): el VENDEDOR no debe poder ver
-     * el historial de ventas bajo ninguna forma, ni siquiera el de su propio turno. Por eso
-     * "/api/caja/**" (que incluye el resumen por turno de CajaService.calcularResumenDeSesion,
-     * solo alcanzable vía GET /api/caja/resumen) y "GET /api/ventas" quedan exclusivamente para
-     * ADMIN — no existe, ni debe agregarse, un endpoint de "mis ventas"/"resumen de mi turno"
-     * para VENDEDOR.
+     * el historial de ventas ni el arqueo de caja bajo ninguna forma, ni siquiera el de su propio
+     * turno. Por eso "GET /api/caja/resumen-dia", "GET /api/caja/resumen" y "GET /api/ventas"
+     * quedan exclusivamente para ADMIN — no existe, ni debe agregarse, un endpoint de "mis
+     * ventas"/"resumen de mi turno" para VENDEDOR.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -88,10 +90,17 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/productos/**").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.POST, "/api/productos", "/api/productos/cargar-stock").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/productos/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/ventas").hasAnyRole("ADMIN", "VENDEDOR")
                 // Historial de ventas: solo ADMIN, ni global ni por turno (ver nota arriba).
                 .requestMatchers(HttpMethod.GET, "/api/ventas").hasRole("ADMIN")
                 .requestMatchers("/api/ventas/descuento/confirmar").hasRole("ADMIN")
+                // Abrir/cerrar caja y solicitar un retiro: operación del día a día, VENDEDOR
+                // también puede. Confirmar el retiro y ver resúmenes sigue exclusivo de ADMIN
+                // (matcher general de abajo).
+                .requestMatchers(HttpMethod.POST, "/api/caja/abrir", "/api/caja/cerrar", "/api/caja/retiro/solicitar")
+                    .hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/caja/**").hasRole("ADMIN")
                 .requestMatchers("/api/reportes/**").hasRole("ADMIN")
                 .anyRequest().authenticated())

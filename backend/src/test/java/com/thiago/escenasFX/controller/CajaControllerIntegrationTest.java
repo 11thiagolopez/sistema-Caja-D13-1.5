@@ -50,7 +50,7 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void abrirCaja_comoVendedor_devuelve403() throws Exception {
+    void abrirCaja_comoVendedor_creaSesionAbierta() throws Exception {
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String token = login("vendedor1", "clave123");
 
@@ -59,7 +59,25 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content("""
                     {"idEmpleado": %d, "montoInicial": 1000}""".formatted(vendedor.getIdEmpleado())))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("ABIERTA"));
+    }
+
+    @Test
+    void cerrarCaja_comoVendedor_laCierra() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/caja/abrir")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"idEmpleado": %d, "montoInicial": 1000}""".formatted(vendedor.getIdEmpleado())))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/caja/cerrar").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("CERRADA"));
     }
 
     @Test
@@ -176,7 +194,8 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void solicitarRetiro_comoVendedor_devuelve403() throws Exception {
+    void solicitarRetiro_comoVendedor_generaSolicitudPendiente() throws Exception {
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com"); // recibe el email de OTP
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String token = login("vendedor1", "clave123");
 
@@ -186,7 +205,67 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
                 .content("""
                     {"idEmpleado": %d, "monto": 300, "motivo": "Gastos", "medioPago": "EFECTIVO"}"""
                     .formatted(vendedor.getIdEmpleado())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("PENDIENTE"));
+    }
+
+    @Test
+    void confirmarRetiro_comoVendedor_devuelve403() throws Exception {
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com"); // recibe el email de OTP
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        String respuesta = mockMvc.perform(post("/api/caja/retiro/solicitar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"idEmpleado": %d, "monto": 300, "motivo": "Gastos", "medioPago": "EFECTIVO"}"""
+                    .formatted(vendedor.getIdEmpleado())))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        Integer idSolicitud = objectMapper.readTree(respuesta).get("idSolicitud").asInt();
+        String codigo = extraerCodigoOtpDelUltimoEmail();
+
+        mockMvc.perform(post("/api/caja/retiro/confirmar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"idSolicitud": %d, "codigo": "%s"}""".formatted(idSolicitud, codigo)))
             .andExpect(status().isForbidden());
+    }
+
+    /**
+     * El caso de uso real: el VENDEDOR pide el retiro, el OTP le llega por email a un ADMIN que
+     * no fue quien lo solicitó, y ese ADMIN lo confirma con el idSolicitud (que ya viene en el
+     * asunto del email) + el código.
+     */
+    @Test
+    void retiro_solicitadoPorVendedor_loConfirmaUnAdminDistinto() throws Exception {
+        Empleado admin = crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String tokenAdmin = login("admin1", "clave123");
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String tokenVendedor = login("vendedor1", "clave123");
+
+        String respuesta = mockMvc.perform(post("/api/caja/retiro/solicitar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor)
+                .content("""
+                    {"idEmpleado": %d, "monto": 300, "motivo": "Gastos varios", "medioPago": "EFECTIVO"}"""
+                    .formatted(vendedor.getIdEmpleado())))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        Integer idSolicitud = objectMapper.readTree(respuesta).get("idSolicitud").asInt();
+        String codigo = extraerCodigoOtpDelUltimoEmail();
+
+        mockMvc.perform(post("/api/caja/retiro/confirmar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
+                .content("""
+                    {"idSolicitud": %d, "codigo": "%s"}""".formatted(idSolicitud, codigo)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tipo").value("RETIRO"));
     }
 
     /**

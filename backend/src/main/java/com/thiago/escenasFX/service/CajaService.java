@@ -90,7 +90,8 @@ public class CajaService {
 
         emailService.enviarOtpAAdmins(
             "Autorización de retiro de caja - solicitud #" + solicitud.getIdSolicitud(),
-            "Se solicitó un retiro de $" + monto + " (" + motivo + ").\n"
+            "Empleado solicitante: " + solicitante.getNombre() + "\n"
+                + "Se solicitó un retiro de $" + monto + " (" + motivo + ").\n"
                 + "Código de confirmación: " + codigo + "\n"
                 + "Vence en " + OtpService.VIGENCIA_MINUTOS + " minutos.");
 

@@ -46,4 +46,8 @@ public class Producto {
 
     @Column(name = "stock_actual")
     private int stockActual;
+
+    // Baja lógica: un producto eliminado deja de listarse/venderse pero no rompe la integridad
+    // de las ventas históricas que ya lo referencian (DetalleVenta -> Producto no tiene cascade).
+    private boolean activo = true;
 }
