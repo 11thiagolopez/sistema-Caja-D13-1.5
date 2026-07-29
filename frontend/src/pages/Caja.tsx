@@ -6,13 +6,15 @@ import type { MedioPago, ResumenDiaResponse } from '../types/api'
 
 export function Caja() {
   const { sesion } = useAuth()
+  const esAdmin = sesion?.rol === 'ADMIN'
   const [resumen, setResumen] = useState<ResumenDiaResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [montoInicial, setMontoInicial] = useState('')
   const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
-  const [idSolicitud, setIdSolicitud] = useState<number | null>(null)
+  const [mensajeSolicitud, setMensajeSolicitud] = useState<string | null>(null)
+  const [idSolicitud, setIdSolicitud] = useState('')
   const [codigo, setCodigo] = useState('')
 
   function cargarResumen() {
@@ -24,7 +26,11 @@ export function Caja() {
       )
   }
 
-  useEffect(cargarResumen, [])
+  // VENDEDOR no debe ni disparar esta llamada: GET /api/caja/resumen-dia es exclusivo de ADMIN.
+  useEffect(() => {
+    if (esAdmin) cargarResumen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esAdmin])
 
   async function onAbrirCaja() {
     if (!sesion || !montoInicial) return
@@ -32,7 +38,7 @@ export function Caja() {
     try {
       await abrirCaja({ idEmpleado: sesion.idEmpleado, montoInicial: Number(montoInicial) })
       setMontoInicial('')
-      cargarResumen()
+      if (esAdmin) cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo abrir la caja')
     }
@@ -42,7 +48,7 @@ export function Caja() {
     setError(null)
     try {
       await cerrarCaja()
-      cargarResumen()
+      if (esAdmin) cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo cerrar la caja')
     }
@@ -51,6 +57,7 @@ export function Caja() {
   async function onSolicitarRetiro() {
     if (!sesion || !monto || !motivo) return
     setError(null)
+    setMensajeSolicitud(null)
     try {
       const solicitud = await solicitarRetiro({
         idEmpleado: sesion.idEmpleado,
@@ -58,7 +65,13 @@ export function Caja() {
         motivo,
         medioPago,
       })
-      setIdSolicitud(solicitud.idSolicitud)
+      setMensajeSolicitud(
+        `Retiro solicitado (#${solicitud.idSolicitud}). Se envió un código de autorización a los administradores.`,
+      )
+      // Atajo para ADMIN: si el mismo usuario va a confirmar, le precargamos el id (sigue editable).
+      if (esAdmin) setIdSolicitud(String(solicitud.idSolicitud))
+      setMonto('')
+      setMotivo('')
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo solicitar el retiro')
     }
@@ -68,11 +81,9 @@ export function Caja() {
     if (!idSolicitud || !codigo) return
     setError(null)
     try {
-      await confirmarRetiro({ idSolicitud, codigo })
-      setIdSolicitud(null)
+      await confirmarRetiro({ idSolicitud: Number(idSolicitud), codigo })
+      setIdSolicitud('')
       setCodigo('')
-      setMonto('')
-      setMotivo('')
       cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el retiro')
@@ -102,36 +113,42 @@ export function Caja() {
 
       <section>
         <h3>Solicitar retiro</h3>
-        {idSolicitud === null ? (
-          <>
-            <input
-              type="number"
-              placeholder="Monto"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-            />
-            <input placeholder="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-            <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
-              <option value="EFECTIVO">Efectivo</option>
-              <option value="TRANSFERENCIA">Transferencia</option>
-              <option value="TARJETA">Tarjeta</option>
-            </select>
-            <button type="button" onClick={onSolicitarRetiro}>
-              Solicitar
-            </button>
-          </>
-        ) : (
-          <>
-            <p>Se envió un código por email a los administradores.</p>
-            <input placeholder="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-            <button type="button" onClick={onConfirmarRetiro}>
-              Confirmar retiro
-            </button>
-          </>
-        )}
+        <input
+          type="number"
+          placeholder="Monto"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+        />
+        <input placeholder="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+        <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="TARJETA">Tarjeta</option>
+        </select>
+        <button type="button" onClick={onSolicitarRetiro}>
+          Solicitar
+        </button>
+        {mensajeSolicitud && <p className="resultado">{mensajeSolicitud}</p>}
       </section>
 
-      {resumen && (
+      {esAdmin && (
+        <section>
+          <h3>Confirmar retiro</h3>
+          <p>El id de solicitud está en el asunto del email que recibiste ("solicitud #...").</p>
+          <input
+            type="number"
+            placeholder="N° de solicitud"
+            value={idSolicitud}
+            onChange={(e) => setIdSolicitud(e.target.value)}
+          />
+          <input placeholder="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+          <button type="button" onClick={onConfirmarRetiro}>
+            Confirmar retiro
+          </button>
+        </section>
+      )}
+
+      {esAdmin && resumen && (
         <section>
           <h3>Resumen del día</h3>
           <ul>

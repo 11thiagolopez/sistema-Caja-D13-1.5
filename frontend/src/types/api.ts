@@ -33,9 +33,27 @@ export interface Producto {
   proveedor: string
   codigoFabrica: string
   descripcion: string
-  precioVenta: number
+  precioVenta: number | null
   precioCompra: number | null
   stockActual: number
+  activo: boolean
+}
+
+export interface ProductoRequest {
+  rubro: string
+  familia: string
+  marca: string
+  proveedor: string
+  codigoFabrica?: string
+  descripcion: string
+  precioVenta: number
+  precioCompra?: number
+  stockActual: number
+}
+
+export interface CargarStockRequest {
+  codigo: string
+  cantidad: number
 }
 
 export interface DetalleVentaRequest {

@@ -15,10 +15,10 @@ export function Layout() {
       <nav>
         <NavLink to="/productos">Productos</NavLink>
         <NavLink to="/ventas/nueva">Registrar venta</NavLink>
+        <NavLink to="/caja">Caja</NavLink>
         {sesion?.rol === 'ADMIN' && (
           <>
             <NavLink to="/ventas/historial">Historial de ventas</NavLink>
-            <NavLink to="/caja">Caja</NavLink>
             <NavLink to="/reportes">Reportes</NavLink>
           </>
         )}

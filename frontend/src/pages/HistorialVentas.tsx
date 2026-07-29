@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { confirmarDescuento, getVentas } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
+import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import type { VentaResponse } from '../types/api'
 
 function hoyIso(): string {
@@ -14,6 +15,7 @@ export function HistorialVentas() {
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [codigos, setCodigos] = useState<Record<number, string>>({})
+  const [comprobanteVenta, setComprobanteVenta] = useState<VentaResponse | null>(null)
 
   async function buscar(event?: FormEvent) {
     event?.preventDefault()
@@ -69,6 +71,7 @@ export function HistorialVentas() {
             <th>Descuento</th>
             <th>Estado</th>
             <th>Autorización</th>
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -96,10 +99,21 @@ export function HistorialVentas() {
                   </span>
                 )}
               </td>
+              <td>
+                {venta.estado === 'CONFIRMADA' && (
+                  <button type="button" onClick={() => setComprobanteVenta(venta)}>
+                    Comprobante
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {comprobanteVenta && (
+        <ComprobanteInterno venta={comprobanteVenta} onCerrar={() => setComprobanteVenta(null)} />
+      )}
     </div>
   )
 }

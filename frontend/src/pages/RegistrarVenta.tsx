@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { getProductos } from '../api/productos'
+import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
+import { BarcodeInput } from '../components/BarcodeInput'
+import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
 
 interface ItemCarrito extends DetalleVentaRequest {
@@ -21,6 +23,11 @@ export function RegistrarVenta() {
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [mostrarComprobante, setMostrarComprobante] = useState(false)
+
+  const [filtroDescripcion, setFiltroDescripcion] = useState('')
+  const [filtroMarca, setFiltroMarca] = useState('')
+  const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
 
   useEffect(() => {
     getProductos()
@@ -31,19 +38,58 @@ export function RegistrarVenta() {
       .catch(() => setError('No se pudieron cargar los productos'))
   }, [])
 
+  const productosFiltrados = productos.filter((p) => {
+    const matchDescripcion = p.descripcion.toLowerCase().includes(filtroDescripcion.toLowerCase())
+    const matchMarca = p.marca.toLowerCase().includes(filtroMarca.toLowerCase())
+    return matchDescripcion && matchMarca
+  })
+
+  function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
+    const precioVenta = producto.precioVenta
+    if (precioVenta == null) return false
+    setCarrito((actual) => {
+      const indiceExistente = actual.findIndex((item) => item.idProducto === producto.idProducto)
+      if (indiceExistente >= 0) {
+        const copia = [...actual]
+        copia[indiceExistente] = {
+          ...copia[indiceExistente],
+          cantidad: copia[indiceExistente].cantidad + cantidadAAgregar,
+        }
+        return copia
+      }
+      return [
+        ...actual,
+        {
+          idProducto: producto.idProducto,
+          descripcionProducto: producto.descripcion,
+          cantidad: cantidadAAgregar,
+          precioUnitario: precioVenta,
+        },
+      ]
+    })
+    return true
+  }
+
   function agregarAlCarrito() {
     const producto = productos.find((p) => p.idProducto === idProductoSeleccionado)
     if (!producto || cantidad <= 0) return
-    setCarrito((actual) => [
-      ...actual,
-      {
-        idProducto: producto.idProducto,
-        descripcionProducto: producto.descripcion,
-        cantidad,
-        precioUnitario: producto.precioVenta,
-      },
-    ])
+    if (!agregarProductoAlCarrito(producto, cantidad)) {
+      setError(`"${producto.descripcion}" no tiene precio de venta cargado, no se puede vender`)
+      return
+    }
     setCantidad(1)
+  }
+
+  async function onEscanear(codigo: string) {
+    setErrorEscaneo(null)
+    try {
+      const producto = await buscarProductoPorCodigo(codigo)
+      if (!agregarProductoAlCarrito(producto, 1)) {
+        setErrorEscaneo(`"${producto.descripcion}" no tiene precio de venta cargado, no se puede vender`)
+      }
+    } catch {
+      setErrorEscaneo(`Producto no encontrado para el código ${codigo}`)
+    }
   }
 
   function quitarDelCarrito(index: number) {
@@ -71,6 +117,7 @@ export function RegistrarVenta() {
         motivoDescuento: descuentoNumero ? motivoDescuento : undefined,
       })
       setResultado(venta)
+      setMostrarComprobante(false)
       setCarrito([])
       setDescuento('')
       setMotivoDescuento('')
@@ -85,14 +132,30 @@ export function RegistrarVenta() {
     <div>
       <h2>Registrar venta</h2>
 
+      <section>
+        <h3>Escanear código de barras</h3>
+        <BarcodeInput onScan={onEscanear} />
+        {errorEscaneo && <p className="error">{errorEscaneo}</p>}
+      </section>
+
       <div className="agregar-producto">
+        <input
+          placeholder="Filtrar por descripción"
+          value={filtroDescripcion}
+          onChange={(e) => setFiltroDescripcion(e.target.value)}
+        />
+        <input
+          placeholder="Filtrar por marca"
+          value={filtroMarca}
+          onChange={(e) => setFiltroMarca(e.target.value)}
+        />
         <select
           value={idProductoSeleccionado ?? ''}
           onChange={(e) => setIdProductoSeleccionado(Number(e.target.value))}
         >
-          {productos.map((producto) => (
+          {productosFiltrados.map((producto) => (
             <option key={producto.idProducto} value={producto.idProducto}>
-              {producto.descripcion} (stock: {producto.stockActual})
+              {producto.descripcion} - {producto.marca} (stock: {producto.stockActual})
             </option>
           ))}
         </select>
@@ -173,11 +236,22 @@ export function RegistrarVenta() {
       </form>
 
       {resultado && (
-        <p className="resultado">
-          {resultado.estado === 'PENDIENTE_AUTORIZACION'
-            ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: se envió un código a los administradores por email.`
-            : `Venta #${resultado.idVenta} confirmada.`}
-        </p>
+        <div className="resultado">
+          <p>
+            {resultado.estado === 'PENDIENTE_AUTORIZACION'
+              ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: se envió un código a los administradores por email.`
+              : `Venta #${resultado.idVenta} confirmada.`}
+          </p>
+          {resultado.estado === 'CONFIRMADA' && (
+            <button type="button" onClick={() => setMostrarComprobante(true)}>
+              Generar comprobante
+            </button>
+          )}
+        </div>
+      )}
+
+      {resultado && mostrarComprobante && (
+        <ComprobanteInterno venta={resultado} onCerrar={() => setMostrarComprobante(false)} />
       )}
     </div>
   )
