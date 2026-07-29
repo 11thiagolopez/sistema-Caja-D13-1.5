@@ -2,6 +2,14 @@
 
 ## Para retomar mañana
 
+**Estado al 2026-07-29: primera prueba real en navegador (Chrome), con ADMIN y VENDEDOR.** Se
+encontraron y arreglaron dos bugs que impedían usar la pantalla de Productos (ver sección 12).
+Además se agregó ABM de productos (alta, baja lógica, carga de stock por código de barras) y se
+amplió el rol VENDEDOR para que pueda abrir/cerrar caja y solicitar retiros. `migracion-web` se
+mergeó a `main` con todo esto. Commits de la sesión, en orden: `5bacdd4` (backend: ABM productos +
+roles de caja), `84d5ae6` (frontend: ABM productos + comprobante interno), `1865194` (fix: race
+condition del JWT).
+
 **Estado al 2026-07-26: el backend está completo, compilando, corriendo contra Supabase real, y
 verificado end-to-end.** Esta fue la primera sesión en que la app efectivamente arrancó (antes
 nunca se había probado más allá de la lectura del código). Commits de la sesión, en orden:
@@ -589,3 +597,62 @@ porque vender sin caja abierta sigue estando permitido (no se agregó esa restri
 ALTER TABLE ventas ADD COLUMN id_sesion INTEGER REFERENCES sesiones_caja(id_sesion);
 ALTER TABLE movimientos_caja ADD COLUMN id_sesion INTEGER REFERENCES sesiones_caja(id_sesion);
 ```
+
+---
+
+## 11. SQL: baja lógica de productos + índices de código de barras — ✅ ejecutado
+
+Necesario para el ABM de productos (alta/baja + carga de stock por código de barras) agregado en
+la sesión del 2026-07-29. `Producto` tiene el campo `activo` (baja lógica: "eliminar" un producto
+no borra la fila — `DetalleVenta.producto` no tiene cascade y un `DELETE` real rompería la
+integridad de ventas históricas — solo lo saca de los listados y de la búsqueda por código).
+
+```sql
+ALTER TABLE productos ADD COLUMN activo BOOLEAN NOT NULL DEFAULT true;
+CREATE INDEX idx_productos_codigo_fabrica ON productos(codigo_fabrica);
+CREATE UNIQUE INDEX idx_productos_codigo_interno ON productos(codigo_interno);
+```
+
+Confirmado el 2026-07-29: se reinició el backend en limpio (`mvn clean spring-boot:run`) contra
+Supabase real con `ddl-auto=validate` y arrancó sin errores de validación de esquema, así que esta
+migración ya estaba corrida. Los tests con H2 no lo hubieran detectado igual (usan
+`ddl-auto=create-drop`, que regenera el esquema desde las entidades sin importar lo que haya en
+Supabase).
+
+---
+
+## 12. Sesión 2026-07-29: primera prueba en navegador real — dos bugs encontrados y arreglados
+
+El usuario reportó que, tanto como ADMIN como VENDEDOR, apenas se logueaba quedaba trabado en la
+pantalla de Productos ("falta un token JWT válido" / pantalla en blanco, sin poder navegar a
+ningún otro lado). Diagnóstico con Chrome real (extensión de automatización), no solo lectura de
+código:
+
+1. **Race condition real en el JWT** (`frontend/src/auth/AuthContext.tsx`): el token se guardaba
+   en el cliente HTTP (`client.ts`) dentro de un `useEffect`. React ejecuta los `useEffect` de
+   componentes hijos antes que los del padre dentro del mismo commit — como `Productos` es hijo de
+   `AuthProvider`, su fetch a `GET /api/productos` (que se dispara en su propio `useEffect` al
+   montar) salía **antes** de que `AuthProvider` terminara de setear el token, tanto al redirigir
+   tras el login como al refrescar la página ya logueado. La primera request siempre iba sin
+   `Authorization` → 401. **Fix**: `useEffect` → `useLayoutEffect` en `AuthContext.tsx` (los layout
+   effects de todo el árbol terminan antes que cualquier `useEffect`, así que ya no hay carrera).
+2. **Bug que en la práctica era el que trababa todo**: varios productos en Supabase tienen
+   `precioVenta: null` (dato legado, migrado sin ese campo cargado). `Productos.tsx` hacía
+   `producto.precioVenta.toFixed(2)` sin chequear null → `TypeError`, sin error boundary en la app,
+   React desmontaba **todo el árbol** → pantalla en negro sin nav ni nada, para cualquier usuario
+   que llegara a ver ese producto en la lista (o sea, todos). Esto probablemente es lo que el
+   usuario interpretó como "no me deja ver los productos". **Fix**: `types/api.ts` ahora tipa
+   `Producto.precioVenta` como `number | null` (refleja la realidad: `BigDecimal` nullable en el
+   backend); `Productos.tsx` muestra `—` en vez de crashear; `RegistrarVenta.tsx` bloquea agregar
+   al carrito un producto sin precio cargado (mensaje de error) en vez de romper el cálculo del
+   total.
+
+Verificado en Chrome real (no solo `tsc`/`vitest`): logout/login como VENDEDOR (Thiago Lopez) y
+como ADMIN (Aleja), ambos aterrizan en `/productos` sin 401 y sin excepciones en consola, con la
+UI respetando el rol (VENDEDOR no ve "Eliminar" ni "Agregar producto"). Repetido además tras
+reiniciar el backend en limpio, mismo resultado.
+
+**Pendiente real, no es un bug**: varios productos tienen `precioVenta` en `null` en Supabase — hoy
+se muestran como "—" y no se pueden vender hasta que se les cargue un precio. Conviene resolverlo
+con un `UPDATE` en Supabase (junto con el pendiente de `precioCompra`, ver más abajo), no es algo
+para arreglar en código.

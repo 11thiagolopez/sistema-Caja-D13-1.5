@@ -153,7 +153,29 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-07-28)
+## Estado actual (Actualizado al 2026-07-29)
+
+**Probado en el navegador con usuarios reales (ADMIN y VENDEDOR) — lo que faltaba del punto
+anterior.** Se encontraron y arreglaron dos bugs que impedían usar la pantalla de Productos con
+cualquiera de los dos roles (detalle completo en `plan-migracion.md`, sección 12):
+
+- Race condition real entre el `useEffect` que guardaba el token JWT en `AuthContext.tsx` y el
+  `useEffect` de `Productos.tsx` que pedía `/api/productos` al montar — el fetch salía sin
+  `Authorization` la primera vez. Fix: `useLayoutEffect` en vez de `useEffect` para setear el
+  token.
+- Productos con `precioVenta: null` en Supabase (dato legado) crasheaban toda la app (sin error
+  boundary, un `TypeError` en un `.toFixed(2)` sin guard desmontaba todo el árbol de React).
+  Fix: tipo `Producto.precioVenta` ahora es `number | null`, `Productos.tsx` muestra "—", y
+  `RegistrarVenta.tsx` bloquea vender un producto sin precio cargado.
+
+Además se agregó ABM de productos completo en la pantalla de Productos (alta con aviso del código
+interno generado, baja lógica con confirmación, carga de stock escaneando código de barras — las
+tres acciones solo para ADMIN, con `BarcodeInput` nuevo para la captura del scanner), y
+`ComprobanteInterno` para imprimir el comprobante de una venta. `Caja.tsx` se ajustó porque ahora
+VENDEDOR también puede abrir/cerrar caja y solicitar retiro (antes esa pantalla era enteramente
+ADMIN).
+
+## Estado anterior (Actualizado al 2026-07-28)
 
 **El frontend ya está scaffoldeado y funcionando**, no es solo un plan. Se hizo el paso a paso de
 abajo completo, incluidas las pantallas de ADMIN (no se dejaron para después como decía el plan
@@ -180,17 +202,21 @@ original):
       backend real corriendo (`mvn spring-boot:run`): login con credenciales inválidas devuelve
       `401 {"message": "..."}` (el shape que espera `ApiRequestError`), preflight CORS desde
       `http://localhost:5173` responde `200` con los headers esperados.
-- [ ] **Falta probar en el navegador con un usuario real** (login válido de ADMIN y de VENDEDOR,
-      ver que el guard de roles y los flujos de OTP se vean bien) — no se pudo hacer en esta
-      sesión por no tener acceso a un navegador.
+- [x] **Probado en el navegador con un usuario real** (2026-07-29, login de ADMIN y de VENDEDOR,
+      Chrome real): encontró y arregló los dos bugs descritos en "Estado actual" arriba. Guard de
+      roles verificado (VENDEDOR no ve acciones de ADMIN en Productos). Los flujos de OTP
+      (descuento/retiro) no se volvieron a probar en esta sesión — quedan para la próxima.
 
 ## Pendientes / decisiones abiertas
 
-- Probar el login real en el navegador (ver punto arriba).
+- Probar en el navegador los flujos de OTP (confirmar descuento de venta, confirmar retiro de
+  caja) con ambos roles — no se llegó a esto en la sesión del 2026-07-29, que se fue en encontrar
+  y arreglar los dos bugs de la pantalla de Productos.
 - Pulir estilos/UX: lo que hay es funcional pero básico (sin librería de componentes, formularios
   simples).
-- Sigue pendiente (ver `plan-migracion.md`): cargar `Producto.precioCompra` en Supabase (afecta
-  la pantalla de Reportes → Balance, que hoy subestima el costo de mercadería).
+- Cargar `Producto.precioVenta` y `precioCompra` en Supabase para los productos que los tienen en
+  `null` (hoy se muestran como "—" en Productos y bloquean la venta; `precioCompra` en `null`
+  además hace que la pantalla de Reportes → Balance subestime el costo de mercadería).
 - No se decidió todavía manejo de estado global (Context alcanza para el tamaño actual de la
   app; evaluar Zustand/Redux solo si la cantidad de estado compartido crece).
 - ¿`.env` con la URL del backend va a variar entre dev/prod? Por ahora alcanza con
