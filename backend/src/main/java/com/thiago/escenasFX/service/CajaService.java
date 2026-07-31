@@ -44,27 +44,34 @@ public class CajaService {
         this.emailService = emailService;
     }
 
+    /**
+     * Se opera con una sola caja/cajero activo a la vez: no dejamos abrir una sesión nueva si ya
+     * hay una ABIERTA, sea de hoy o de un día anterior sin cerrar (ver nota en
+     * {@link com.thiago.escenasFX.repository.SesionCajaRepository#findByEstado}). Si quedó una
+     * sesión vieja sin cerrar, hay que cerrarla primero — no se auto-cierra sola para no perder de
+     * vista la diferencia de caja de ese turno.
+     */
     public SesionCaja abrirSesion(BigDecimal montoInicial, Empleado empleado) {
-        LocalDate hoy = LocalDate.now();
-        sesionRepo.findByFechaAndEstado(hoy, "ABIERTA").ifPresent(s -> {
-            throw new IllegalStateException("Ya existe una sesión de caja abierta hoy");
+        sesionRepo.findByEstado("ABIERTA").ifPresent(s -> {
+            throw new IllegalStateException(
+                "Ya existe una sesión de caja abierta (del " + s.getFecha() + "); hay que cerrarla antes de abrir una nueva");
         });
 
         SesionCaja sesion = new SesionCaja();
-        sesion.setFecha(hoy);
+        sesion.setFecha(LocalDate.now());
         sesion.setMontoInicial(montoInicial);
         sesion.setEstado("ABIERTA");
         sesion.setEmpleadoApertura(empleado);
         return sesionRepo.save(sesion);
     }
 
-    public SesionCaja obtenerSesionAbiertaDeHoy() {
-        return sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA")
-            .orElseThrow(() -> new IllegalStateException("No hay una sesión de caja abierta hoy"));
+    public SesionCaja obtenerSesionAbierta() {
+        return sesionRepo.findByEstado("ABIERTA")
+            .orElseThrow(() -> new IllegalStateException("No hay una sesión de caja abierta"));
     }
 
     public SesionCaja cerrarSesionDelDia() {
-        SesionCaja sesion = obtenerSesionAbiertaDeHoy();
+        SesionCaja sesion = obtenerSesionAbierta();
         sesion.setEstado("CERRADA");
         return sesionRepo.save(sesion);
     }
@@ -129,7 +136,7 @@ public class CajaService {
         movimiento.setMonto(monto);
         movimiento.setMotivo(motivo);
         movimiento.setEmpleado(empleado);
-        sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA").ifPresent(movimiento::setSesion);
+        sesionRepo.findByEstado("ABIERTA").ifPresent(movimiento::setSesion);
         return movRepo.save(movimiento);
     }
 

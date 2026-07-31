@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,7 +51,7 @@ class VentaServiceTest {
     @BeforeEach
     void configuracionPorDefecto() {
         // lenient: no todos los tests llegan a usar estos stubs (algunos tiran excepción antes).
-        lenient().when(sesionRepo.findByFechaAndEstado(any(LocalDate.class), anyString()))
+        lenient().when(sesionRepo.findByEstado(anyString()))
             .thenReturn(Optional.empty());
         lenient().when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -181,7 +180,7 @@ class VentaServiceTest {
         when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
         SesionCaja sesionAbierta = new SesionCaja();
         sesionAbierta.setIdSesion(7);
-        when(sesionRepo.findByFechaAndEstado(any(LocalDate.class), anyString()))
+        when(sesionRepo.findByEstado(anyString()))
             .thenReturn(Optional.of(sesionAbierta));
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));

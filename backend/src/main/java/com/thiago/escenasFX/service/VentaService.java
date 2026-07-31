@@ -1,7 +1,6 @@
 package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
@@ -40,9 +39,10 @@ public class VentaService {
      */
     @Transactional
     public Venta registrarVenta(Venta venta) {
-        // Vincula la venta a la caja abierta en este momento, si hay una. Permite el arqueo por
+        // Vincula la venta a la caja abierta en este momento, si hay una (sin filtrar por fecha:
+        // una sesión de un día anterior que nunca se cerró sigue "ABIERTA"). Permite el arqueo por
         // turno; no es obligatorio tener una caja abierta para vender (no se pidió esa regla).
-        sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA").ifPresent(venta::setSesion);
+        sesionRepo.findByEstado("ABIERTA").ifPresent(venta::setSesion);
 
         BigDecimal totalBruto = BigDecimal.ZERO;
 

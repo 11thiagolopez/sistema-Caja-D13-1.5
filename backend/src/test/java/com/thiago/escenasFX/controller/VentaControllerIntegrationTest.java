@@ -198,17 +198,48 @@ class VentaControllerIntegrationTest extends AbstractIntegrationTest {
             .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Flujo real: el VENDEDOR registra la venta con descuento, el OTP le llega por email al
+     * ADMIN (nunca al VENDEDOR), pero es el VENDEDOR quien está frente al cliente y termina la
+     * venta una vez que el ADMIN le pasa el código. El control de seguridad está en quién recibe
+     * el email, no en qué rol aprieta "Confirmar" — por eso VENDEDOR puede confirmar su propia
+     * venta si tiene el código correcto.
+     */
     @Test
-    void confirmarDescuento_comoVendedor_devuelve403() throws Exception {
-        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+    void confirmarDescuento_comoVendedor_funciona() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto(10);
         String tokenVendedor = login("vendedor1", "clave123");
+
+        String body = """
+            {
+                "idEmpleado": %d,
+                "medioPago": "EFECTIVO",
+                "detalles": [{"idProducto": %d, "cantidad": 1, "precioUnitario": 100}],
+                "descuento": 10,
+                "motivoDescuento": "Motivo"
+            }
+            """.formatted(vendedor.getIdEmpleado(), producto.getIdProducto());
+
+        String respuesta = mockMvc.perform(post("/api/ventas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor)
+                .content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("PENDIENTE_AUTORIZACION"))
+            .andReturn().getResponse().getContentAsString();
+
+        Integer idVenta = objectMapper.readTree(respuesta).get("idVenta").asInt();
+        String codigo = extraerCodigoOtpDelUltimoEmail();
 
         mockMvc.perform(post("/api/ventas/descuento/confirmar")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor)
                 .content("""
-                    {"idVenta": 1, "codigo": "123456"}"""))
-            .andExpect(status().isForbidden());
+                    {"idVenta": %d, "codigo": "%s"}""".formatted(idVenta, codigo)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("CONFIRMADA"));
     }
 
     @Test

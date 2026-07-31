@@ -64,13 +64,18 @@ public class SecurityConfig {
 
     /**
      * JWT stateless por roles (ADMIN / VENDEDOR).
-     * - ADMIN: unico rol que ve ventas (GET), confirma descuentos/retiros y accede a reportes.
-     * - ADMIN y VENDEDOR: pueden listar productos, registrar ventas (POST), abrir/cerrar caja y
-     *   solicitar un retiro.
-     * - Confirmar un descuento de venta o un retiro de caja requiere ser ADMIN (el OTP se le
-     *   envía a él por email) — el VENDEDOR puede disparar la solicitud (venta con descuento,
-     *   retiro), pero el ADMIN es quien controla/autoriza con el código, nunca al revés.
+     * - ADMIN: unico rol que ve ventas (GET), resúmenes de caja y accede a reportes.
+     * - ADMIN y VENDEDOR: pueden listar productos, registrar ventas (POST), abrir/cerrar caja,
+     *   solicitar un retiro, y confirmar un descuento de venta o un retiro de caja.
      * - Alta/baja de productos y carga de stock: solo ADMIN.
+     *
+     * Flujo de autorización real (2026-07-30, aclarado por el dueño del negocio): el OTP de un
+     * descuento o un retiro le llega por email solo al ADMIN — eso es lo que evita que el
+     * VENDEDOR se autoconfirme. Pero quien está frente a la caja (a menudo el VENDEDOR) es quien
+     * tiene que terminar la operación: el ADMIN le pasa el código (llamado, WhatsApp, etc.) y el
+     * VENDEDOR lo escribe para cerrarla. Por eso confirmar NO puede quedar exclusivo de ADMIN en
+     * el backend — el control de seguridad está en quién recibe el código por email, no en qué
+     * rol aprieta "Confirmar".
      *
      * Decisión de negocio (confirmada por el dueño del negocio): el VENDEDOR no debe poder ver
      * el historial de ventas ni el arqueo de caja bajo ninguna forma, ni siquiera el de su propio
@@ -95,11 +100,14 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/ventas").hasAnyRole("ADMIN", "VENDEDOR")
                 // Historial de ventas: solo ADMIN, ni global ni por turno (ver nota arriba).
                 .requestMatchers(HttpMethod.GET, "/api/ventas").hasRole("ADMIN")
-                .requestMatchers("/api/ventas/descuento/confirmar").hasRole("ADMIN")
-                // Abrir/cerrar caja y solicitar un retiro: operación del día a día, VENDEDOR
-                // también puede. Confirmar el retiro y ver resúmenes sigue exclusivo de ADMIN
-                // (matcher general de abajo).
-                .requestMatchers(HttpMethod.POST, "/api/caja/abrir", "/api/caja/cerrar", "/api/caja/retiro/solicitar")
+                // Confirmar el descuento: cualquiera de los dos roles (ver nota arriba sobre el
+                // flujo real de autorización — el control está en quién recibe el OTP por email).
+                .requestMatchers("/api/ventas/descuento/confirmar").hasAnyRole("ADMIN", "VENDEDOR")
+                // Abrir/cerrar caja, solicitar y confirmar un retiro: operación del día a día,
+                // VENDEDOR también puede. Ver resúmenes sigue exclusivo de ADMIN (matcher general
+                // de abajo).
+                .requestMatchers(HttpMethod.POST, "/api/caja/abrir", "/api/caja/cerrar",
+                        "/api/caja/retiro/solicitar", "/api/caja/retiro/confirmar")
                     .hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/caja/**").hasRole("ADMIN")
                 .requestMatchers("/api/reportes/**").hasRole("ADMIN")

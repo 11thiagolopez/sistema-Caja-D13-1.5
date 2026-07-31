@@ -71,7 +71,7 @@ class CajaServiceTest {
 
     @Test
     void abrirSesion_sinSesionAbierta_creaSesion() {
-        when(sesionRepo.findByFechaAndEstado(eq(LocalDate.now()), eq("ABIERTA"))).thenReturn(Optional.empty());
+        when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.empty());
         when(sesionRepo.save(any(SesionCaja.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Empleado empleado = new Empleado();
@@ -87,12 +87,34 @@ class CajaServiceTest {
 
     @Test
     void abrirSesion_yaHaySesionAbiertaHoy_lanzaExcepcion() {
-        when(sesionRepo.findByFechaAndEstado(eq(LocalDate.now()), eq("ABIERTA")))
+        when(sesionRepo.findByEstado(eq("ABIERTA")))
             .thenReturn(Optional.of(new SesionCaja()));
 
         assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado()))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Ya existe una sesión de caja abierta hoy");
+            .hasMessageContaining("Ya existe una sesión de caja abierta");
+
+        verify(sesionRepo, never()).save(any());
+    }
+
+    /**
+     * Regresión del bug real: el vendedor abre caja, se olvida de cerrarla y cierra el
+     * navegador; al otro día la sesión de ayer sigue "ABIERTA" en la base. Antes de este fix,
+     * abrirSesion() sólo buscaba una sesión ABIERTA con fecha de HOY, así que dejaba crear una
+     * sesión nueva encima de la vieja sin cerrar — la base terminaba acumulando sesiones ABIERTA
+     * de días distintos. Ahora la búsqueda es por estado sin filtrar fecha, así que una sesión
+     * vieja sin cerrar bloquea abrir una nueva, sea de hoy o de ayer.
+     */
+    @Test
+    void abrirSesion_haySesionAbiertaDeUnDiaAnterior_lanzaExcepcion() {
+        SesionCaja sesionDeAyer = new SesionCaja();
+        sesionDeAyer.setFecha(LocalDate.now().minusDays(1));
+        sesionDeAyer.setEstado("ABIERTA");
+        when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.of(sesionDeAyer));
+
+        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Ya existe una sesión de caja abierta");
 
         verify(sesionRepo, never()).save(any());
     }
@@ -241,7 +263,7 @@ class CajaServiceTest {
         solicitud.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
         when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
         when(otpService.coincide("654321", "hash-retiro")).thenReturn(true);
-        when(sesionRepo.findByFechaAndEstado(any(LocalDate.class), anyString())).thenReturn(Optional.empty());
+        when(sesionRepo.findByEstado(anyString())).thenReturn(Optional.empty());
         when(movRepo.save(any(MovimientoCaja.class))).thenAnswer(inv -> inv.getArgument(0));
 
         MovimientoCaja movimiento = cajaService.confirmarRetiro(1, "654321");

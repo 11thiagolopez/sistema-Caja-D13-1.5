@@ -209,8 +209,15 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
             .andExpect(jsonPath("$.estado").value("PENDIENTE"));
     }
 
+    /**
+     * Flujo real: el VENDEDOR pide el retiro, el OTP le llega por email al ADMIN (nunca al
+     * VENDEDOR), pero es el VENDEDOR quien está frente a la caja y termina la operación una vez
+     * que el ADMIN le pasa el código (llamado, WhatsApp, etc.). El control de seguridad está en
+     * quién recibe el email, no en qué rol aprieta "Confirmar" — por eso VENDEDOR puede confirmar
+     * su propia solicitud si tiene el código correcto.
+     */
     @Test
-    void confirmarRetiro_comoVendedor_devuelve403() throws Exception {
+    void confirmarRetiro_comoVendedor_funciona() throws Exception {
         crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com"); // recibe el email de OTP
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String token = login("vendedor1", "clave123");
@@ -232,7 +239,8 @@ class CajaControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content("""
                     {"idSolicitud": %d, "codigo": "%s"}""".formatted(idSolicitud, codigo)))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tipo").value("RETIRO"));
     }
 
     /**
