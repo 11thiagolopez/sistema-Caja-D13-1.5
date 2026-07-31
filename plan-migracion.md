@@ -2,6 +2,53 @@
 
 ## Para retomar mañana
 
+**Estado al 2026-07-30: tres bugs reportados por el dueño del negocio probando el sistema real
+(backend `:8080` + frontend `:5173`, ambos corriendo contra Supabase real) — los tres
+encontrados, diagnosticados y arreglados en la misma sesión, pero todavía sin commitear.**
+
+1. **Confirmar retiro/descuento estaba mal alcanzado por rol.** El dueño aclaró el flujo real de
+   autorización: el código OTP le llega por email solo al ADMIN (eso sigue siendo el control de
+   seguridad — el VENDEDOR nunca puede generarlo ni verlo), pero quien está físicamente en la caja
+   —a menudo el VENDEDOR— es quien tiene que terminar la operación una vez que el ADMIN le pasa el
+   código (llamada, WhatsApp, etc.). Antes `SecurityConfig` exigía `hasRole("ADMIN")` para
+   `/api/caja/retiro/confirmar` y `/api/ventas/descuento/confirmar`, y el frontend ocultaba esas
+   secciones para VENDEDOR — así que un vendedor que pedía un retiro o vendía con descuento nunca
+   tenía dónde escribir el código, y la operación quedaba pendiente para siempre. **Fix**: ambos
+   endpoints pasan a `hasAnyRole("ADMIN", "VENDEDOR")`; en el frontend, "Confirmar retiro" en
+   `Caja.tsx` ya no está oculto para VENDEDOR (y el id de solicitud se precarga para cualquiera que
+   pidió el retiro, no solo ADMIN), y se agregó una sección nueva "Confirmar descuento de venta" en
+   `RegistrarVenta.tsx` (antes sólo existía en `HistorialVentas.tsx`, que sigue siendo exclusiva de
+   ADMIN por la regla de no mostrarle el historial al VENDEDOR — por eso no alcanzaba con esa
+   sección sola).
+2. **Bug real de sesiones de caja duplicadas.** Si el vendedor se olvidaba de cerrar la caja al
+   final del día y cerraba el navegador, al otro día `abrirSesion()` dejaba crear una sesión nueva
+   sin problema, porque sólo chequeaba si había una sesión ABIERTA con fecha de **hoy** — una
+   sesión de ayer sin cerrar no bloqueaba nada. Resultado: `sesiones_caja` iba acumulando sesiones
+   ABIERTA de días distintos, ninguna cerrada nunca (el "bucle" que reportó el dueño). **Fix**:
+   nuevo método `SesionCajaRepository.findByEstado(String)` (sin filtro de fecha), usado ahora en
+   `abrirSesion()`, `obtenerSesionAbierta()` (renombrado desde `obtenerSesionAbiertaDeHoy()`),
+   `cerrarSesionDelDia()`, `registrarRetiro()`, y en el vínculo `Venta`→`SesionCaja` de
+   `VentaService.registrarVenta()`. `abrirSesion()` ahora rechaza abrir una sesión nueva mientras
+   quede cualquier sesión ABIERTA sin cerrar, sea de hoy o de un día anterior. Test de regresión
+   nuevo: `abrirSesion_haySesionAbiertaDeUnDiaAnterior_lanzaExcepcion`.
+3. **Sin feedback visual mientras esperaba una respuesta del backend** ("se tilda"): se agregó un
+   spinner CSS reutilizable (`.spinner` en `frontend/src/index.css`) y se aplicó a todos los
+   botones que hacen una llamada async y no tenían loading state: `Caja.tsx`
+   (abrir/cerrar/solicitar/confirmar retiro), `Productos.tsx` (agregar/eliminar producto, cargar
+   stock), `HistorialVentas.tsx` (buscar, confirmar descuento), `RegistrarVenta.tsx` (confirmar
+   descuento, nuevo) y `Login.tsx`.
+
+Tests: **80/80 verdes** con `mvn test` (se sumó el test de regresión de arriba, y se
+renombraron/expandieron `confirmarRetiro_comoVendedor_devuelve403` →
+`confirmarRetiro_comoVendedor_funciona` y `confirmarDescuento_comoVendedor_devuelve403` →
+`confirmarDescuento_comoVendedor_funciona`, que ahora ejercitan el flujo completo en vez de
+esperar 403). `tsc -b` del frontend sin errores.
+
+**Nada de esto está commiteado todavía** — quedó todo en el working tree para que el dueño lo
+probara en vivo (backend y frontend corriendo en local contra Supabase real). El repo está al día
+con `main` (no hay rama `migracion-web` con commits pendientes), así que estos cambios arrancan
+limpios sobre `main` — falta decidir si van directo o por un branch nuevo, y commitear.
+
 **Estado al 2026-07-29: primera prueba real en navegador (Chrome), con ADMIN y VENDEDOR.** Se
 encontraron y arreglaron dos bugs que impedían usar la pantalla de Productos (ver sección 12).
 Además se agregó ABM de productos (alta, baja lógica, carga de stock por código de barras) y se
@@ -106,14 +153,20 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
 
 ### Pendiente para la próxima sesión, en orden sugerido de prioridad
 
-1. **Probar el frontend en el navegador** con un usuario real (ADMIN y VENDEDOR) para confirmar
-   que el guard de roles y los flujos de OTP se ven y funcionan bien de punta a punta.
-2. **Cargar `Producto.precioCompra`**: la mayoría de los productos lo tienen `null`, así que el
-   balance financiero (`GET /api/reportes/balance`) da el costo de mercadería de menos (afecta
-   también a la pantalla de Reportes del frontend).
-3. **Abrir el PR de `migracion-web` → `main`** para los dos commits pendientes (reorg a monorepo +
-   scaffold de frontend), si se quiere mantener `main` al día como con el PR #1.
-4. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
+1. **Commitear los cambios de hoy** (2026-07-30, backend + frontend, ver arriba) — quedaron sin
+   commitear a propósito, para que el dueño los probara en vivo primero. Decidir si van directo a
+   `main` o por un branch nuevo.
+2. **Probar en el navegador, con un email real, el flujo completo de confirmación por VENDEDOR**
+   (retiro y descuento con descuento): los tests de integración mockean `JavaMailSender`, así que
+   el flujo "el ADMIN recibe el mail, le pasa el código al VENDEDOR, el VENDEDOR lo escribe" nunca
+   se probó de punta a punta con un mail real en esta sesión.
+3. **Cargar `Producto.precioVenta` y `precioCompra`** en Supabase para los productos que los
+   tienen en `null`: bloquean la venta de esos productos y subestiman el costo de mercadería en el
+   balance de Reportes. No se tocó en la sesión del 2026-07-30 (el dueño dijo que ya tiene los
+   documentos con los precios y los va a cargar él).
+4. **Pulir estilos/UX del frontend**: sigue siendo funcional pero básico (sin librería de
+   componentes, formularios simples).
+5. **Flyway** (opcional): reemplazar el manejo manual del esquema en Supabase por migraciones
    versionadas — recomendado antes de tener datos de producción reales, cada vez más caro después.
 
 (Paso 8 — tests de integración — ya está completo, ver sección "Estado de avance" abajo.)
@@ -234,6 +287,17 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
       los repositorios.
 - [ ] Agregar Flyway (opcional, quedó recomendado en la sección 6 pero no se agregó todavía — se está
       gestionando el esquema a mano en Supabase por ahora).
+- [x] **(2026-07-30) Confirmar retiro/descuento habilitado para VENDEDOR, no sólo ADMIN**: ver
+      detalle en "Para retomar mañana" arriba y en la sección 13 más abajo. `SecurityConfig` pasa
+      `/api/caja/retiro/confirmar` y `/api/ventas/descuento/confirmar` a
+      `hasAnyRole("ADMIN", "VENDEDOR")`.
+- [x] **(2026-07-30) Fix bug de sesiones de caja duplicadas**: `abrirSesion()` sólo chequeaba una
+      sesión ABIERTA de **hoy**, dejando abrir una sesión nueva encima de una vieja sin cerrar de
+      un día anterior. Ahora usa `SesionCajaRepository.findByEstado("ABIERTA")` sin filtro de
+      fecha. Ver sección 13.
+- [x] **(2026-07-30) Spinners de carga** en los botones que llaman a la API y no tenían feedback
+      visual (`Caja.tsx`, `Productos.tsx`, `HistorialVentas.tsx`, `RegistrarVenta.tsx`,
+      `Login.tsx`).
 
 ## 0. Diagnóstico del estado actual (histórico, previo a los pasos de arriba)
 
@@ -656,3 +720,89 @@ reiniciar el backend en limpio, mismo resultado.
 se muestran como "—" y no se pueden vender hasta que se les cargue un precio. Conviene resolverlo
 con un `UPDATE` en Supabase (junto con el pendiente de `precioCompra`, ver más abajo), no es algo
 para arreglar en código.
+
+---
+
+## 13. Sesión 2026-07-30: tres bugs reportados probando el sistema en vivo
+
+El dueño del negocio probó backend (`:8080`) y frontend (`:5173`) corriendo juntos contra Supabase
+real (arrancados en esta misma sesión) y reportó tres problemas de uso real, los tres
+diagnosticados leyendo el código real (no solo los planes) y arreglados en la misma sesión.
+
+### 1. VENDEDOR no tenía dónde confirmar un retiro o un descuento
+
+Diagnóstico inicial: la sección de confirmación con el código SÍ existía en el código
+(`Caja.tsx` tenía "Confirmar retiro", `HistorialVentas.tsx` tenía el input de código para
+descuentos), pero ambas estaban condicionadas a `esAdmin` — coincidía con la regla de negocio
+documentada hasta ese momento ("el ADMIN es quien controla/autoriza con el código, nunca al
+revés"). Al preguntarle al dueño con qué rol estaba probando, aclaró el flujo real: **el código
+sigue llegando solo al ADMIN por email** (ahí sigue el control de seguridad — el VENDEDOR nunca lo
+ve ni lo genera), pero es el VENDEDOR, parado en la caja, quien tiene que poder escribirlo una vez
+que el ADMIN se lo pasa por otro canal (llamada, WhatsApp). Restringir la confirmación a ADMIN
+dejaba la operación pendiente para siempre en la práctica, porque el ADMIN normalmente no está
+físicamente en la caja para apretar el botón.
+
+**Cambios:**
+- `SecurityConfig`: `/api/caja/retiro/confirmar` y `/api/ventas/descuento/confirmar` pasan de
+  `hasRole("ADMIN")` a `hasAnyRole("ADMIN", "VENDEDOR")`. El resto de los endpoints de
+  caja/ventas exclusivos de ADMIN (resúmenes, historial) no cambia.
+- `Caja.tsx`: la sección "Confirmar retiro" ya no está condicionada a `esAdmin`; el id de
+  solicitud se precarga para quien pidió el retiro sea cual sea su rol.
+- `RegistrarVenta.tsx`: sección nueva "Confirmar descuento de venta" (id de venta + código),
+  visible para ambos roles, con el id de venta precargado apenas la venta queda
+  `PENDIENTE_AUTORIZACION`. `HistorialVentas.tsx` (exclusivo ADMIN) conserva su propio input de
+  confirmación para cuando el ADMIN revisa el historial directamente.
+- Tests actualizados: `CajaControllerIntegrationTest.confirmarRetiro_comoVendedor_devuelve403` →
+  `confirmarRetiro_comoVendedor_funciona`; `VentaControllerIntegrationTest.confirmarDescuento_comoVendedor_devuelve403`
+  → `confirmarDescuento_comoVendedor_funciona`. Ambos ahora ejercitan el flujo completo
+  (solicitar/vender → extraer OTP del email mockeado → confirmar con el mismo token de VENDEDOR)
+  en vez de esperar 403.
+
+### 2. Sesiones de caja duplicadas ("bucle" en la base)
+
+El dueño reportó: si el vendedor se olvida de cerrar caja al final del día y cierra el navegador,
+al otro día vuelve a abrir una caja nueva y en la base "aparecen todas como abiertas". Root cause
+confirmado leyendo `CajaService.abrirSesion()`: el chequeo de "ya hay una sesión abierta" era
+`sesionRepo.findByFechaAndEstado(LocalDate.now(), "ABIERTA")` — filtraba por la fecha de **hoy**,
+así que una sesión de ayer con `estado='ABIERTA'` nunca aparecía en esa búsqueda y no bloqueaba
+nada. Cada día sin cerrar sumaba una fila más `ABIERTA` a `sesiones_caja`, para siempre.
+
+**Cambios:**
+- `SesionCajaRepository`: método nuevo `findByEstado(String estado)` (sin filtro de fecha),
+  documentado en el propio repositorio para que quede explícito por qué existe al lado de
+  `findByFechaAndEstado` (que se deja, sigue usado/testeado en `CajaRepositoriesTest`).
+- `CajaService.abrirSesion()`: usa `findByEstado("ABIERTA")` — bloquea abrir una sesión nueva si
+  hay **cualquier** sesión abierta sin cerrar, sea de hoy o de un día anterior. Mensaje de error
+  incluye la fecha de la sesión vieja para que quien lo vea sepa qué pasó.
+- `CajaService.obtenerSesionAbiertaDeHoy()` → renombrado a `obtenerSesionAbierta()` (ya no está
+  scopeado a "hoy"), usado por `cerrarSesionDelDia()` — así que "Cerrar caja" ahora sí puede
+  cerrar una sesión vieja abandonada de un día anterior, no sólo la de hoy.
+- `CajaService.registrarRetiro()` y `VentaService.registrarVenta()`: el vínculo de un retiro/venta
+  a la sesión de caja activa (`idSesion`) también pasa a `findByEstado("ABIERTA")`, por
+  consistencia — antes una venta hecha "hoy" mientras sólo quedaba abierta la sesión de ayer no se
+  vinculaba a ninguna sesión.
+- Test de regresión nuevo en `CajaServiceTest`: `abrirSesion_haySesionAbiertaDeUnDiaAnterior_lanzaExcepcion`,
+  que reproduce exactamente el escenario reportado (sesión con `fecha = ayer`, `estado = ABIERTA`)
+  y verifica que `abrirSesion()` la rechaza.
+
+**Nota para la próxima sesión**: esto arregla que se sigan acumulando sesiones nuevas, pero **no
+limpia las que ya quedaron abiertas en Supabase** de sesiones anteriores a este fix. Conviene
+revisar `sesiones_caja` y cerrar a mano (`UPDATE sesiones_caja SET estado='CERRADA' WHERE
+estado='ABIERTA' AND fecha < CURRENT_DATE`) las que correspondan, antes de que el próximo
+`abrirSesion()` real choque con una de esas.
+
+### 3. Sin feedback visual en botones mientras esperan respuesta ("se tilda")
+
+Varios botones que disparan una llamada a la API no tenían ningún `disabled`/estado de carga
+(`Caja.tsx` completo, y en `Productos.tsx` las acciones de agregar/eliminar producto y cargar
+stock). Sin feedback, un click en una red lenta se sentía como que la app se colgó, e invitaba a
+hacer doble click (con el riesgo de disparar la acción dos veces).
+
+**Cambios:**
+- Spinner CSS reutilizable (`.spinner`, con `@keyframes girar`) agregado a `frontend/src/index.css`.
+- Aplicado con un estado de carga por acción (no uno solo compartido, para no tildar botones que
+  no están esperando nada) en: `Caja.tsx` (abrir/cerrar/solicitar/confirmar), `Productos.tsx`
+  (agregar/eliminar/cargar stock), `HistorialVentas.tsx` (buscar/confirmar por fila), y sumado
+  también a `RegistrarVenta.tsx` y `Login.tsx`, que ya tenían el estado de carga pero no el ícono.
+- Todos los botones afectados además quedan `disabled` mientras están en curso, evitando el doble
+  submit.

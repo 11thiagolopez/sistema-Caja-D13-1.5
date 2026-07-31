@@ -24,14 +24,19 @@ el historial; `frontend/` se creó vacía, lista para el scaffold de abajo.
 
 ## Regla de negocio crítica para el frontend (no negociable)
 
-**El rol `VENDEDOR` no debe poder ver el historial de ventas bajo ninguna forma, ni siquiera el
-de su propio turno.** Esto ya está bloqueado en el backend (`SecurityConfig`, ver
-`plan-migracion.md` sección 7 punto 5), pero el frontend tiene que respetarlo también a nivel de
-UI: el rol `VENDEDOR` no debe tener en su interfaz ningún botón/pantalla que intente pegarle a
-`GET /api/ventas` ni a nada bajo `/api/caja/**` (resumen del día, resumen por turno, abrir/cerrar
-caja, retiros) ni a `/api/reportes/**`. No es solo "ocultar el botón": ni siquiera debería
-llamarse a esos endpoints desde el código de VENDEDOR, para no depender de que el 403 del backend
-tape un error de UI.
+**El rol `VENDEDOR` no debe poder ver el historial de ventas ni el arqueo/resumen de caja bajo
+ninguna forma, ni siquiera el de su propio turno.** Esto ya está bloqueado en el backend
+(`SecurityConfig`, ver `plan-migracion.md` sección 7 punto 5), pero el frontend tiene que
+respetarlo también a nivel de UI: el rol `VENDEDOR` no debe tener en su interfaz ningún
+botón/pantalla que intente pegarle a `GET /api/ventas`, `GET /api/caja/resumen-dia`,
+`GET /api/caja/resumen` ni a `/api/reportes/**`. No es solo "ocultar el botón": ni siquiera
+debería llamarse a esos endpoints desde el código de VENDEDOR, para no depender de que el 403 del
+backend tape un error de UI.
+
+**Esto NO aplica a operar la caja del día a día**: `VENDEDOR` sí puede abrir/cerrar sesión de
+caja, solicitar un retiro y confirmar un retiro o un descuento de venta con el código que le pase
+el ADMIN (ver "Contrato de API" abajo) — el código de autorización sigue llegando solo al email
+del ADMIN, eso es lo que mantiene el control, no el rol que aprieta "Confirmar".
 
 ---
 
@@ -62,7 +67,7 @@ persistir la sesión) para el resto de los llamados y para decidir qué mostrar 
 | Método | Ruta | Rol | Body | Devuelve |
 |---|---|---|---|---|
 | POST | `/api/ventas` | ADMIN, VENDEDOR | `VentaRequest` (ver abajo) | `VentaResponse` |
-| POST | `/api/ventas/descuento/confirmar` | **solo ADMIN** | `{idVenta, codigo}` | `VentaResponse` |
+| POST | `/api/ventas/descuento/confirmar` | ADMIN, VENDEDOR | `{idVenta, codigo}` | `VentaResponse` |
 | GET | `/api/ventas?desde=&hasta=` | **solo ADMIN** | — | `VentaResponse[]` |
 
 `VentaRequest`:
@@ -80,23 +85,26 @@ persistir la sesión) para el resto de los llamados y para decidir qué mostrar 
 `VentaResponse`: `{idVenta, fecha, idEmpleado, medioPago, tipoComprobante, totalVenta, descuento,
 estado, detalles: [{idProducto, descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 `estado` es `"CONFIRMADA"` o `"PENDIENTE_AUTORIZACION"` (esto último solo si `descuento > 0`: la
-venta ya descontó stock pero necesita que un ADMIN confirme el código OTP que le llega por email
-antes de poder considerarse una venta real para el arqueo de caja).
+venta ya descontó stock pero necesita que se confirme el código OTP antes de poder considerarse
+una venta real para el arqueo de caja. El código sólo le llega por email al ADMIN — ahí está el
+control de seguridad —, pero desde el 2026-07-30 cualquiera de los dos roles puede escribirlo en
+`POST /api/ventas/descuento/confirmar`, porque en la práctica es el VENDEDOR quien está frente al
+cliente y termina la venta apenas el ADMIN le pasa el código).
 
 **UX a resolver**: no hay un endpoint "ventas pendientes de autorización". Para que un ADMIN vea
 qué ventas están esperando confirmación, hay que pedir `GET /api/ventas?desde=hoy&hasta=hoy` y
 filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 
-### Caja (`/api/caja`) — **todo exclusivo ADMIN**
+### Caja (`/api/caja`)
 
-| Método | Ruta | Body | Devuelve |
-|---|---|---|---|
-| POST | `/api/caja/abrir` | `{idEmpleado, montoInicial}` | `SesionCajaResponse` |
-| POST | `/api/caja/cerrar` | — | `SesionCajaResponse` |
-| POST | `/api/caja/retiro/solicitar` | `{idEmpleado, monto, motivo, medioPago}` | `SolicitudRetiroResponse` |
-| POST | `/api/caja/retiro/confirmar` | `{idSolicitud, codigo}` | `MovimientoCajaResponse` |
-| GET | `/api/caja/resumen-dia` | — | `ResumenDiaResponse` |
-| GET | `/api/caja/resumen?desde=&hasta=` | — | `ResumenRangoResponse` |
+| Método | Ruta | Rol | Body | Devuelve |
+|---|---|---|---|---|
+| POST | `/api/caja/abrir` | ADMIN, VENDEDOR | `{idEmpleado, montoInicial}` | `SesionCajaResponse` |
+| POST | `/api/caja/cerrar` | ADMIN, VENDEDOR | — | `SesionCajaResponse` |
+| POST | `/api/caja/retiro/solicitar` | ADMIN, VENDEDOR | `{idEmpleado, monto, motivo, medioPago}` | `SolicitudRetiroResponse` |
+| POST | `/api/caja/retiro/confirmar` | ADMIN, VENDEDOR | `{idSolicitud, codigo}` | `MovimientoCajaResponse` |
+| GET | `/api/caja/resumen-dia` | **solo ADMIN** | — | `ResumenDiaResponse` |
+| GET | `/api/caja/resumen?desde=&hasta=` | **solo ADMIN** | — | `ResumenRangoResponse` |
 
 `SesionCajaResponse`: `{idSesion, fecha, montoInicial, estado}` (`estado`: `"ABIERTA"`/`"CERRADA"`).
 
@@ -107,10 +115,13 @@ efectivoFinal, totalDigital, cajaTotalDelDia}` (todos los montos `number`).
 `ResumenRangoResponse`: `{desde, hasta, total: ResumenDiaResponse, sesiones: [{idSesion, fecha,
 estado, empleadoApertura, resumen: ResumenDiaResponse}]}` — el desglose por turno.
 
-**Flujo de retiro (dos pasos, ambos ADMIN)**: `solicitar` genera un código de 6 dígitos que se
-manda por email a los ADMIN con email cargado; `confirmar` valida ese código (vence a los 10
-minutos) y recién ahí crea el movimiento de caja real. El frontend necesita un form de dos pasos
-(monto/motivo/medio → después el código).
+**Flujo de retiro (dos pasos)**: `solicitar` genera un código de 6 dígitos que se manda por email
+a los ADMIN con email cargado; `confirmar` valida ese código (vence a los 10 minutos) y recién ahí
+crea el movimiento de caja real. Desde el 2026-07-30 cualquiera de los dos roles puede llamar a
+`confirmar` — el código sigue llegando sólo al ADMIN por email, pero es habitual que sea el
+VENDEDOR quien está en la caja y termina la operación apenas el ADMIN se lo pasa (llamada,
+WhatsApp, etc.). El frontend necesita un form de dos pasos (monto/motivo/medio → después el
+código).
 
 ### Reportes (`/api/reportes`) — **solo ADMIN**
 
@@ -148,12 +159,34 @@ frontend/
       Productos.tsx
       RegistrarVenta.tsx
       HistorialVentas.tsx   # solo ADMIN
-      Caja.tsx              # solo ADMIN
+      Caja.tsx              # ADMIN y VENDEDOR (resumen del día queda solo para ADMIN dentro de la pantalla)
       Reportes.tsx          # solo ADMIN
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-07-29)
+## Estado actual (Actualizado al 2026-07-30)
+
+**Tres arreglos a partir de pruebas reales del dueño del negocio** (detalle completo en
+`plan-migracion.md`, sección 13):
+
+- **Confirmar retiro/descuento habilitado para VENDEDOR**: `Caja.tsx` ya no oculta "Confirmar
+  retiro" a VENDEDOR (antes estaba condicionado a `esAdmin`); `RegistrarVenta.tsx` suma una
+  sección nueva "Confirmar descuento de venta" (antes esa confirmación sólo existía en
+  `HistorialVentas.tsx`, inalcanzable para VENDEDOR por ser ruta exclusiva de ADMIN). El código
+  sigue llegando solo al email del ADMIN — el cambio es sólo quién puede escribirlo en el form.
+- **Spinners de carga**: clase `.spinner` reutilizable en `index.css`, aplicada con un estado de
+  carga por acción (no compartido) en todos los botones que llaman a la API y no tenían feedback
+  visual: `Caja.tsx` (las 4 acciones), `Productos.tsx` (agregar/eliminar/cargar stock),
+  `HistorialVentas.tsx` (buscar/confirmar), y sumada también a `RegistrarVenta.tsx` y `Login.tsx`
+  que ya tenían el estado pero no el ícono. Los botones quedan `disabled` mientras están en curso.
+- (No es de frontend, pero afecta el flujo de Caja) Bug de sesiones de caja duplicadas arreglado
+  en el backend — ver sección 13 de `plan-migracion.md`.
+
+`tsc -b` sin errores después de estos cambios. **No probado todavía en el navegador con
+credenciales reales** (no había a mano en esta sesión) — sí se verificó que el backend reinició
+tomando los nuevos permisos y que el frontend hizo hot-reload sin romperse.
+
+## Estado anterior (Actualizado al 2026-07-29)
 
 **Probado en el navegador con usuarios reales (ADMIN y VENDEDOR) — lo que faltaba del punto
 anterior.** Se encontraron y arreglaron dos bugs que impedían usar la pantalla de Productos con
@@ -192,12 +225,15 @@ original):
 - [x] `src/auth/AuthContext.tsx`: sesión (`idEmpleado`, `nombre`, `usuario`, `rol`, `token`)
       persistida en `localStorage`.
 - [x] `src/auth/ProtectedRoute.tsx`: `RequireAuth` y `RequireRole` bloquean **a nivel de router**
-      (no solo ocultan botones) — `VENDEDOR` no puede llegar a `/ventas/historial`, `/caja` ni
+      (no solo ocultan botones) — `VENDEDOR` no puede llegar a `/ventas/historial` ni a
       `/reportes` aunque escriba la URL a mano, cumpliendo la regla no negociable de arriba.
+      `/caja` sí es alcanzable por los dos roles (ver nota en `App.tsx`): la pantalla branchea
+      internamente qué mostrarle a cada uno.
 - [x] Las 6 pantallas: `Login`, `Productos`, `RegistrarVenta` (con aviso de
-      `PENDIENTE_AUTORIZACION` cuando hay descuento), y las de ADMIN — `HistorialVentas` (con
-      input de código para confirmar el OTP del descuento), `Caja` (abrir/cerrar sesión, retiro en
-      dos pasos, resumen del día), `Reportes` (balance + productos ganadores).
+      `PENDIENTE_AUTORIZACION` cuando hay descuento, y desde el 2026-07-30 su propia sección para
+      confirmarlo), `Caja` (abrir/cerrar sesión, retiro en dos pasos — ambos roles desde el
+      2026-07-30, resumen del día solo ADMIN), y las de ADMIN — `HistorialVentas` (con input de
+      código para confirmar el OTP del descuento), `Reportes` (balance + productos ganadores).
 - [x] `tsc -b` y `npm run build` sin errores, `oxlint` limpio. Verificado con `curl` contra el
       backend real corriendo (`mvn spring-boot:run`): login con credenciales inválidas devuelve
       `401 {"message": "..."}` (el shape que espera `ApiRequestError`), preflight CORS desde
@@ -209,9 +245,11 @@ original):
 
 ## Pendientes / decisiones abiertas
 
-- Probar en el navegador los flujos de OTP (confirmar descuento de venta, confirmar retiro de
-  caja) con ambos roles — no se llegó a esto en la sesión del 2026-07-29, que se fue en encontrar
-  y arreglar los dos bugs de la pantalla de Productos.
+- **Commitear los cambios de la sesión 2026-07-30** — quedaron sin commitear a propósito, para
+  que el dueño los probara primero en vivo.
+- Probar en el navegador, con un email real, el flujo completo de confirmación por VENDEDOR
+  (retiro y descuento) — sigue sin probarse de punta a punta con credenciales reales; los tests
+  automáticos mockean el envío de email.
 - Pulir estilos/UX: lo que hay es funcional pero básico (sin librería de componentes, formularios
   simples).
 - Cargar `Producto.precioVenta` y `precioCompra` en Supabase para los productos que los tienen en

@@ -9,7 +9,7 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-07-29):
+Estado Actual (Actualizado al 2026-07-30):
 
 **Monorepo**: el repo tiene `backend/` (todo el proyecto Java/Maven/Eclipse, movido desde la raíz
 con `git mv` preservando el historial) y `frontend/` (React + Vite + TypeScript, scaffoldeado y
@@ -18,10 +18,11 @@ funcionando). Los comandos de Maven/Eclipse corren desde `backend/`, los de npm 
 
 El backend Spring Boot está completo, compila limpio, y quedó verificado end-to-end contra
 Supabase real (login JWT por roles, ventas con descuento + OTP, retiro de caja + OTP, arqueo de
-caja por turno y por rango de fechas, CORS, ABM de productos). Tests: 79/79 verdes con `mvn test`
-(sumaron `ProductoServiceTest` y `ProductoControllerIntegrationTest` esta sesión). Detalle completo
-en la sección "Estado de avance" de `plan-migracion.md`. `migracion-web` está mergeada a `main`
-(local y en GitHub), incluyendo el ABM de productos y los dos fixes de esta sesión (ver abajo).
+caja por turno y por rango de fechas, CORS, ABM de productos). Tests: **80/80** verdes con
+`mvn test`. Detalle completo en la sección "Estado de avance" de `plan-migracion.md`. El repo está
+al día con `main` en GitHub, **pero los cambios de la sesión 2026-07-30 (ver abajo) todavía no
+están commiteados** — quedaron en el working tree a propósito para que el dueño los probara en
+vivo primero.
 
 **Nota de entorno**: esta máquina tiene JDK 24, que rompe silenciosamente Lombok y Mockito con las
 versiones que gestiona `spring-boot-starter-parent 3.3.4` (no generaban getters/setters ni podían
@@ -30,25 +31,33 @@ mockear clases, sin ningún error). Se fijó `lombok.version`, `mockito.version`
 completo en `plan-migracion.md`, sección "Fixes de entorno".
 
 El frontend (React + Vite + TypeScript, en `frontend/`) tiene Login, Productos (con ABM completo:
-alta, baja lógica, carga de stock por código de barras — solo ADMIN), Registrar venta, y las tres
-pantallas de ADMIN (Historial de ventas con confirmación de OTP, Caja, Reportes), con guards de
-rutas por rol reales. VENDEDOR ahora también puede abrir/cerrar caja y solicitar retiros (antes
-era todo exclusivo de ADMIN). Contrato de API completo y reglas de negocio por rol en
-`plan-frontend.md`.
+alta, baja lógica, carga de stock por código de barras — solo ADMIN), Registrar venta (con
+confirmación de descuento propia, nueva), y las pantallas de ADMIN (Historial de ventas con
+confirmación de OTP, Reportes) más Caja (accesible a ambos roles, resumen del día solo ADMIN), con
+guards de rutas por rol reales. VENDEDOR puede abrir/cerrar caja, solicitar retiros, y desde esta
+sesión también confirmar un retiro o un descuento con el código que le pase el ADMIN. Contrato de
+API completo y reglas de negocio por rol en `plan-frontend.md`.
 
-**2026-07-29 — primera prueba real en Chrome (ADMIN y VENDEDOR) y dos bugs arreglados**: el
-usuario reportó quedar trabado en la pantalla de Productos apenas logueaba, con ambos roles.
-Diagnóstico con la extensión de automatización de Chrome (no solo lectura de código) encontró dos
-bugs reales, no uno: (1) una race condition genuina entre el `useEffect` que guardaba el token JWT
-y el `useEffect` de `Productos.tsx` que pedía los datos (fix: `useLayoutEffect` en
-`AuthContext.tsx`), y (2) el bug que en la práctica tumbaba toda la app: productos con
-`precioVenta: null` en Supabase (dato legado) hacían crashear un `.toFixed(2)` sin guard, y sin
-error boundary React desmontaba toda la UI dejando una pantalla en negro. Detalle completo,
-incluido cómo se verificó, en `plan-migracion.md` sección 12.
+**2026-07-30 — tres bugs reportados por el dueño probando el sistema real (backend `:8080` +
+frontend `:5173` contra Supabase real) y arreglados en la sesión**: (1) confirmar un retiro o un
+descuento estaba restringido a ADMIN tanto en el backend como en el frontend, pero el flujo real
+es que el código le llega por email solo al ADMIN y éste se lo pasa (llamada, WhatsApp) al
+VENDEDOR que está en la caja para que él lo escriba y cierre la operación — se habilitó
+`VENDEDOR` para confirmar en ambos endpoints y se agregó la sección correspondiente en el
+frontend; (2) bug real de sesiones de caja duplicadas: `abrirSesion()` sólo chequeaba una sesión
+ABIERTA de **hoy**, así que una sesión de un día anterior sin cerrar no bloqueaba abrir una nueva
+— la tabla `sesiones_caja` iba acumulando sesiones ABIERTA para siempre; (3) se agregaron spinners
+de carga a los botones que llamaban a la API sin ningún feedback visual. Detalle completo,
+incluido qué se testeó, en `plan-migracion.md` sección 13.
 
 Pendiente (por prioridad):
-1. Cargar `precioVenta` y `precioCompra` en Supabase para los productos que los tienen en `null`
+1. Commitear los cambios de la sesión 2026-07-30 (backend + frontend, ver arriba) y decidir el
+   flujo de branch/PR.
+2. Probar en el navegador, con un email real, el flujo completo de confirmación por VENDEDOR
+   (retiro y descuento) — los tests automáticos mockean el envío de email.
+3. Cargar `precioVenta` y `precioCompra` en Supabase para los productos que los tienen en `null`
    (hoy se muestran como "—" y no se pueden vender; también afecta el balance financiero de
-   Reportes, que subestima el costo de mercadería).
-2. Pulir estilos/UX del frontend: sigue siendo funcional pero básico.
-3. Flyway (opcional, reemplazaría el manejo manual del esquema en Supabase).
+   Reportes, que subestima el costo de mercadería) — el dueño ya tiene los documentos con los
+   precios, pendiente de que los cargue.
+4. Pulir estilos/UX del frontend: sigue siendo funcional pero básico.
+5. Flyway (opcional, reemplazaría el manejo manual del esquema en Supabase).
