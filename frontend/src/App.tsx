@@ -18,8 +18,8 @@ function App() {
           <Route path="/" element={<Navigate to="/productos" replace />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/ventas/nueva" element={<RegistrarVenta />} />
-          {/* Caja: ambos roles entran (abrir/cerrar/solicitar retiro), la pantalla misma
-              branchea por rol para el resto (confirmar retiro y resumen son solo ADMIN). */}
+          {/* Caja: ambos roles entran y pueden abrir/cerrar/solicitar/confirmar un retiro; la
+              pantalla misma branchea por rol sólo para el resumen del día, que sigue solo ADMIN. */}
           <Route path="/caja" element={<Caja />} />
           <Route element={<RequireRole allow={['ADMIN']} />}>
             <Route path="/ventas/historial" element={<HistorialVentas />} />

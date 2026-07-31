@@ -16,6 +16,7 @@ export function HistorialVentas() {
   const [cargando, setCargando] = useState(false)
   const [codigos, setCodigos] = useState<Record<number, string>>({})
   const [comprobanteVenta, setComprobanteVenta] = useState<VentaResponse | null>(null)
+  const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
 
   async function buscar(event?: FormEvent) {
     event?.preventDefault()
@@ -34,11 +35,14 @@ export function HistorialVentas() {
     const codigo = codigos[idVenta]
     if (!codigo) return
     setError(null)
+    setConfirmandoId(idVenta)
     try {
       const actualizada = await confirmarDescuento({ idVenta, codigo })
       setVentas((actual) => actual.map((v) => (v.idVenta === idVenta ? actualizada : v)))
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el código')
+    } finally {
+      setConfirmandoId(null)
     }
   }
 
@@ -55,7 +59,8 @@ export function HistorialVentas() {
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </label>
         <button type="submit" disabled={cargando}>
-          Buscar
+          {cargando && <span className="spinner" />}
+          {cargando ? 'Buscando...' : 'Buscar'}
         </button>
       </form>
 
@@ -93,8 +98,13 @@ export function HistorialVentas() {
                         setCodigos((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))
                       }
                     />
-                    <button type="button" onClick={() => confirmar(venta.idVenta)}>
-                      Confirmar
+                    <button
+                      type="button"
+                      onClick={() => confirmar(venta.idVenta)}
+                      disabled={confirmandoId === venta.idVenta}
+                    >
+                      {confirmandoId === venta.idVenta && <span className="spinner" />}
+                      {confirmandoId === venta.idVenta ? 'Confirmando...' : 'Confirmar'}
                     </button>
                   </span>
                 )}

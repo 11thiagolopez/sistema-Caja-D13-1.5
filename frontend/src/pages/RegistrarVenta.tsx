@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
-import { registrarVenta } from '../api/ventas'
+import { confirmarDescuento, registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
@@ -24,6 +24,12 @@ export function RegistrarVenta() {
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [mostrarComprobante, setMostrarComprobante] = useState(false)
+
+  const [idVentaConfirmar, setIdVentaConfirmar] = useState('')
+  const [codigoConfirmar, setCodigoConfirmar] = useState('')
+  const [confirmando, setConfirmando] = useState(false)
+  const [errorConfirmacion, setErrorConfirmacion] = useState<string | null>(null)
+  const [mensajeConfirmacion, setMensajeConfirmacion] = useState<string | null>(null)
 
   const [filtroDescripcion, setFiltroDescripcion] = useState('')
   const [filtroMarca, setFiltroMarca] = useState('')
@@ -121,10 +127,33 @@ export function RegistrarVenta() {
       setCarrito([])
       setDescuento('')
       setMotivoDescuento('')
+      // Precargamos el id de venta abajo (sigue editable): quien registró la venta con
+      // descuento es normalmente quien la va a confirmar apenas el admin le pase el código.
+      if (venta.estado === 'PENDIENTE_AUTORIZACION') {
+        setIdVentaConfirmar(String(venta.idVenta))
+        setMensajeConfirmacion(null)
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar la venta')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  async function onConfirmarDescuento() {
+    if (!idVentaConfirmar || !codigoConfirmar) return
+    setErrorConfirmacion(null)
+    setMensajeConfirmacion(null)
+    setConfirmando(true)
+    try {
+      const venta = await confirmarDescuento({ idVenta: Number(idVentaConfirmar), codigo: codigoConfirmar })
+      setMensajeConfirmacion(`Venta #${venta.idVenta} confirmada.`)
+      setIdVentaConfirmar('')
+      setCodigoConfirmar('')
+    } catch (err) {
+      setErrorConfirmacion(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el descuento')
+    } finally {
+      setConfirmando(false)
     }
   }
 
@@ -231,6 +260,7 @@ export function RegistrarVenta() {
         )}
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={enviando || carrito.length === 0}>
+          {enviando && <span className="spinner" />}
           {enviando ? 'Registrando...' : 'Registrar venta'}
         </button>
       </form>
@@ -253,6 +283,35 @@ export function RegistrarVenta() {
       {resultado && mostrarComprobante && (
         <ComprobanteInterno venta={resultado} onCerrar={() => setMostrarComprobante(false)} />
       )}
+
+      <section>
+        <h3>Confirmar descuento de venta</h3>
+        <p>
+          El código de autorización le llega por email al ADMIN — pedíselo (llamada, WhatsApp,
+          etc.) y escribilo acá para terminar la venta.
+        </p>
+        <input
+          type="number"
+          placeholder="N° de venta"
+          value={idVentaConfirmar}
+          onChange={(e) => setIdVentaConfirmar(e.target.value)}
+        />
+        <input
+          placeholder="Código"
+          value={codigoConfirmar}
+          onChange={(e) => setCodigoConfirmar(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={onConfirmarDescuento}
+          disabled={confirmando || !idVentaConfirmar || !codigoConfirmar}
+        >
+          {confirmando && <span className="spinner" />}
+          {confirmando ? 'Confirmando...' : 'Confirmar descuento'}
+        </button>
+        {errorConfirmacion && <p className="error">{errorConfirmacion}</p>}
+        {mensajeConfirmacion && <p className="resultado">{mensajeConfirmacion}</p>}
+      </section>
     </div>
   )
 }

@@ -44,6 +44,7 @@ export function Login() {
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={cargando}>
+          {cargando && <span className="spinner" />}
           {cargando ? 'Ingresando...' : 'Ingresar'}
         </button>
       </form>

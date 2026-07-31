@@ -16,6 +16,10 @@ export function Caja() {
   const [mensajeSolicitud, setMensajeSolicitud] = useState<string | null>(null)
   const [idSolicitud, setIdSolicitud] = useState('')
   const [codigo, setCodigo] = useState('')
+  const [abriendo, setAbriendo] = useState(false)
+  const [cerrando, setCerrando] = useState(false)
+  const [solicitando, setSolicitando] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
 
   function cargarResumen() {
     setError(null)
@@ -35,22 +39,28 @@ export function Caja() {
   async function onAbrirCaja() {
     if (!sesion || !montoInicial) return
     setError(null)
+    setAbriendo(true)
     try {
       await abrirCaja({ idEmpleado: sesion.idEmpleado, montoInicial: Number(montoInicial) })
       setMontoInicial('')
       if (esAdmin) cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo abrir la caja')
+    } finally {
+      setAbriendo(false)
     }
   }
 
   async function onCerrarCaja() {
     setError(null)
+    setCerrando(true)
     try {
       await cerrarCaja()
       if (esAdmin) cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo cerrar la caja')
+    } finally {
+      setCerrando(false)
     }
   }
 
@@ -58,6 +68,7 @@ export function Caja() {
     if (!sesion || !monto || !motivo) return
     setError(null)
     setMensajeSolicitud(null)
+    setSolicitando(true)
     try {
       const solicitud = await solicitarRetiro({
         idEmpleado: sesion.idEmpleado,
@@ -68,25 +79,31 @@ export function Caja() {
       setMensajeSolicitud(
         `Retiro solicitado (#${solicitud.idSolicitud}). Se envió un código de autorización a los administradores.`,
       )
-      // Atajo para ADMIN: si el mismo usuario va a confirmar, le precargamos el id (sigue editable).
-      if (esAdmin) setIdSolicitud(String(solicitud.idSolicitud))
+      // Precargamos el id de solicitud abajo (sigue editable): quien pidió el retiro es
+      // normalmente quien lo va a confirmar apenas el admin le pase el código.
+      setIdSolicitud(String(solicitud.idSolicitud))
       setMonto('')
       setMotivo('')
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo solicitar el retiro')
+    } finally {
+      setSolicitando(false)
     }
   }
 
   async function onConfirmarRetiro() {
     if (!idSolicitud || !codigo) return
     setError(null)
+    setConfirmando(true)
     try {
       await confirmarRetiro({ idSolicitud: Number(idSolicitud), codigo })
       setIdSolicitud('')
       setCodigo('')
-      cargarResumen()
+      if (esAdmin) cargarResumen()
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el retiro')
+    } finally {
+      setConfirmando(false)
     }
   }
 
@@ -103,11 +120,13 @@ export function Caja() {
           value={montoInicial}
           onChange={(e) => setMontoInicial(e.target.value)}
         />
-        <button type="button" onClick={onAbrirCaja}>
-          Abrir caja
+        <button type="button" onClick={onAbrirCaja} disabled={abriendo || !montoInicial}>
+          {abriendo && <span className="spinner" />}
+          {abriendo ? 'Abriendo...' : 'Abrir caja'}
         </button>
-        <button type="button" onClick={onCerrarCaja}>
-          Cerrar caja
+        <button type="button" onClick={onCerrarCaja} disabled={cerrando}>
+          {cerrando && <span className="spinner" />}
+          {cerrando ? 'Cerrando...' : 'Cerrar caja'}
         </button>
       </section>
 
@@ -125,28 +144,32 @@ export function Caja() {
           <option value="TRANSFERENCIA">Transferencia</option>
           <option value="TARJETA">Tarjeta</option>
         </select>
-        <button type="button" onClick={onSolicitarRetiro}>
-          Solicitar
+        <button type="button" onClick={onSolicitarRetiro} disabled={solicitando || !monto || !motivo}>
+          {solicitando && <span className="spinner" />}
+          {solicitando ? 'Solicitando...' : 'Solicitar'}
         </button>
         {mensajeSolicitud && <p className="resultado">{mensajeSolicitud}</p>}
       </section>
 
-      {esAdmin && (
-        <section>
-          <h3>Confirmar retiro</h3>
-          <p>El id de solicitud está en el asunto del email que recibiste ("solicitud #...").</p>
-          <input
-            type="number"
-            placeholder="N° de solicitud"
-            value={idSolicitud}
-            onChange={(e) => setIdSolicitud(e.target.value)}
-          />
-          <input placeholder="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-          <button type="button" onClick={onConfirmarRetiro}>
-            Confirmar retiro
-          </button>
-        </section>
-      )}
+      <section>
+        <h3>Confirmar retiro</h3>
+        <p>
+          El código de autorización le llega por email al ADMIN — pedíselo (llamada, WhatsApp,
+          etc.) y escribilo acá para terminar el retiro. El n° de solicitud también está en el
+          asunto de ese email ("solicitud #...").
+        </p>
+        <input
+          type="number"
+          placeholder="N° de solicitud"
+          value={idSolicitud}
+          onChange={(e) => setIdSolicitud(e.target.value)}
+        />
+        <input placeholder="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+        <button type="button" onClick={onConfirmarRetiro} disabled={confirmando || !idSolicitud || !codigo}>
+          {confirmando && <span className="spinner" />}
+          {confirmando ? 'Confirmando...' : 'Confirmar retiro'}
+        </button>
+      </section>
 
       {esAdmin && resumen && (
         <section>

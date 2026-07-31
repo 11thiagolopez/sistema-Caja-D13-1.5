@@ -30,10 +30,13 @@ export function Productos() {
   const [nuevoProducto, setNuevoProducto] = useState<ProductoRequest>(PRODUCTO_VACIO)
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
   const [ultimoCodigoGenerado, setUltimoCodigoGenerado] = useState<string | null>(null)
+  const [agregando, setAgregando] = useState(false)
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null)
 
   const [cantidadStock, setCantidadStock] = useState('1')
   const [errorStock, setErrorStock] = useState<string | null>(null)
   const [mensajeStock, setMensajeStock] = useState<string | null>(null)
+  const [cargandoStock, setCargandoStock] = useState(false)
 
   function cargarProductos() {
     return getProductos()
@@ -57,6 +60,7 @@ export function Productos() {
     event.preventDefault()
     setErrorAlta(null)
     setUltimoCodigoGenerado(null)
+    setAgregando(true)
     try {
       const creado = await crearProducto(nuevoProducto)
       setProductos((actual) => [...actual, creado])
@@ -64,16 +68,21 @@ export function Productos() {
       setNuevoProducto(PRODUCTO_VACIO)
     } catch (err) {
       setErrorAlta(err instanceof ApiRequestError ? err.message : 'No se pudo agregar el producto')
+    } finally {
+      setAgregando(false)
     }
   }
 
   async function onEliminar(producto: Producto) {
     if (!window.confirm(`¿Eliminar "${producto.descripcion}" (${producto.marca})?`)) return
+    setEliminandoId(producto.idProducto)
     try {
       await eliminarProducto(producto.idProducto)
       setProductos((actual) => actual.filter((p) => p.idProducto !== producto.idProducto))
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo eliminar el producto')
+    } finally {
+      setEliminandoId(null)
     }
   }
 
@@ -85,6 +94,7 @@ export function Productos() {
       setErrorStock('Ingresá una cantidad válida antes de escanear')
       return
     }
+    setCargandoStock(true)
     try {
       const actualizado = await cargarStock({ codigo, cantidad })
       setProductos((actual) =>
@@ -95,6 +105,8 @@ export function Productos() {
       setErrorStock(
         err instanceof ApiRequestError ? err.message : `No se encontró ningún producto para el código ${codigo}`,
       )
+    } finally {
+      setCargandoStock(false)
     }
   }
 
@@ -130,6 +142,12 @@ export function Productos() {
             onChange={(e) => setCantidadStock(e.target.value)}
           />
           <BarcodeInput onScan={onEscanearParaCargarStock} />
+          {cargandoStock && (
+            <p>
+              <span className="spinner" />
+              Actualizando stock...
+            </p>
+          )}
           {errorStock && <p className="error">{errorStock}</p>}
           {mensajeStock && <p className="resultado">{mensajeStock}</p>}
         </section>
@@ -158,8 +176,13 @@ export function Productos() {
               <td>{producto.stockActual}</td>
               {esAdmin && (
                 <td>
-                  <button type="button" onClick={() => onEliminar(producto)}>
-                    Eliminar
+                  <button
+                    type="button"
+                    onClick={() => onEliminar(producto)}
+                    disabled={eliminandoId === producto.idProducto}
+                  >
+                    {eliminandoId === producto.idProducto && <span className="spinner" />}
+                    {eliminandoId === producto.idProducto ? 'Eliminando...' : 'Eliminar'}
                   </button>
                 </td>
               )}
@@ -259,7 +282,10 @@ export function Productos() {
               />
             </label>
             {errorAlta && <p className="error">{errorAlta}</p>}
-            <button type="submit">Agregar producto</button>
+            <button type="submit" disabled={agregando}>
+              {agregando && <span className="spinner" />}
+              {agregando ? 'Agregando...' : 'Agregar producto'}
+            </button>
           </form>
           {ultimoCodigoGenerado && (
             <p className="resultado">Producto creado con código interno: {ultimoCodigoGenerado}</p>
