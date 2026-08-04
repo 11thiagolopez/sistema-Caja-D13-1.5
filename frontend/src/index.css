@@ -1,35 +1,22 @@
 :root {
   --text: #1f2430;
   --text-h: #08060d;
-  --bg: #fff;
-  --bg-alt: #f4f3ec;
+  --bg: #eceff1;
+  --bg-alt: #ffffff;
   --border: #e5e4e7;
-  --accent: #7c3aed;
+  --accent: #007acc;
   --accent-contrast: #fff;
   --error: #c0392b;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   font: 16px/145% var(--sans);
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #d6d8de;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --bg-alt: #1f2028;
-    --border: #2e303a;
-    --accent: #a78bfa;
-    --accent-contrast: #16171d;
-    --error: #f87171;
-  }
 }
 
 * {

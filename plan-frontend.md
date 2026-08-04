@@ -129,10 +129,100 @@ código).
 |---|---|---|
 | GET | `/api/reportes/productos-ganadores?desde=&hasta=&limit=` | `ProductoRankingDTO[]` |
 | GET | `/api/reportes/balance?desde=&hasta=` | `BalanceFinancieroResponse` |
+| GET | `/api/reportes/comisiones?desde=&hasta=` | `ComisionEmpleadoDTO[]` — `{idEmpleado, nombreEmpleado, comisionPorcentaje, gananciaGenerada, comisionCalculada, cantidadVentas}` |
+| GET | `/api/reportes/ventas-por-vendedor?desde=&hasta=&idEmpleado=` | `VentaResponse[]` |
+
+`BalanceFinancieroResponse` (desde la sesión 2026-08-04) gana `comisionesPagadas`. La fórmula
+cambió: `gananciaNeta = ingresosPorVentas - costoMercaderia - gastosOperativos - comisionesPagadas`.
+`gastosOperativos` ahora es la suma de la tabla `Gasto` (ver abajo), **no** los retiros de caja —
+esos quedan fuera del cálculo de ganancia (siguen existiendo como arqueo puro en `/api/caja/resumen*`).
+
+### Marcas (`/api/marcas`) — ADMIN y VENDEDOR, solo lectura
+
+| Método | Ruta | Devuelve |
+|---|---|---|
+| GET | `/api/marcas` | `MarcaResponse[]` — `{idMarca, nombre, codigo}` |
+
+Catálogo nombre↔código de 2 dígitos. No hay `POST` público: se crea de forma transparente al dar de
+alta un producto o una compra con un nombre de marca que todavía no existe (`MarcaService.resolverOCrear`).
+El frontend arma un mapa `codigo → nombre` con esta lista para mostrar/buscar por nombre en
+`Producto.marca` (que sigue siendo el código de 2 dígitos en la respuesta de `/api/productos`, sin
+cambios en ese contrato).
+
+### Proveedores (`/api/proveedores`) — ADMIN
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/proveedores` | — | `ProveedorResponse[]` |
+| POST | `/api/proveedores` | `{nombre, contacto?, telefono?, email?}` | `ProveedorResponse` |
+| PUT | `/api/proveedores/{id}` | igual que POST | `ProveedorResponse` |
+| DELETE | `/api/proveedores/{id}` | — | baja lógica, `204` |
+
+### Gastos (`/api/gastos`) — ADMIN
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/gastos?desde=&hasta=` | — | `GastoResponse[]` |
+| POST | `/api/gastos` | `{idEmpleado, nombre, importe, fecha, categoria?}` | `GastoResponse` |
+
+`fecha` no puede ser futura (validado en el backend con `IllegalArgumentException` → 400).
+
+### Compras (`/api/compras`) — ADMIN
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| POST | `/api/compras` | `CompraRequest` (ver abajo) | `CompraResponse` |
+| GET | `/api/compras?desde=&hasta=` | — | `CompraResponse[]` |
+| GET | `/api/compras/pagos-proveedor?desde=&hasta=` | — | `PagoProveedorDTO[]` |
+| GET | `/api/compras/productos-mas-comprados?desde=&hasta=&limit=` | — | `ProductoComprasRankingDTO[]` |
+
+`CompraRequest`:
+```ts
+{
+  idEmpleado: number;
+  fecha: string;              // no puede ser futura
+  proveedorNombre: string;    // resuelve o crea el proveedor por nombre
+  medioPago: string;
+  items: {
+    idProducto?: number;               // repone stock/precio de un producto existente
+    nuevoProducto?: {                  // O ESTO, si el producto todavía no existe
+      rubro: string; familia: string; marca: string; descripcion: string; codigoFabrica?: string;
+    };
+    cantidad: number;
+    precioCompraUnitario: number;
+    precioVentaUnitario?: number;      // si viene, actualiza Producto.precioVenta también
+  }[];
+}
+```
+Cargar una compra **actualiza stock y precio** del producto (suma `cantidad` al stock, refresca
+`precioCompra` siempre y `precioVenta` si vino) — no es solo un asiento contable.
+
+### Empleados (`/api/empleados`) — ADMIN (antes no existía este controller)
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/empleados` | — | `EmpleadoResponse[]` (nunca expone `passwordHash`) |
+| POST | `/api/empleados` | `{nombre, usuario, password, email?, rol, comision?}` | `EmpleadoResponse` |
+| PUT | `/api/empleados/{id}` | igual que POST, `password` opcional | `EmpleadoResponse` |
+| DELETE | `/api/empleados/{id}` | — | baja lógica (`activo=false`), `204` |
+
+`comision` es el % sobre la **ganancia** (no el total facturado) que se lleva ese vendedor —
+columna nueva en `empleados`. Un empleado con `activo=false` no puede loguearse (`AuthService.login()`
+lo rechaza con el mismo mensaje genérico que credenciales inválidas).
+
+### Caja — endpoint nuevo
+
+| Método | Ruta | Rol | Devuelve |
+|---|---|---|---|
+| GET | `/api/caja/sesion-abierta` | ADMIN, VENDEDOR | `200 SesionCajaResponse` si hay una ABIERTA, `204` si no |
+
+Usado por el modal obligatorio de "abrir caja" que se muestra al loguearse (ver `Layout.tsx`) —
+las variantes `resumen-dia`/`resumen` son ADMIN-only y no sirven para esto porque VENDEDOR también
+tiene que ver el modal.
 
 ---
 
-## Pantallas sugeridas (primera versión)
+## Pantallas sugeridas (primera versión, histórico — ver "Estado actual" para la estructura real de hoy)
 
 **Para ambos roles:**
 - Login.
@@ -164,7 +254,43 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-07-30)
+## Estado actual (Actualizado al 2026-08-04)
+
+**Rediseño grande de interfaz + seis dominios de negocio nuevos**, pedidos por el dueño después de
+usar el sistema real (detalle completo, decisiones de diseño y qué se verificó en
+`plan-migracion.md`, sección 14):
+
+- **Sidebar por secciones** (`components/Layout.tsx`, reescrito alrededor de un array de
+  configuración) reemplaza la barra de botones plana de arriba: enlaces sueltos (Cobros,
+  Productos, Historial de ventas, Reportes) + secciones desplegables Caja (abrir/cerrar caja y
+  retiros como tres modales distintos, más "ver resumen del día" en `/caja/resumen`, ADMIN),
+  Gastos, Compras, Vendedores (ADMIN), y un botón suelto Proveedores que abre modal directo sin
+  ruta propia.
+- **Modal obligatorio de "abrir caja"** al loguearse (ambos roles) si no hay una sesión ABIERTA —
+  al confirmar, navega a `/ventas/nueva` (Cobros).
+- **Tema**: fondo gris claro fijo (`#eceff1`/`#ffffff`), ya no depende de `prefers-color-scheme`
+  (se sacó el bloque de modo oscuro de `index.css` a pedido explícito del dueño).
+- **Combo de producto/marca por nombre** (`<datalist>` nativo) en `RegistrarVenta.tsx` y en la
+  grilla de Compras — reemplaza el `<select>` por id de antes. `Productos.tsx`: marca y proveedor
+  pasan de texto/código crudo a combos con autocompletado.
+- **Pantallas nuevas** (todas ADMIN salvo aclaración): `Gastos.tsx`, `ComprasNueva.tsx` (grilla
+  tipo Excel, producto existente o alta inline, fecha no futura), `ComprasConsulta.tsx`,
+  `PagosProveedores.tsx`, `Vendedores.tsx` (alta con % comisión + baja lógica),
+  `ComisionesVendedores.tsx`, `VentasPorVendedor.tsx`, `components/ProveedoresModal.tsx`.
+- **`Reportes.tsx`**: línea nueva de comisiones pagadas, fórmula de ganancia neta cambiada (ver
+  contrato de API arriba).
+- Nuevo `components/Modal.tsx` genérico (generaliza el overlay que antes solo tenía
+  `ComprobanteInterno`), `utils/date.ts` (`hoyIso()` extraído de la duplicación que había en
+  `HistorialVentas.tsx`/`Reportes.tsx`).
+
+`tsc -b` sin errores. Probado en Chrome con un ADMIN de prueba (creado y borrado en la misma
+sesión): sidebar, alta de gasto, alta de compra con producto nuevo (verificado en Supabase que
+actualizó stock/precio y generó bien el código interno), modal de Proveedores, alta de vendedor
+con comisión, balance financiero con la fórmula nueva — todo funcionando. La rama "no hay sesión
+abierta → aparece el modal" del flujo post-login no se pudo probar en vivo porque había una sesión
+real abierta que no se quiso interrumpir; sí se confirmó la rama contraria.
+
+## Estado anterior (Actualizado al 2026-07-30)
 
 **Tres arreglos a partir de pruebas reales del dueño del negocio** (detalle completo en
 `plan-migracion.md`, sección 13):
@@ -245,6 +371,8 @@ original):
 
 ## Pendientes / decisiones abiertas
 
+- Probar en vivo el modal de "abrir caja" en la rama sin sesión abierta (ver sección 14 de
+  `plan-migracion.md` — no se pudo forzar sin interrumpir una sesión real).
 - **Commitear los cambios de la sesión 2026-07-30** — quedaron sin commitear a propósito, para
   que el dueño los probara primero en vivo.
 - Probar en el navegador, con un email real, el flujo completo de confirmación por VENDEDOR

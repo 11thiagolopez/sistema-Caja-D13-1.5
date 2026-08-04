@@ -21,6 +21,11 @@ export function cerrarCaja(): Promise<SesionCajaResponse> {
   return request<SesionCajaResponse>('/api/caja/cerrar', { method: 'POST' })
 }
 
+// null cuando no hay ninguna sesión ABIERTA (backend responde 204 sin cuerpo).
+export function getSesionAbierta(): Promise<SesionCajaResponse | null> {
+  return request<SesionCajaResponse | null>('/api/caja/sesion-abierta')
+}
+
 export function solicitarRetiro(req: RetiroSolicitarRequest): Promise<SolicitudRetiroResponse> {
   return request<SolicitudRetiroResponse>('/api/caja/retiro/solicitar', {
     method: 'POST',

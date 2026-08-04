@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { BalanceFinancieroResponse, ProductoRankingDTO } from '../types/api'
+import type { BalanceFinancieroResponse, ComisionEmpleadoDTO, ProductoRankingDTO, VentaResponse } from '../types/api'
 
 export function getProductosGanadores(
   desde: string,
@@ -13,4 +13,14 @@ export function getProductosGanadores(
 
 export function getBalance(desde: string, hasta: string): Promise<BalanceFinancieroResponse> {
   return request<BalanceFinancieroResponse>(`/api/reportes/balance?desde=${desde}&hasta=${hasta}`)
+}
+
+export function getComisiones(desde: string, hasta: string): Promise<ComisionEmpleadoDTO[]> {
+  return request<ComisionEmpleadoDTO[]>(`/api/reportes/comisiones?desde=${desde}&hasta=${hasta}`)
+}
+
+export function getVentasPorVendedor(desde: string, hasta: string, idEmpleado: number): Promise<VentaResponse[]> {
+  return request<VentaResponse[]>(
+    `/api/reportes/ventas-por-vendedor?desde=${desde}&hasta=${hasta}&idEmpleado=${idEmpleado}`,
+  )
 }

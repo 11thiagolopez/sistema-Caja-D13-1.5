@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.thiago.escenasFX.dto.ProductoRequest;
+import com.thiago.escenasFX.model.Marca;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.repository.ProductoRepository;
 
@@ -12,9 +13,14 @@ import com.thiago.escenasFX.repository.ProductoRepository;
 public class ProductoService {
 
     private final ProductoRepository productoRepo;
+    private final MarcaService marcaService;
+    private final ProveedorService proveedorService;
 
-    public ProductoService(ProductoRepository productoRepo) {
+    public ProductoService(ProductoRepository productoRepo, MarcaService marcaService,
+            ProveedorService proveedorService) {
         this.productoRepo = productoRepo;
+        this.marcaService = marcaService;
+        this.proveedorService = proveedorService;
     }
 
     public List<Producto> listarTodos() {
@@ -32,20 +38,23 @@ public class ProductoService {
      * rubro+familia+marca, y sigue subiendo dentro de esa misma combinación.
      */
     public Producto crear(ProductoRequest req) {
+        Marca marca = marcaService.resolverOCrear(req.getMarca());
+
         List<Producto> existentes = productoRepo
-            .findByRubroAndFamiliaAndMarcaOrderByCorrelativoDesc(req.getRubro(), req.getFamilia(), req.getMarca());
+            .findByRubroAndFamiliaAndMarcaOrderByCorrelativoDesc(req.getRubro(), req.getFamilia(), marca.getCodigo());
 
         int correlativoAnterior = existentes.isEmpty() ? 0 : Integer.parseInt(existentes.get(0).getCorrelativo());
         String correlativo = String.format("%04d", correlativoAnterior + 1);
-        String codigoInterno = req.getRubro() + req.getFamilia() + req.getMarca() + correlativo;
+        String codigoInterno = req.getRubro() + req.getFamilia() + marca.getCodigo() + correlativo;
 
         Producto producto = new Producto();
         producto.setRubro(req.getRubro());
         producto.setFamilia(req.getFamilia());
-        producto.setMarca(req.getMarca());
+        producto.setMarca(marca.getCodigo());
         producto.setCorrelativo(correlativo);
         producto.setCodigoInterno(codigoInterno);
         producto.setProveedor(req.getProveedor());
+        producto.setProveedorRef(proveedorService.resolverOCrear(req.getProveedor()));
         producto.setCodigoFabrica(req.getCodigoFabrica());
         producto.setDescripcion(req.getDescripcion());
         producto.setPrecioVenta(req.getPrecioVenta());

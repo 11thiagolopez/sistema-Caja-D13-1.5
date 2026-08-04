@@ -7,6 +7,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,7 +32,13 @@ public class Producto {
     @Column(name = "codigo_interno")
     private String codigoInterno;
 
+    // Texto libre histórico, previo al catálogo de proveedores. Se sigue escribiendo por
+    // compatibilidad pero ya no se usa para mostrar/filtrar — ver proveedorRef.
     private String proveedor;
+
+    @ManyToOne
+    @JoinColumn(name = "id_proveedor")
+    private Proveedor proveedorRef;
 
     @Column(name = "codigo_fabrica")
     private String codigoFabrica;

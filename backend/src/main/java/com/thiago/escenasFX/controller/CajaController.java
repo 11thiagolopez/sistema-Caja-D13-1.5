@@ -2,8 +2,10 @@ package com.thiago.escenasFX.controller;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -56,6 +58,16 @@ public class CajaController {
     @PostMapping("/cerrar")
     public SesionCajaResponse cerrar() {
         return toResponse(cajaService.cerrarSesionDelDia());
+    }
+
+    /**
+     * Usado por el modal de "abrir caja" que se muestra al loguearse (ambos roles): 200 con la
+     * sesión si hay una ABIERTA, 204 si no hay ninguna.
+     */
+    @GetMapping("/sesion-abierta")
+    public ResponseEntity<SesionCajaResponse> sesionAbierta() {
+        Optional<SesionCaja> sesion = cajaService.obtenerSesionAbiertaOpcional();
+        return sesion.map(s -> ResponseEntity.ok(toResponse(s))).orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PostMapping("/retiro/solicitar")

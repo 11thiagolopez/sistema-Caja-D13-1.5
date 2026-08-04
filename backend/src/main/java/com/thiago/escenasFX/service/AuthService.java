@@ -26,6 +26,12 @@ public class AuthService {
             throw new AuthenticationFailedException("Usuario o contraseña inválidos");
         }
 
+        // No se distingue el mensaje de "usuario dado de baja" del de credenciales inválidas, por
+        // el mismo motivo que ya se documenta arriba: no dar pistas de qué usuarios existen.
+        if (!empleado.isActivo()) {
+            throw new AuthenticationFailedException("Usuario o contraseña inválidos");
+        }
+
         return empleado;
     }
 }

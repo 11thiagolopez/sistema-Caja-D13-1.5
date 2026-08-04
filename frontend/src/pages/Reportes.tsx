@@ -1,11 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { getBalance, getProductosGanadores } from '../api/reportes'
 import { ApiRequestError } from '../api/client'
+import { hoyIso } from '../utils/date'
 import type { BalanceFinancieroResponse, ProductoRankingDTO } from '../types/api'
-
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export function Reportes() {
   const [desde, setDesde] = useState(hoyIso())
@@ -43,7 +40,7 @@ export function Reportes() {
         </label>
         <label>
           Hasta
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          <input type="date" max={hoyIso()} value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </label>
         <button type="submit" disabled={cargando}>
           Buscar
@@ -58,11 +55,18 @@ export function Reportes() {
           <ul>
             <li>Ingresos por ventas: {balance.ingresosPorVentas.toFixed(2)}</li>
             <li>Costo de mercadería: {balance.costoMercaderia.toFixed(2)}</li>
-            <li>Gastos operativos: {balance.gastosOperativos.toFixed(2)}</li>
+            <li>Gastos operativos (luz, alquiler, etc.): {balance.gastosOperativos.toFixed(2)}</li>
+            <li>Comisiones pagadas a vendedores: {balance.comisionesPagadas.toFixed(2)}</li>
             <li>
               <strong>Ganancia neta: {balance.gananciaNeta.toFixed(2)}</strong>
             </li>
           </ul>
+          <p>
+            <em>
+              Los retiros de caja no se descuentan acá (quedan solo como arqueo en la sección Caja) — esta
+              ganancia neta resta costo de mercadería, gastos operativos reales y comisiones.
+            </em>
+          </p>
         </section>
       )}
 

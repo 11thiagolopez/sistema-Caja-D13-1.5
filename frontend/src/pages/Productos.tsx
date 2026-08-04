@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { cargarStock, crearProducto, eliminarProducto, getProductos } from '../api/productos'
+import { getMarcas } from '../api/marcas'
+import { getProveedores } from '../api/proveedores'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
-import type { Producto, ProductoRequest } from '../types/api'
+import type { MarcaResponse, Producto, ProductoRequest, ProveedorResponse } from '../types/api'
 
 const PRODUCTO_VACIO: ProductoRequest = {
   rubro: '',
@@ -21,6 +23,8 @@ export function Productos() {
   const { sesion } = useAuth()
   const esAdmin = sesion?.rol === 'ADMIN'
   const [productos, setProductos] = useState<Producto[]>([])
+  const [marcas, setMarcas] = useState<MarcaResponse[]>([])
+  const [proveedores, setProveedores] = useState<ProveedorResponse[]>([])
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
 
@@ -48,11 +52,16 @@ export function Productos() {
 
   useEffect(() => {
     cargarProductos().finally(() => setCargando(false))
+    getMarcas().then(setMarcas)
+    getProveedores().then(setProveedores)
   }, [])
 
+  const nombrePorCodigoMarca = Object.fromEntries(marcas.map((m) => [m.codigo, m.nombre]))
+
   const productosFiltrados = productos.filter((p) => {
+    const nombreMarca = nombrePorCodigoMarca[p.marca] ?? p.marca
     const matchDescripcion = p.descripcion.toLowerCase().includes(filtroDescripcion.toLowerCase())
-    const matchMarca = p.marca.toLowerCase().includes(filtroMarca.toLowerCase())
+    const matchMarca = nombreMarca.toLowerCase().includes(filtroMarca.toLowerCase())
     return matchDescripcion && matchMarca
   })
 
@@ -66,6 +75,8 @@ export function Productos() {
       setProductos((actual) => [...actual, creado])
       setUltimoCodigoGenerado(creado.codigoInterno)
       setNuevoProducto(PRODUCTO_VACIO)
+      getMarcas().then(setMarcas)
+      getProveedores().then(setProveedores)
     } catch (err) {
       setErrorAlta(err instanceof ApiRequestError ? err.message : 'No se pudo agregar el producto')
     } finally {
@@ -74,7 +85,7 @@ export function Productos() {
   }
 
   async function onEliminar(producto: Producto) {
-    if (!window.confirm(`¿Eliminar "${producto.descripcion}" (${producto.marca})?`)) return
+    if (!window.confirm(`¿Eliminar "${producto.descripcion}" (${nombrePorCodigoMarca[producto.marca] ?? producto.marca})?`)) return
     setEliminandoId(producto.idProducto)
     try {
       await eliminarProducto(producto.idProducto)
@@ -169,7 +180,7 @@ export function Productos() {
           {productosFiltrados.map((producto) => (
             <tr key={producto.idProducto}>
               <td>{producto.descripcion}</td>
-              <td>{producto.marca}</td>
+              <td>{nombrePorCodigoMarca[producto.marca] ?? producto.marca}</td>
               <td>{producto.rubro}</td>
               <td>{producto.codigoInterno}</td>
               <td>{producto.precioVenta != null ? producto.precioVenta.toFixed(2) : '—'}</td>
@@ -214,21 +225,33 @@ export function Productos() {
               />
             </label>
             <label>
-              Marca (2 dígitos)
+              Marca
               <input
-                maxLength={2}
                 required
+                list="marcas-datalist"
+                placeholder="Ej. KALOP"
                 value={nuevoProducto.marca}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, marca: e.target.value })}
               />
+              <datalist id="marcas-datalist">
+                {marcas.map((m) => (
+                  <option key={m.idMarca} value={m.nombre} />
+                ))}
+              </datalist>
             </label>
             <label>
               Proveedor
               <input
                 required
+                list="proveedores-datalist"
                 value={nuevoProducto.proveedor}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, proveedor: e.target.value })}
               />
+              <datalist id="proveedores-datalist">
+                {proveedores.map((p) => (
+                  <option key={p.idProveedor} value={p.nombre} />
+                ))}
+              </datalist>
             </label>
             <label>
               Descripción

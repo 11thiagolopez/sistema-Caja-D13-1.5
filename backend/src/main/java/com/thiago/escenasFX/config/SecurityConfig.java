@@ -94,6 +94,12 @@ public class SecurityConfig {
                 .accessDeniedHandler(accessDeniedHandler))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/marcas").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.GET, "/api/caja/sesion-abierta").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers("/api/proveedores/**").hasRole("ADMIN")
+                .requestMatchers("/api/gastos/**").hasRole("ADMIN")
+                .requestMatchers("/api/compras/**").hasRole("ADMIN")
+                .requestMatchers("/api/empleados/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/productos/**").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/productos", "/api/productos/cargar-stock").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/productos/**").hasRole("ADMIN")

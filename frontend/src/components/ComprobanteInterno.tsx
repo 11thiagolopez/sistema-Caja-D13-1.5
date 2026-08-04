@@ -1,3 +1,4 @@
+import { Modal } from './Modal'
 import type { VentaResponse } from '../types/api'
 
 interface ComprobanteInternoProps {
@@ -15,7 +16,7 @@ export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps)
   const fecha = new Date(venta.fecha).toLocaleString('es-AR')
 
   return (
-    <div className="comprobante-overlay">
+    <Modal onClose={onCerrar}>
       <div className="comprobante">
         <h3>COMPROBANTE INTERNO N° {numero}</h3>
         <p className="comprobante-aviso">(no válido como factura fiscal)</p>
@@ -55,6 +56,6 @@ export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps)
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

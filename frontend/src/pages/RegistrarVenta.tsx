@@ -1,11 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
+import { getMarcas } from '../api/marcas'
 import { confirmarDescuento, registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
-import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
+import type { DetalleVentaRequest, MarcaResponse, MedioPago, Producto, VentaResponse } from '../types/api'
+
+function etiquetaProducto(producto: Producto, nombreMarca: string): string {
+  return `${producto.descripcion} - ${nombreMarca} (${producto.codigoInterno})`
+}
 
 interface ItemCarrito extends DetalleVentaRequest {
   descripcionProducto: string
@@ -14,7 +19,8 @@ interface ItemCarrito extends DetalleVentaRequest {
 export function RegistrarVenta() {
   const { sesion } = useAuth()
   const [productos, setProductos] = useState<Producto[]>([])
-  const [idProductoSeleccionado, setIdProductoSeleccionado] = useState<number | null>(null)
+  const [marcas, setMarcas] = useState<MarcaResponse[]>([])
+  const [productoTexto, setProductoTexto] = useState('')
   const [cantidad, setCantidad] = useState(1)
   const [carrito, setCarrito] = useState<ItemCarrito[]>([])
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
@@ -31,24 +37,20 @@ export function RegistrarVenta() {
   const [errorConfirmacion, setErrorConfirmacion] = useState<string | null>(null)
   const [mensajeConfirmacion, setMensajeConfirmacion] = useState<string | null>(null)
 
-  const [filtroDescripcion, setFiltroDescripcion] = useState('')
-  const [filtroMarca, setFiltroMarca] = useState('')
   const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
 
   useEffect(() => {
     getProductos()
-      .then((lista) => {
-        setProductos(lista)
-        setIdProductoSeleccionado(lista[0]?.idProducto ?? null)
-      })
+      .then(setProductos)
       .catch(() => setError('No se pudieron cargar los productos'))
+    getMarcas().then(setMarcas)
   }, [])
 
-  const productosFiltrados = productos.filter((p) => {
-    const matchDescripcion = p.descripcion.toLowerCase().includes(filtroDescripcion.toLowerCase())
-    const matchMarca = p.marca.toLowerCase().includes(filtroMarca.toLowerCase())
-    return matchDescripcion && matchMarca
-  })
+  const nombrePorCodigoMarca = Object.fromEntries(marcas.map((m) => [m.codigo, m.nombre]))
+
+  const productoSeleccionado = productos.find(
+    (p) => etiquetaProducto(p, nombrePorCodigoMarca[p.marca] ?? p.marca) === productoTexto,
+  )
 
   function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
     const precioVenta = producto.precioVenta
@@ -77,13 +79,13 @@ export function RegistrarVenta() {
   }
 
   function agregarAlCarrito() {
-    const producto = productos.find((p) => p.idProducto === idProductoSeleccionado)
-    if (!producto || cantidad <= 0) return
-    if (!agregarProductoAlCarrito(producto, cantidad)) {
-      setError(`"${producto.descripcion}" no tiene precio de venta cargado, no se puede vender`)
+    if (!productoSeleccionado || cantidad <= 0) return
+    if (!agregarProductoAlCarrito(productoSeleccionado, cantidad)) {
+      setError(`"${productoSeleccionado.descripcion}" no tiene precio de venta cargado, no se puede vender`)
       return
     }
     setCantidad(1)
+    setProductoTexto('')
   }
 
   async function onEscanear(codigo: string) {
@@ -169,32 +171,26 @@ export function RegistrarVenta() {
 
       <div className="agregar-producto">
         <input
-          placeholder="Filtrar por descripción"
-          value={filtroDescripcion}
-          onChange={(e) => setFiltroDescripcion(e.target.value)}
+          list="productos-datalist"
+          placeholder="Buscar producto por descripción o marca"
+          value={productoTexto}
+          onChange={(e) => setProductoTexto(e.target.value)}
         />
-        <input
-          placeholder="Filtrar por marca"
-          value={filtroMarca}
-          onChange={(e) => setFiltroMarca(e.target.value)}
-        />
-        <select
-          value={idProductoSeleccionado ?? ''}
-          onChange={(e) => setIdProductoSeleccionado(Number(e.target.value))}
-        >
-          {productosFiltrados.map((producto) => (
-            <option key={producto.idProducto} value={producto.idProducto}>
-              {producto.descripcion} - {producto.marca} (stock: {producto.stockActual})
-            </option>
+        <datalist id="productos-datalist">
+          {productos.map((producto) => (
+            <option
+              key={producto.idProducto}
+              value={etiquetaProducto(producto, nombrePorCodigoMarca[producto.marca] ?? producto.marca)}
+            />
           ))}
-        </select>
+        </datalist>
         <input
           type="number"
           min={1}
           value={cantidad}
           onChange={(e) => setCantidad(Number(e.target.value))}
         />
-        <button type="button" onClick={agregarAlCarrito}>
+        <button type="button" onClick={agregarAlCarrito} disabled={!productoSeleccionado}>
           Agregar
         </button>
       </div>

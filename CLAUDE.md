@@ -9,7 +9,23 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-07-30):
+Estado Actual (Actualizado al 2026-08-04):
+
+Rediseño grande de interfaz (sidebar por secciones desplegables, tema gris claro fijo, modal
+obligatorio de abrir caja post-login) más seis dominios de negocio nuevos: Marca (catálogo
+nombre↔código, resuelto automáticamente al dar de alta productos/compras), Proveedor (catálogo con
+FK en productos, backfileado desde los 5 valores de texto libre que ya existían), Gasto (gastos
+operativos, reflejados en Reportes), Compra (con actualización de stock/precio y alta de producto
+nuevo en el mismo renglón), Empleado CRUD (antes no existía ningún endpoint — alta/baja con % de
+comisión), y Comisiones (reporte por vendedor, % sobre la ganancia). La fórmula de ganancia neta en
+Reportes cambió: ya no resta retiros de caja, resta Gastos reales + comisiones pagadas. Todo
+compilado (`mvn compile`/`tsc -b` limpios) y probado end-to-end en Chrome. Detalle completo,
+decisiones de diseño confirmadas con el dueño y qué quedó sin probar en vivo, en `plan-migracion.md`
+sección 14 y `plan-frontend.md` "Estado actual". De paso se arregló un bug real encontrado antes de
+empezar (3 sesiones de caja duplicadas en Supabase causaban un 401 engañoso al abrir caja) y uno
+descubierto escribiendo esta misma actualización (la baja lógica de empleado no bloqueaba el login).
+
+Estado Anterior (Actualizado al 2026-07-30):
 
 **Monorepo**: el repo tiene `backend/` (todo el proyecto Java/Maven/Eclipse, movido desde la raíz
 con `git mv` preservando el historial) y `frontend/` (React + Vite + TypeScript, scaffoldeado y
@@ -51,8 +67,8 @@ de carga a los botones que llamaban a la API sin ningún feedback visual. Detall
 incluido qué se testeó, en `plan-migracion.md` sección 13.
 
 Pendiente (por prioridad):
-1. Commitear los cambios de la sesión 2026-07-30 (backend + frontend, ver arriba) y decidir el
-   flujo de branch/PR.
+1. Probar en vivo la rama del modal de "abrir caja" sin ninguna sesión abierta (no se pudo forzar
+   en la sesión 2026-08-04 sin interrumpir una sesión real que había quedado abierta).
 2. Probar en el navegador, con un email real, el flujo completo de confirmación por VENDEDOR
    (retiro y descuento) — los tests automáticos mockean el envío de email.
 3. Cargar `precioVenta` y `precioCompra` en Supabase para los productos que los tienen en `null`
@@ -60,4 +76,6 @@ Pendiente (por prioridad):
    Reportes, que subestima el costo de mercadería) — el dueño ya tiene los documentos con los
    precios, pendiente de que los cargue.
 4. Pulir estilos/UX del frontend: sigue siendo funcional pero básico.
-5. Flyway (opcional, reemplazaría el manejo manual del esquema en Supabase).
+5. Row Level Security deshabilitado en la mayoría de las tablas de Supabase — señalado al dueño,
+   pendiente de que decida si se atiende.
+6. Flyway (opcional, reemplazaría el manejo manual del esquema en Supabase).

@@ -14,5 +14,6 @@ public class BalanceFinancieroResponse {
     private BigDecimal ingresosPorVentas;
     private BigDecimal costoMercaderia;
     private BigDecimal gastosOperativos;
+    private BigDecimal comisionesPagadas;
     private BigDecimal gananciaNeta;
 }

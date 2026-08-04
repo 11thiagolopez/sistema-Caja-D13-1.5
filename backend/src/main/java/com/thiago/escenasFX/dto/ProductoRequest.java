@@ -21,8 +21,10 @@ public class ProductoRequest {
     @Pattern(regexp = "\\d{2}")
     private String familia;
 
+    // Nombre libre (ej. "KALOP"), no un código. ProductoService resuelve el código interno de
+    // 2 dígitos correspondiente vía MarcaService, creando la marca si es la primera vez que se
+    // usa ese nombre.
     @NotBlank
-    @Pattern(regexp = "\\d{2}")
     private String marca;
 
     @NotBlank

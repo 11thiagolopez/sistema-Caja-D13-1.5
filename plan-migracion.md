@@ -2,6 +2,21 @@
 
 ## Para retomar mañana
 
+**Estado al 2026-08-04: reestructuración grande de interfaz + seis dominios de negocio nuevos
+(Marca, Proveedor, Gasto, Compra, Empleado CRUD, Comisiones), pedidos por el dueño después de usar
+el sistema en producción.** Arrancó con un bug real encontrado en vivo (backend caído sin que el
+dueño lo supiera — el frontend fallaba con "falta un token JWT válido" al abrir caja, pero la causa
+real era `NonUniqueResultException`: habían quedado 3 sesiones de caja ABIERTA duplicadas de antes
+del fix de la sesión 2026-07-30, ver sección 13; se cerraron a mano y quedó documentado como
+recordatorio de limpiar datos legados después de un fix de código). A partir de ahí, pedido grande
+de UI/negocio: fondo gris claro fijo (ya no sigue `prefers-color-scheme`, se sacó el bloque de modo
+oscuro de `index.css` porque el dueño lo pidió explícitamente después de no ver el cambio con su
+SO en modo oscuro), sidebar por secciones desplegables reemplazando la barra de botones de arriba,
+modal obligatorio de "abrir caja" post-login, y los seis dominios nuevos. Detalle completo,
+decisiones de diseño y qué se verificó en la sección 14. **Todo compilado (`mvn compile` y
+`tsc -b` limpios) y probado end-to-end en Chrome con un usuario ADMIN temporal** (creado y borrado
+en la misma sesión, junto con el resto de los datos de prueba) — commiteado en esta sesión.
+
 **Estado al 2026-07-30: tres bugs reportados por el dueño del negocio probando el sistema real
 (backend `:8080` + frontend `:5173`, ambos corriendo contra Supabase real) — los tres
 encontrados, diagnosticados y arreglados en la misma sesión, pero todavía sin commitear.**
@@ -806,3 +821,183 @@ hacer doble click (con el riesgo de disparar la acción dos veces).
   también a `RegistrarVenta.tsx` y `Login.tsx`, que ya tenían el estado de carga pero no el ícono.
 - Todos los botones afectados además quedan `disabled` mientras están en curso, evitando el doble
   submit.
+
+## 14. Sesión 2026-08-04: rediseño de navegación + Marca, Proveedor, Gasto, Compra, Empleado CRUD, Comisiones
+
+### 0. Bug real encontrado antes de arrancar el pedido nuevo
+
+El dueño reportó que, tras loguearse bien, "Abrir caja" le tiraba `401 {"message": "No autenticado:
+falta un token JWT válido"}`. El JWT era válido — se confirmó decodificándolo y repitiendo el POST
+a mano. La causa real, visible en el log del backend, era `org.hibernate.NonUniqueResultException:
+Query did not return a unique result: 3 results were returned` dentro de
+`CajaService.abrirSesion()`, que usa `sesionRepo.findByEstado("ABIERTA")` esperando `Optional`
+(0 o 1 resultado). Habían quedado **3 filas `ABIERTA`** en `sesiones_caja` (ids 2, 3, 4; de
+2026-07-26, 2026-07-29 y 2026-07-30) — residuo de antes del fix de sesiones duplicadas de la
+sesión 2026-07-30 (sección 13): el código ya estaba arreglado, pero los datos viejos nunca se
+habían limpiado, y esa excepción no manejada se traducía en un 401 genérico en vez de un error
+claro. **Fix**: `UPDATE sesiones_caja SET estado='CERRADA' WHERE estado='ABIERTA'` sobre las 3 filas
+(confirmado con el dueño antes de tocar la base real). Verificado abriendo y cerrando una sesión de
+prueba después del fix — `200 OK` en ambos POSTs.
+
+### 1. Pedido del dueño y aclaraciones
+
+El pedido original mezclaba términos ambiguos con software de referencia inaccesible ("Punto de
+Venta Plus 7" de GD Sistemas, sin captura de pantalla disponible — el diseño se hizo en base a la
+especificación escrita y las convenciones ya usadas en el código, no a una réplica visual).
+Aclaraciones clave antes de tocar código:
+
+- **"Cuentas corrientes" no es cuenta de crédito de cliente/proveedor** — es un gasto operativo
+  (nombre + importe + fecha, ej. "pago de luz"), renombrado internamente a **Gastos**.
+- **Compras sí actualiza stock y precio** de los productos (no es solo un asiento contable).
+- **Modal de "abrir caja" post-login**: ambos roles, bloqueante, te deja en Cobros (`/ventas/nueva`)
+  al confirmar.
+- **Comisión de vendedor**: % sobre la **ganancia** (venta − costo), no sobre el total facturado.
+- **Fórmula de ganancia neta**: deja de restar los retiros de caja (quedan solo como arqueo) y en
+  su lugar resta Gastos reales + comisiones pagadas — cambio de comportamiento confirmado
+  explícitamente con el dueño porque altera un número que ya conocía.
+- **Compras**: la grilla soporta tanto reponer un producto existente como dar de alta uno nuevo en
+  el mismo renglón.
+- **Vendedores**: además de alta, se pidió baja lógica (no existía ninguna columna `activo` en
+  `empleados` hasta ahora).
+- **Marca**: pasa a ser nombre libre (ej. "KALOP") en toda la app, resuelto internamente a un
+  código de 2 dígitos vía catálogo nuevo, para no romper `codigoInterno` de los 7004 productos
+  existentes (auditado: códigos `"01"`-`"40"` en uso + dos valores mal formados `"4"`/`"8"` que
+  duplican `"04"`/`"08"`; asignación automática arranca en `"41"`).
+- **Proveedor**: catálogo nuevo con FK en `productos.id_proveedor`, backfileado desde los 5
+  valores de texto libre que ya existían (`VEGA`, `CANDIL`, `LUZ VERDE`, `AKAI ENERGY`, `CAMBRE`).
+  La columna vieja `productos.proveedor` (texto) queda intacta y sin usarse más, por compatibilidad.
+
+### 2. Base de datos (Supabase, todo aditivo)
+
+```sql
+CREATE TABLE marcas (id_marca serial PK, nombre varchar(80) UNIQUE, codigo varchar(2) UNIQUE, activo boolean, creado_en timestamp);
+CREATE TABLE proveedores (id_proveedor serial PK, nombre varchar(120) UNIQUE, contacto, telefono, email, activo, creado_en);
+ALTER TABLE productos ADD COLUMN id_proveedor integer REFERENCES proveedores(id_proveedor);
+-- backfill desde productos.proveedor (texto) a la nueva tabla + FK
+CREATE TABLE gastos (id_gasto serial PK, nombre, importe numeric(12,2) CHECK(>0), fecha date, categoria, id_empleado_registro FK, creado_en);
+CREATE TABLE compras (id_compra serial PK, fecha date, id_proveedor FK, medio_pago, total_compra, id_empleado_registro FK, creado_en);
+CREATE TABLE compra_items (id_item serial PK, id_compra FK ON DELETE CASCADE, id_producto FK, cantidad CHECK(>0), precio_compra_unitario, precio_venta_unitario, subtotal);
+ALTER TABLE empleados ADD COLUMN comision numeric(5,2) CHECK(0-100);
+ALTER TABLE empleados ADD COLUMN activo boolean DEFAULT true;
+```
+
+Nada de esto tocó filas existentes de `productos`, `ventas`, `detalle_ventas`, `sesiones_caja`,
+`movimientos_caja`, `solicitudes_retiro`, más allá del backfill de `id_proveedor` (nullable).
+
+### 3. Backend — dominios nuevos
+
+Mismo patrón que el resto del código (`model/`/`repository/`/`service/`/`dto/`/`controller/`
+planos, DTOs `<Entidad><Acción>Request/Response`, excepciones reusando `IllegalArgumentException`
+→400 / `IllegalStateException`→409 vía `GlobalExceptionHandler`, sin exceptions nuevas):
+
+- **Marca**: `MarcaService.resolverOCrear(nombre)` — busca por nombre (case-insensitive), crea con
+  el próximo código libre desde `"41"` si no existe. `ProductoService.crear()` la usa en vez de
+  tomar `req.getMarca()` como código directo — el resto de la lógica de `codigoInterno`/correlativo
+  no cambió. `GET /api/marcas` (ambos roles, lo necesita el combo de ventas). Sin `POST` público:
+  la creación es siempre transparente desde otro flujo (alta de producto o compra).
+- **Proveedor**: CRUD completo (`GET/POST/PUT/DELETE /api/proveedores`, ADMIN) + `resolverOCrear`
+  reusado por Producto y Compra. `Producto` gana `@ManyToOne proveedorRef` (además del texto libre
+  histórico, que se sigue escribiendo por compatibilidad).
+- **Gasto**: `GET/POST /api/gastos?desde=&hasta=` (ADMIN), valida fecha no futura server-side.
+- **Compra + CompraItem**: mismo patrón padre/hijo que Venta/DetalleVenta (`CompraMapper`
+  package-private como `VentaMapper`, mismo motivo: evitar el ciclo de serialización JPA).
+  `CompraService.registrarCompra()` valida fecha no futura, resuelve/crea el proveedor por nombre,
+  y por cada renglón: si trae `idProducto` repone stock/precio de un producto existente; si trae
+  `nuevoProducto` (rubro/familia/marca/descripción/código de fábrica) lo da de alta en el momento
+  vía `ProductoService.crear()` con stock inicial 0 (el stock del renglón se suma después, junto
+  con el de productos existentes, para no duplicar). `POST /api/compras`,
+  `GET /api/compras?desde=&hasta=`, `GET /api/compras/pagos-proveedor?desde=&hasta=` (agrupado por
+  proveedor), `GET /api/compras/productos-mas-comprados?desde=&hasta=&limit=` (mismo patrón que
+  `ReporteService.productosGanadores`) — todos ADMIN.
+- **Empleado (CRUD nuevo — no existía ningún controller antes)**: `Empleado` gana `comision`
+  (BigDecimal, nullable) y `activo` (boolean, default true). `EmpleadoService.crear()` hashea la
+  password con el `PasswordEncoder` bean ya existente (mismo que usa `AuthService`), valida usuario
+  único. `GET/POST/PUT /api/empleados`, `DELETE /api/empleados/{id}` (baja lógica) — ADMIN.
+  `EmpleadoResponse` nunca expone `passwordHash`.
+- **Comisiones y ventas por vendedor**: agregado a `ReporteService`/`ReportesController` existentes
+  (ya blindados ADMIN-only, sin matcher nuevo). `comisionesPorVendedor(desde,hasta)`: ventas
+  CONFIRMADA agrupadas por empleado, margen = Σ(precioUnitario − precioCompra) × cantidad,
+  comisión = margen × `empleado.comision`/100. `GET /api/reportes/comisiones?desde=&hasta=`,
+  `GET /api/reportes/ventas-por-vendedor?desde=&hasta=&idEmpleado=`.
+- **`balanceFinanciero()` reescrito**: antes sumaba todos los `MovimientoCaja` como "gastos
+  operativos" (confundía retiros de caja con gasto real de negocio); ahora resta `Σ Gasto.importe`
+  del rango + `Σ comisionCalculada`, y los retiros quedan fuera del cálculo de ganancia (siguen
+  existiendo como arqueo puro en la sección Caja). `BalanceFinancieroResponse` gana
+  `comisionesPagadas`.
+- **`GET /api/caja/sesion-abierta`** (ambos roles): 200 con la sesión si hay una ABIERTA, 204 si
+  no — lo necesita el modal post-login para decidir si mostrarse, ya que las variantes existentes
+  (`resumen-dia`/`resumen`) son ADMIN-only y el modal debe funcionar para VENDEDOR también.
+  `CajaService` gana `obtenerSesionAbiertaOpcional()` (variante no-throwing de la que ya existía).
+
+### 4. Frontend — reestructuración y pantallas nuevas
+
+- **Tema**: `--bg` pasa a gris claro (`#eceff1`), `--bg-alt` a blanco puro para que las tarjetas se
+  destaquen. El dueño pidió que el gris se viera siempre — el bloque `@media
+  (prefers-color-scheme: dark)` de `index.css` se sacó por completo (antes el tema dependía del SO;
+  con el navegador del dueño en modo oscuro, el cambio de fondo no se veía nunca). `color-scheme`
+  pasa de `light dark` a `light`.
+- **`components/Modal.tsx`** nuevo: generaliza el único patrón de ventana emergente que existía
+  (`ComprobanteInterno`, overlay fijo + tarjeta centrada, sin portal ni focus-trap) en un
+  componente reusable (`title?`, `onClose?` — sin él, el modal no es descartable, usado para el
+  flujo obligatorio de abrir caja; `wide?` para modales con tablas). `ComprobanteInterno` se
+  refactorizó para usarlo.
+- **`components/Layout.tsx`** reescrito alrededor de un array de configuración (secciones +
+  roles) en vez del `<nav>` plano hardcodeado de antes — sidebar vertical con: enlaces sueltos
+  (Cobros, Productos, Historial de ventas, Reportes), y secciones desplegables Caja (abrir/cerrar
+  caja y retiros como tres modales distintos — antes vivían inline en `Caja.tsx` —, más "ver
+  resumen del día" ADMIN), Gastos, Compras, Vendedores (ADMIN), y un botón suelto Proveedores que
+  abre modal directo (sin ruta propia, tal cual lo pidió el dueño). `Caja.tsx` quedó reducido a
+  solo el resumen ADMIN, ahora en `/caja/resumen`.
+- **Modal de abrir caja post-login**: `Layout` llama `GET /api/caja/sesion-abierta` una vez al
+  montar; si no hay sesión, muestra `AbrirCajaModal` sin `onClose` (no descartable) y al confirmar
+  navega a `/ventas/nueva`. El mismo componente se reusa (con `onClose`) para la apertura manual
+  desde el menú Caja.
+- **Combo de producto/marca por nombre**: `<input list>` + `<datalist>` nativo (sin librería
+  nueva) en `RegistrarVenta.tsx` (reemplaza el `<select>` por id) y en la grilla de Compras — la
+  UI muestra/busca por nombre de marca, el backend sigue generando `codigoInterno` con el código
+  de 2 dígitos por debajo. `Productos.tsx`: los campos marca y proveedor pasan de texto/código
+  crudo a combos con autocompletado sobre `GET /api/marcas`/`GET /api/proveedores`.
+- **Páginas nuevas** (todas ADMIN salvo aclaración): `Gastos.tsx` (listado + alta, patrón de
+  `Productos.tsx`), `ComprasNueva.tsx` (grilla tipo Excel: filas dinámicas, fecha con
+  `max={hoy}` — primera validación de fecha-no-futura del frontend, más el chequeo espejo en el
+  backend —, cada renglón con datalist de producto que revela campos de alta inline si no matchea
+  nada existente), `ComprasConsulta.tsx` (rango de fechas server-side + proveedor/marca/descripción
+  client-side + "productos más comprados"), `PagosProveedores.tsx`, `Vendedores.tsx` (alta con %
+  comisión + baja lógica), `ComisionesVendedores.tsx`, `VentasPorVendedor.tsx`, y
+  `components/ProveedoresModal.tsx` (listado + alta/edición/baja inline, sin ruta propia).
+- **`Reportes.tsx`**: nueva línea "Comisiones pagadas a vendedores" y relabel de "Gastos
+  operativos" para reflejar la fórmula nueva.
+- `utils/date.ts` nuevo (`hoyIso()`), extraído de la duplicación que ya existía en
+  `HistorialVentas.tsx`/`Reportes.tsx`, reusado en todas las pantallas nuevas con filtro de fecha.
+
+### 5. Qué se verificó
+
+`mvn compile` y `tsc -b` limpios. En Chrome, con un usuario ADMIN temporal (creado por SQL directo
+con un hash BCrypt generado localmente, y borrado al final junto con el resto de los datos de
+prueba — el dueño no tenía credenciales a mano en esta sesión): sidebar con todas las secciones
+correctas por rol; alta de gasto reflejada en el listado y en Reportes (`gastosOperativos:
+5000.00` para el rango de hoy); alta de compra con un producto **nuevo** en el mismo renglón —
+confirmado en Supabase que el producto quedó creado con `stock_actual=1`, `precio_compra`/`precio_
+venta` correctos, `codigo_interno` bien armado (`9999410001`), `id_proveedor` resuelto a un
+proveedor existente (CANDIL) y la marca "KALOP" creada con código `"41"` (primero libre después de
+los `"01"`-`"40"` ya usados); modal de Proveedores mostrando los 5 proveedores reales migrados;
+alta de vendedor con 50% de comisión; balance financiero de Reportes reflejando el gasto de prueba.
+**No se pudo probar en vivo la rama "no hay sesión abierta → aparece el modal"** del flujo
+post-login: había una sesión ABIERTA real (`id_sesion=6`, del día anterior) que no se tocó para no
+interrumpir una posible operación real del dueño — sí se confirmó la rama contraria (con sesión
+abierta, el modal correctamente no aparece). Sin errores en la consola del navegador durante toda
+la sesión. Datos de prueba (usuario ADMIN temporal, vendedor de prueba, producto/compra/gasto de
+prueba) borrados al final — la base quedó con los mismos 7004 productos y 2 empleados reales que
+antes de empezar, más las tablas nuevas (proveedores con los 5 backfileados, marcas con "KALOP").
+
+Al escribir esta sección se notó que la baja lógica de empleado no bloqueaba el login
+(`AuthService.login()` no chequeaba `activo`) — se arregló en la misma sesión: ahora un empleado
+con `activo=false` recibe el mismo `401 "Usuario o contraseña inválidos"` que credenciales mal
+escritas (mismo criterio de no revelar qué usuarios existen que ya se usaba para usuario-inexistente
+vs. password-incorrecta).
+
+**Pendiente para la próxima sesión**: probar en vivo el modal de abrir caja cuando no hay ninguna
+sesión abierta (cerrar la sesión real `id_sesion=6` cuando el dueño confirme que ya no la necesita,
+o esperar a que él mismo la cierre); cargar `precioVenta`/`precioCompra` en los productos que
+siguen en `null` (pendiente desde la sesión 2026-07-30); Row Level Security sigue deshabilitado en
+la mayoría de las tablas de Supabase (señalado, no es parte de este pedido).

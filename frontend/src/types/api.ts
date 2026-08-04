@@ -27,6 +27,8 @@ export interface Producto {
   idProducto: number
   rubro: string
   familia: string
+  // Código interno de 2 dígitos (no el nombre) — usar el mapa de MarcaResponse[] para mostrar
+  // el nombre.
   marca: string
   correlativo: string
   codigoInterno: string
@@ -42,6 +44,7 @@ export interface Producto {
 export interface ProductoRequest {
   rubro: string
   familia: string
+  // Nombre libre (ej. "KALOP"), no un código: el backend resuelve/crea la Marca correspondiente.
   marca: string
   proveedor: string
   codigoFabrica?: string
@@ -49,6 +52,28 @@ export interface ProductoRequest {
   precioVenta: number
   precioCompra?: number
   stockActual: number
+}
+
+export interface MarcaResponse {
+  idMarca: number
+  nombre: string
+  codigo: string
+}
+
+export interface ProveedorRequest {
+  nombre: string
+  contacto?: string
+  telefono?: string
+  email?: string
+}
+
+export interface ProveedorResponse {
+  idProveedor: number
+  nombre: string
+  contacto: string | null
+  telefono: string | null
+  email: string | null
+  activo: boolean
 }
 
 export interface CargarStockRequest {
@@ -180,5 +205,120 @@ export interface BalanceFinancieroResponse {
   ingresosPorVentas: number
   costoMercaderia: number
   gastosOperativos: number
+  comisionesPagadas: number
   gananciaNeta: number
+}
+
+export interface GastoRequest {
+  idEmpleado: number
+  nombre: string
+  importe: number
+  fecha: string
+  categoria?: string
+}
+
+export interface GastoResponse {
+  idGasto: number
+  nombre: string
+  importe: number
+  fecha: string
+  categoria: string | null
+  empleadoRegistroNombre: string | null
+  creadoEn: string
+}
+
+export interface NuevoProductoEnCompraRequest {
+  rubro: string
+  familia: string
+  marca: string
+  descripcion: string
+  codigoFabrica?: string
+}
+
+export interface CompraItemRequest {
+  idProducto?: number
+  nuevoProducto?: NuevoProductoEnCompraRequest
+  cantidad: number
+  precioCompraUnitario: number
+  precioVentaUnitario?: number
+}
+
+export interface CompraRequest {
+  idEmpleado: number
+  fecha: string
+  proveedorNombre: string
+  medioPago: MedioPago
+  items: CompraItemRequest[]
+}
+
+export interface CompraItemResponse {
+  idItem: number
+  idProducto: number
+  descripcionProducto: string
+  marcaProducto: string
+  cantidad: number
+  precioCompraUnitario: number
+  precioVentaUnitario: number | null
+  subtotal: number
+}
+
+export interface CompraResponse {
+  idCompra: number
+  fecha: string
+  idProveedor: number | null
+  nombreProveedor: string | null
+  medioPago: MedioPago
+  totalCompra: number
+  items: CompraItemResponse[]
+}
+
+export interface PagoProveedorDTO {
+  idProveedor: number
+  nombreProveedor: string
+  totalPagado: number
+  cantidadCompras: number
+}
+
+export interface ProductoComprasRankingDTO {
+  idProducto: number
+  descripcion: string
+  cantidadComprada: number
+  totalPagado: number
+}
+
+export interface EmpleadoRequest {
+  nombre: string
+  usuario: string
+  password: string
+  email?: string
+  rol: Rol
+  comision?: number
+}
+
+export interface EmpleadoUpdateRequest {
+  nombre: string
+  usuario: string
+  password?: string
+  email?: string
+  rol: Rol
+  comision?: number
+}
+
+export interface EmpleadoResponse {
+  idEmpleado: number
+  nombre: string
+  usuario: string
+  rol: Rol
+  email: string | null
+  comision: number | null
+  activo: boolean
+}
+
+export interface ComisionEmpleadoDTO {
+  idEmpleado: number
+  nombreEmpleado: string
+  comisionPorcentaje: number | null
+  gananciaGenerada: number
+  comisionCalculada: number
+  cantidadVentas: number
 }

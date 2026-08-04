@@ -15,6 +15,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByRubroAndFamiliaAndMarcaOrderByCorrelativoDesc(String rubro, String familia, String marca);
 
+    boolean existsByMarca(String marca);
+
     // Explícito con @Query (en vez de un nombre derivado tipo
     // findByCodigoFabricaOrCodigoInternoAndActivoTrue) porque Spring Data resolvería
     // "X Or Y And Z" como "X Or (Y And Z)", no "(X Or Y) And Z".

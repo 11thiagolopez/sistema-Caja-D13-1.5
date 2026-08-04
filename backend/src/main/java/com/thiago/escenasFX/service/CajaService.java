@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,6 +69,15 @@ public class CajaService {
     public SesionCaja obtenerSesionAbierta() {
         return sesionRepo.findByEstado("ABIERTA")
             .orElseThrow(() -> new IllegalStateException("No hay una sesión de caja abierta"));
+    }
+
+    /**
+     * Variante no-throwing de obtenerSesionAbierta(), usada por el modal de "abrir caja" post
+     * login: no es un error de negocio que no haya sesión abierta, es justamente lo que dispara
+     * el modal.
+     */
+    public Optional<SesionCaja> obtenerSesionAbiertaOpcional() {
+        return sesionRepo.findByEstado("ABIERTA");
     }
 
     public SesionCaja cerrarSesionDelDia() {
