@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.thiago.escenasFX.dto.ProductoRequest;
+import com.thiago.escenasFX.dto.ProductoUpdateRequest;
 import com.thiago.escenasFX.model.Marca;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.repository.ProductoRepository;
@@ -41,7 +42,7 @@ public class ProductoService {
         Marca marca = marcaService.resolverOCrear(req.getMarca());
 
         List<Producto> existentes = productoRepo
-            .findByRubroAndFamiliaAndMarcaOrderByCorrelativoDesc(req.getRubro(), req.getFamilia(), marca.getCodigo());
+            .findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc(req.getRubro(), req.getFamilia(), marca.getCodigo());
 
         int correlativoAnterior = existentes.isEmpty() ? 0 : Integer.parseInt(existentes.get(0).getCorrelativo());
         String correlativo = String.format("%04d", correlativoAnterior + 1);
@@ -50,7 +51,8 @@ public class ProductoService {
         Producto producto = new Producto();
         producto.setRubro(req.getRubro());
         producto.setFamilia(req.getFamilia());
-        producto.setMarca(marca.getCodigo());
+        producto.setNumeroMarca(marca.getCodigo());
+        producto.setMarca(marca.getNombre());
         producto.setCorrelativo(correlativo);
         producto.setCodigoInterno(codigoInterno);
         producto.setProveedor(req.getProveedor());
@@ -62,6 +64,27 @@ public class ProductoService {
         producto.setStockActual(req.getStockActual());
         producto.setActivo(true);
 
+        return productoRepo.save(producto);
+    }
+
+    /**
+     * Edición en línea desde la tabla de Productos (solo ADMIN, ver SecurityConfig). No toca
+     * rubro/numeroMarca/codigoInterno a propósito — ver ProductoUpdateRequest.
+     */
+    public Producto actualizar(Integer id, ProductoUpdateRequest req) {
+        Producto producto = obtenerPorId(id);
+        if (req.getDescripcion() != null) {
+            producto.setDescripcion(req.getDescripcion());
+        }
+        if (req.getMarca() != null) {
+            producto.setMarca(req.getMarca());
+        }
+        if (req.getPrecioVenta() != null) {
+            producto.setPrecioVenta(req.getPrecioVenta());
+        }
+        if (req.getStockActual() != null) {
+            producto.setStockActual(req.getStockActual());
+        }
         return productoRepo.save(producto);
     }
 

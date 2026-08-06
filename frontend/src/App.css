@@ -19,16 +19,24 @@
 
 .layout {
   display: flex;
-  min-height: 100svh;
+  height: 100svh;
 }
 
 .sidebar {
   width: 240px;
   flex-shrink: 0;
+  height: 100%;
   background: var(--bg-alt);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+
+.sidebar-cerrada {
+  width: 0;
+  border-right: none;
 }
 
 .sidebar-marca {
@@ -38,6 +46,8 @@
 }
 
 .sidebar nav {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 8px;
@@ -115,25 +125,80 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .layout-topbar {
+  position: relative;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  background: var(--accent);
+}
+
+.topbar-espaciador {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-toggle {
+  background: transparent;
+  color: var(--accent-contrast);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.topbar-titulo {
+  position: fixed;
+  top: 16px;
+  left: calc(50% - 28px);
+  transform: translateX(-50%);
+  margin: 0;
+  font-family: 'Montserrat', var(--sans);
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--accent-contrast);
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.45),
+    0 2px 3px rgba(0, 0, 0, 0.3),
+    0 0 1px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.topbar-usuario {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .layout-topbar .nav-usuario {
   font-size: 14px;
+  color: var(--accent-contrast);
+}
+
+.topbar-usuario button {
+  background: var(--accent-contrast);
+  color: var(--accent);
 }
 
 .layout-contenido main {
   flex: 1;
   padding: 24px;
-  overflow-x: auto;
+  overflow: auto;
 }
 
 .agregar-producto {
@@ -141,6 +206,36 @@
   gap: 8px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.ayuda-edicion {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+  margin: -8px 0 8px;
+}
+
+.celda-editable {
+  cursor: text;
+}
+
+.celda-editable:hover {
+  background: var(--bg-alt);
+  outline: 1px dashed var(--input-border);
+  outline-offset: -3px;
+}
+
+.celda-editando {
+  padding: 4px 6px;
+}
+
+.celda-editando input {
+  width: 100%;
+}
+
+.celda-editando .error {
+  margin: 4px 0 0;
+  font-size: 12px;
 }
 
 .confirmar-descuento {

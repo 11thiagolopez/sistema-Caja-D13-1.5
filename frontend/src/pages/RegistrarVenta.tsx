@@ -1,15 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
-import { getMarcas } from '../api/marcas'
 import { confirmarDescuento, registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
-import type { DetalleVentaRequest, MarcaResponse, MedioPago, Producto, VentaResponse } from '../types/api'
+import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
 
-function etiquetaProducto(producto: Producto, nombreMarca: string): string {
-  return `${producto.descripcion} - ${nombreMarca} (${producto.codigoInterno})`
+function etiquetaProducto(producto: Producto): string {
+  return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
 }
 
 interface ItemCarrito extends DetalleVentaRequest {
@@ -19,7 +18,6 @@ interface ItemCarrito extends DetalleVentaRequest {
 export function RegistrarVenta() {
   const { sesion } = useAuth()
   const [productos, setProductos] = useState<Producto[]>([])
-  const [marcas, setMarcas] = useState<MarcaResponse[]>([])
   const [productoTexto, setProductoTexto] = useState('')
   const [cantidad, setCantidad] = useState(1)
   const [carrito, setCarrito] = useState<ItemCarrito[]>([])
@@ -43,14 +41,9 @@ export function RegistrarVenta() {
     getProductos()
       .then(setProductos)
       .catch(() => setError('No se pudieron cargar los productos'))
-    getMarcas().then(setMarcas)
   }, [])
 
-  const nombrePorCodigoMarca = Object.fromEntries(marcas.map((m) => [m.codigo, m.nombre]))
-
-  const productoSeleccionado = productos.find(
-    (p) => etiquetaProducto(p, nombrePorCodigoMarca[p.marca] ?? p.marca) === productoTexto,
-  )
+  const productoSeleccionado = productos.find((p) => etiquetaProducto(p) === productoTexto)
 
   function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
     const precioVenta = producto.precioVenta
@@ -178,10 +171,7 @@ export function RegistrarVenta() {
         />
         <datalist id="productos-datalist">
           {productos.map((producto) => (
-            <option
-              key={producto.idProducto}
-              value={etiquetaProducto(producto, nombrePorCodigoMarca[producto.marca] ?? producto.marca)}
-            />
+            <option key={producto.idProducto} value={etiquetaProducto(producto)} />
           ))}
         </datalist>
         <input

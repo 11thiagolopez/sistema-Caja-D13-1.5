@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.CargarStockRequest;
 import com.thiago.escenasFX.dto.ProductoRequest;
+import com.thiago.escenasFX.dto.ProductoUpdateRequest;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.service.ProductoService;
 
@@ -53,6 +55,11 @@ public class ProductoController {
     @PostMapping("/cargar-stock")
     public Producto cargarStock(@Valid @RequestBody CargarStockRequest request) {
         return productoService.cargarStock(request.getCodigo(), request.getCantidad());
+    }
+
+    @PatchMapping("/{id}")
+    public Producto actualizar(@PathVariable Integer id, @Valid @RequestBody ProductoUpdateRequest request) {
+        return productoService.actualizar(id, request);
     }
 
     @DeleteMapping("/{id}")

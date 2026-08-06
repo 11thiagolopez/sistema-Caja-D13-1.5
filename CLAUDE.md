@@ -9,7 +9,107 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-08-04):
+Estado Actual (Actualizado al 2026-08-05, sesión larga — hay un bloqueante de máquina, leer el
+final de esta sección antes de tocar nada):
+
+**Continuación de la sesión de búsqueda por marca: ABM en línea de Productos, rediseño de
+navegación, y un bug de datos real en la resolución de marcas (con fix de código escrito pero
+SIN DESPLEGAR — ver "Bloqueante" al final).** Resumen por tema:
+
+1. **Edición en línea en la tabla de Productos** (`Productos.tsx`, solo ADMIN): tocar una celda de
+   descripción, marca, precio de venta o stock la vuelve editable ahí mismo (Enter guarda, Escape
+   cancela, click afuera guarda). Rubro y código interno quedan de solo lectura a propósito —
+   forman parte de la identidad del producto (van dentro de `codigoInterno` junto con el
+   correlativo) y editarlos ahí generaría inconsistencias. Nuevo endpoint
+   `PATCH /api/productos/{id}` (`ProductoUpdateRequest`, solo los campos no-nulos se actualizan,
+   solo ADMIN en `SecurityConfig`), con tests. Se agregó también la columna "Código de fábrica" a
+   la tabla (antes no se mostraba). Probado extremo a extremo contra Supabase real (subí stock de
+   un producto real y lo volví a bajar para no dejar el inventario alterado).
+2. **Rediseño de navegación**: login redirige a "Cobros" (`/ventas/nueva`) en vez de Productos.
+   Sidebar colapsable con un botón ☰ en el header (`sidebarAbierta` en `Layout.tsx`), útil para
+   liberar pantalla en Cobros. Sidebar y header quedan fijos (`position: fixed`/`height: 100svh`
+   en `.layout`), sólo el contenido central scrollea. Header: franja azul (`--accent`, ahora
+   `#005a9e`, más oscuro que el original `#007acc`) con "Sistema D13" centrado en la ventana
+   (`position: fixed; left: calc(50% - 28px)`, corrido sutilmente a la izquierda a pedido), fuente
+   Montserrat 900 (TT Neoris Pro es paga, no se pudo usar sin licencia — si el dueño consigue el
+   archivo con licencia, reemplazar en `index.html`/`App.css`), con sombra sutil para dar
+   profundidad a la letra. Padding del header reducido (era muy grueso). Tabla de productos con
+   bordes más gruesos y oscuros (`--table-border`). Inputs con borde gris visible y fondo blanco
+   (antes eran invisibles contra el fondo). Alta de producto: la flechita del stock ahora
+   incrementa de a 1 (antes usaba el mismo paso 0.01 que el precio). El campo Marca del alta
+   aclara que se escribe el nombre (no un código) y que no importan mayúsculas/minúsculas; al
+   crear el producto se informa en un cartel el nombre y código de marca asignado, aclarando si la
+   marca era nueva.
+3. **Bug de datos real, encontrado por el dueño probando en producción**: al escribir una marca
+   que ya existía en productos reales pero no estaba en el catálogo `marcas` (que quedó casi vacío
+   — sólo tenía 1-2 filas de pruebas, totalmente desconectado de los nombres de marca reales que
+   ya traían los 7004 productos migrados/backfileados a mano), `MarcaService.resolverOCrear`
+   generaba un código nuevo (41+) en vez de reciclar el que esa marca ya usaba. Pasó dos veces:
+   "KALOP" (sesión 2026-08-04, código nuevo 41, sin producto asociado — se limpió) y "kallay"
+   (sesión de hoy, código nuevo 42, con un producto real: "llave tesorito" id 9214 — se corrigió a
+   mano en Supabase para usar el código real de KALLAY, "21", el más usado de los 3 códigos
+   históricos distintos que tiene esa marca en los datos migrados). **Fix de código escrito**
+   (`ProductoRepository.buscarUsoHistoricoDeMarca` + `MarcaService.crearDesdeUsoHistorico`): antes
+   de generar un código nuevo, busca si el nombre ya se usó en `productos` y, si es así, recicla
+   el `(numeroMarca, marca)` que más se repite — código y mayúscula/minúscula histórica real, no
+   lo que tipeó quien carga el producto nuevo. Tests nuevos en `MarcaServiceTest.java` (no existía
+   antes). **Dato importante para el negocio, no arreglado ni por el código ni a mano**: los datos
+   migrados tienen múltiples nombres de marca compartiendo el mismo `numero_marca` y viceversa
+   (ej. "01" es CAMBRE para 564 productos pero también ACYTRA/PRIVE/KALLAY para unos pocos cada
+   uno) — es ruido heredado de cómo funcionaba el código de marca en el sistema viejo (parece haber
+   sido un código local por rubro, no un identificador de marca globalmente único). El fix nuevo
+   elige el código más frecuente por nombre, lo cual es razonable pero no "corrige" esa mezcla
+   histórica — si en algún momento se quiere prolijizar de verdad, hay que decidir junto con el
+   dueño qué código es el "correcto" para cada marca y renumerar, una tarea aparte y más grande.
+
+**BLOQUEANTE para retomar — LEER PRIMERO:** el compilador de Java de esta máquina se rompió a
+mitad de la sesión (`ClassFormatError: Illegal UTF8 string in constant pool` en una clase interna
+del JDK, `com/sun/tools/javac/code/Symtab$4`) — reproducible incluso compilando un "Hola mundo"
+vacío sin relación con el proyecto, así que no es un problema de este código. Estado del archivo
+`C:\Program Files\Java\jdk-24\lib\modules`: 142.450.906 bytes, fecha de escritura sin cambios
+desde la instalación (25/8/2025) — no es que algo lo esté tocando ahora mismo; lo más probable es
+que tenga corrupción real en disco que antes se enmascaraba con la página en caché de RAM del SO,
+y dejó de poder leerse bien en algún momento de esta sesión larga. El dueño va a reiniciar la PC y,
+si sigue fallando, reinstalar el JDK 24. **Antes de dar por hecho que el fix de marcas está
+andando, hay que**:
+1. Confirmar que `mvn -q -o test` (backend) corre limpio de nuevo (sin el `ClassFormatError`).
+2. Reiniciar el backend (`mvn spring-boot:run` no tiene hot-reload de Java — un `kill` del proceso
+   viejo por el puerto 8080 y volver a levantarlo). El backend que sigue corriendo ahora mismo
+   todavía tiene el `MarcaService` VIEJO (sin el fix) compilado en memoria.
+3. Recién ahí probar de nuevo el flujo de alta de producto con una marca existente tipeada con
+   otra capitalización, para confirmar que recicla el código correcto en vez de crear uno nuevo.
+
+**Pendiente de sesiones anteriores, sigue sin tocar**: RLS deshabilitado en las 12 tablas de
+`public` (reportado por el advisor de Supabase, hay que decidir políticas antes de activarlo); no
+se probó en el navegador el flujo de "Cargar precioVenta/precioCompra" pendiente para los
+productos que los tienen en null.
+
+Estado Anterior (Actualizado al 2026-08-05, primera parte de la sesión):
+
+**Búsqueda de productos por marca (Productos, Ventas, Compras) + fix de un bug real en la
+generación de código interno.** El dueño modificó a mano la tabla `productos` en Supabase:
+renombró la columna vieja `marca` (que en realidad guardaba el código de 2 dígitos) a
+`numero_marca`, y agregó una columna `marca` nueva con el nombre real de cada marca cargado a
+mano para los 7004 productos históricos (el catálogo `marcas` sólo tenía 1 fila, así que la
+resolución código→nombre para productos legacy fallaba silenciosamente y mostraba el código crudo
+en vez del nombre). La entidad `Producto` sólo tenía un campo `marca` mapeado a esa columna y
+usado como si fuera el código, así que tras el cambio manual en Supabase la generación de
+`codigoInterno`/correlativo en altas nuevas (`ProductoService.crear`, `MarcaService`) quedaba rota
+(confirmado corriendo los tests: 5 ya fallaban antes de tocar nada). Fix: `Producto` ahora tiene
+`numeroMarca` (columna `numero_marca`, el código de 2 dígitos, para `codigoInterno`) y `marca`
+(columna `marca`, el nombre para mostrar/buscar, sincronizado con `Marca.nombre` al crear). En el
+frontend se sacó la indirección `nombrePorCodigoMarca[p.marca] ?? p.marca` (pensada para resolver
+código→nombre vía el catálogo) en Productos.tsx, RegistrarVenta.tsx, ComprasConsulta.tsx y
+ComprasNueva.tsx, porque ahora `producto.marca` ya es el nombre real listo para mostrar/filtrar —
+el filtro de marca en Productos y el buscador en Registrar venta (que ya existían) ahora funcionan
+de verdad para el catálogo legacy. Tests backend (`mvn test`, incluidos los 5 que ya estaban
+rotos) y `tsc -b` verdes. **Pendiente: no se probó end-to-end en el navegador contra Supabase
+real** (compiló y los tests automáticos pasan, pero no se abrió Chrome). También pendiente
+—preexistente, no de esta sesión—: RLS deshabilitado en las 12 tablas de `public` (`productos`
+incluida), reportado por el advisor de Supabase; no se tocó porque hay que decidir políticas antes
+de activarlo.
+
+Estado Anterior (Actualizado al 2026-08-04):
 
 Rediseño grande de interfaz (sidebar por secciones desplegables, tema gris claro fijo, modal
 obligatorio de abrir caja post-login) más seis dominios de negocio nuevos: Marca (catálogo

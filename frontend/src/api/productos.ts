@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { CargarStockRequest, Producto, ProductoRequest } from '../types/api'
+import type { CargarStockRequest, Producto, ProductoRequest, ProductoUpdateRequest } from '../types/api'
 
 export function getProductos(): Promise<Producto[]> {
   return request<Producto[]>('/api/productos')
@@ -23,4 +23,8 @@ export function eliminarProducto(idProducto: number): Promise<void> {
 
 export function cargarStock(req: CargarStockRequest): Promise<Producto> {
   return request<Producto>('/api/productos/cargar-stock', { method: 'POST', body: JSON.stringify(req) })
+}
+
+export function actualizarProducto(idProducto: number, cambios: ProductoUpdateRequest): Promise<Producto> {
+  return request<Producto>(`/api/productos/${idProducto}`, { method: 'PATCH', body: JSON.stringify(cambios) })
 }

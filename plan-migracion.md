@@ -2,6 +2,18 @@
 
 ## Para retomar mañana
 
+**⚠️ Antes que nada: hay un compilador de Java roto en la máquina (ver sección 15.6) — el fix del
+bug de marcas está escrito pero no desplegado. Seguir los "primeros pasos" del final de la sección
+15 antes de tocar cualquier otra cosa.**
+
+**Estado al 2026-08-05: continuación de la búsqueda por marca — edición en línea de productos
+(ABM tocando la celda), rediseño grande de navegación (sidebar colapsable, header centrado con
+fuente Montserrat, tabla con bordes más marcados), y un bug de datos real donde crear un producto
+con una marca ya existente pero tipeada distinto generaba un código de marca nuevo en vez de
+reciclar el que ya se usaba — encontrado por el dueño probando en producción, con dos casos reales
+afectados (uno corregido a mano en Supabase con su confirmación). Detalle completo, decisiones y
+qué quedó sin verificar por el bloqueante del compilador, en la sección 15.**
+
 **Estado al 2026-08-04: reestructuración grande de interfaz + seis dominios de negocio nuevos
 (Marca, Proveedor, Gasto, Compra, Empleado CRUD, Comisiones), pedidos por el dueño después de usar
 el sistema en producción.** Arrancó con un bug real encontrado en vivo (backend caído sin que el
@@ -1001,3 +1013,179 @@ sesión abierta (cerrar la sesión real `id_sesion=6` cuando el dueño confirme 
 o esperar a que él mismo la cierre); cargar `precioVenta`/`precioCompra` en los productos que
 siguen en `null` (pendiente desde la sesión 2026-07-30); Row Level Security sigue deshabilitado en
 la mayoría de las tablas de Supabase (señalado, no es parte de este pedido).
+
+## 15. Sesión 2026-08-05: búsqueda por marca, edición en línea, rediseño de navegación y bug de resolución de marcas
+
+**Punto de partida**: el dueño modificó a mano la tabla `productos` en Supabase entre sesiones —
+renombró la columna vieja `marca` (guardaba el código de 2 dígitos) a `numero_marca`, y agregó una
+columna `marca` nueva con el nombre real de cada marca, backfileado a mano para los 7004 productos
+históricos. Pidió agregar búsqueda de productos por marca en la tabla de Productos, en los filtros,
+y en la ventana de Ventas.
+
+### 15.1 Fix de mapeo `Producto.marca`/`numeroMarca` (bug real, pre-existente al pedido)
+
+La entidad `Producto` sólo tenía un campo `marca` (sin `@Column`, mapeado por convención a la
+columna `marca`) usado en todo el backend como si fuera el código de 2 dígitos — `ProductoService
+.crear()` hacía `producto.setMarca(marca.getCodigo())` y `findByRubroAndFamiliaAndMarca...` filtraba
+por ese campo esperando el código. Tras el cambio manual en Supabase, la columna `marca` pasó a
+tener el *nombre* de la marca, no el código — así que la generación de `codigoInterno`/correlativo
+en altas nuevas quedó rota (confirmado corriendo los tests antes de tocar nada: 5 ya fallaban,
+`ProductoServiceTest` no mockeaba `MarcaService`/`ProveedorService` — bug de tests preexistente
+desde la sesión 2026-08-04 que nunca se había notado — y `ProductoControllerIntegrationTest`
+esperaba códigos de marca literales que ya no correspondían).
+
+**Fix**: `Producto` ahora tiene `numeroMarca` (`@Column(name="numero_marca")`, el código de 2
+dígitos, usado para `codigoInterno`/correlativo) y `marca` (columna `marca`, el nombre para
+mostrar/buscar, sincronizado con `Marca.nombre` al crear). Repositorio y servicios actualizados
+(`findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc`, `existsByNumeroMarca`). Tests
+arreglados (mocks de `MarcaService`/`ProveedorService` agregados, códigos esperados corregidos a
+los que realmente asigna `MarcaService.siguienteCodigoLibre()` en una base de test vacía).
+
+### 15.2 Búsqueda por marca en frontend
+
+En Productos.tsx, RegistrarVenta.tsx, ComprasConsulta.tsx y ComprasNueva.tsx había una indirección
+`nombrePorCodigoMarca[p.marca] ?? p.marca` (mapa código→nombre armado desde `GET /api/marcas`,
+pensada para cuando `p.marca` todavía era el código). Como el catálogo `marcas` tenía casi ninguna
+fila cargada, esa resolución fallaba para casi todo el inventario legacy y mostraba el código crudo
+en vez del nombre. Se sacó esa indirección en los cuatro archivos: `producto.marca` ya es
+directamente el nombre real, listo para mostrar/filtrar. El filtro "Filtrar por marca" en
+Productos y el buscador "por descripción o marca" en Registrar venta ya existían en la UI — con
+este fix empezaron a funcionar de verdad contra el catálogo legacy completo.
+
+**Bug introducido y arreglado en la misma sesión**: algunos productos tienen `marca` en `null`
+(nunca se les backfileó el nombre) — el filtro hacía `p.marca.toLowerCase()` sin chequeo de null y
+tiraba `Cannot read properties of null`, rompiendo toda la pantalla de Productos apenas se
+escribía algo en el filtro. Se agregó manejo null-safe (`(p.marca ?? '').toLowerCase()`) en los
+cuatro archivos, y se muestra "—" en vez de nada cuando no hay marca cargada (mismo criterio que
+ya se usaba para `precioVenta` en null).
+
+**Bug pre-existente encontrado de paso**: `Productos.tsx` pedía `GET /api/proveedores`
+incondicionalmente para cualquier rol, pero ese endpoint es sólo-ADMIN en `SecurityConfig` — un
+VENDEDOR entrando a Productos recibía 403 y la pantalla entera fallaba. Se corrigió pidiéndolo sólo
+si `esAdmin`.
+
+### 15.3 Edición en línea de productos (ABM, pedido nuevo)
+
+Tocar una celda de descripción, marca, precio de venta o stock en la tabla de Productos (sólo
+ADMIN) la vuelve editable ahí mismo — Enter guarda, Escape cancela, click afuera guarda. Rubro y
+código interno quedan de sólo lectura a propósito: son parte de la identidad del producto
+(`codigoInterno` = rubro+familia+numeroMarca+correlativo) y editarlos ahí generaría
+inconsistencias — para eso está el alta de un producto nuevo. Nuevo endpoint
+`PATCH /api/productos/{id}` (`ProductoUpdateRequest`, todos los campos opcionales, semántica PATCH:
+sólo se actualiza lo que venga no-nulo), restringido a ADMIN en `SecurityConfig`, con tests
+(`ProductoServiceTest`, `ProductoControllerIntegrationTest`). Se agregó también la columna "Código
+de fábrica" a la tabla (antes no se mostraba). La flechita del stock ahora incrementa de a 1 (antes
+compartía el `step=0.01` del precio). Probado extremo a extremo contra Supabase real: se subió el
+stock de un producto real en 1 y se volvió a bajar, para no dejar el inventario alterado.
+
+**Bug encontrado al probar**: el primer intento de guardar dio 401. Causa: Spring Boot no tiene
+hot-reload de Java (a diferencia de Vite/HMR en el frontend) — el backend seguía corriendo con el
+build viejo, sin el `@PatchMapping` nuevo, así que la request caía al catch-all de seguridad y el
+método ni siquiera estaba soportado. Se reinició el proceso (`mvn spring-boot:run`) y funcionó.
+**Recordatorio para toda sesión futura que toque el backend: reiniciar el proceso después de
+cambios en `.java`, el `mvn spring-boot:run` no se entera solo.**
+
+### 15.4 Rediseño de navegación y estilos (pedido iterativo, varias rondas)
+
+- Login redirige a "Cobros" (`/ventas/nueva`) en vez de Productos.
+- Sidebar colapsable con un botón ☰ en el header (`sidebarAbierta` en `Layout.tsx`), para liberar
+  pantalla en Cobros o cualquier pantalla.
+- Sidebar y header fijos (`.layout` con `height: 100svh`, `.layout-contenido` con
+  `overflow: hidden` y `main` con `overflow: auto`) — sólo el contenido central scrollea, antes se
+  movía todo junto con la página.
+- Header: franja azul (`--accent`, `#005a9e`, más oscuro que el original `#007acc`) con "Sistema
+  D13" centrado respecto a toda la ventana (no sólo al espacio libre de sidebar, para que no salte
+  al abrir/cerrar el menú) vía `position: fixed; left: calc(50% - 28px); transform:
+  translateX(-50%)` — corrido sutilmente a la izquierda a pedido explícito. Fuente Montserrat 900
+  (Google Fonts) con sombra sutil para dar profundidad — **TT Neoris Pro, la fuente que pidió
+  originalmente, es paga (fundición TypeType) y no se pudo usar sin archivo con licencia; si el
+  dueño consigue el `.woff2`/`.ttf` con licencia, reemplazar el `<link>` de Google Fonts en
+  `index.html` y `font-family` en `.topbar-titulo`**. Padding del header reducido (pidió que "no
+  tape la visión").
+- Tabla de productos con bordes más gruesos y oscuros (`--table-border`, aplica a todas las tablas
+  de la app, no sólo Productos, mismo `th`/`td` global).
+- Inputs de texto/número con borde gris visible y fondo blanco (antes el borde era casi invisible
+  contra el fondo gris de la página — mismo tono que el fondo).
+- El campo Marca del alta de producto aclara en la etiqueta que se escribe el nombre (no un
+  código) y que no importan mayúsculas/minúsculas; al crear el producto se informa en un cartel
+  aparte el nombre y código de marca asignado, aclarando si la marca era nueva o ya existía.
+
+Nota de color: en un ida y vuelta intermedio se probó oscurecer el fondo gris general (`--bg`) y
+el borde de separación sidebar/contenido — el dueño no lo quiso, se revirtió a los valores
+originales (`--bg: #eceff1`, `--border: #e5e4e7`). Sólo quedaron los cambios de tabla (bordes) e
+inputs (borde + fondo), que sí pidió.
+
+### 15.5 Bug de datos real: resolución de marca no reciclaba códigos existentes
+
+El dueño probó crear un producto escribiendo "kallay" (minúscula) sabiendo que ya había productos
+reales con marca "KALLAY". El sistema avisó que había creado una marca nueva con un código nuevo,
+en vez de reconocer la marca existente.
+
+**Causa raíz**: el catálogo `marcas` (tabla nueva de la sesión 2026-08-04, pensada como
+nombre↔código) quedó prácticamente vacío — nunca se backfileó desde los nombres/códigos que ya
+traían los 7004 productos migrados/backfileados a mano, así que está completamente desconectado de
+la realidad de los datos. `MarcaService.resolverOCrear()` sólo miraba ese catálogo casi vacío
+(`findByNombreIgnoreCase`, que sí es case-insensitive — ese no era el problema) y, al no
+encontrar el nombre ahí, generaba un código nuevo del rango 41-99 sin chequear si ese nombre ya se
+usaba en `productos`. Pasó dos veces: "KALOP" (sesión 2026-08-04, código nuevo 41, el producto de
+prueba que lo usó se borró en esa misma sesión — quedó la fila huérfana en `marcas`) y "kallay"
+(esta sesión, código nuevo 42, con un producto real: "llave tesorito" id 9214).
+
+Auditando `productos` se encontró que los datos migrados tienen **múltiples nombres de marca
+compartiendo el mismo `numero_marca` y viceversa** — ej. el código "01" es CAMBRE para 564
+productos pero también ACYTRA/PRIVE/KALLAY para un puñado cada uno; "KALLAY" en particular
+aparecía bajo 3 códigos distintos: "01" (3), "21" (35, el dominante) y "42" (1, el bug de hoy).
+Es ruido heredado del sistema viejo — el código de 2 dígitos ahí parece haber sido un código local
+por rubro, no un identificador de marca globalmente único, así que no hay un "código correcto"
+único y obvio por nombre en todos los casos; el fix elige el más frecuente, que es razonable pero
+no resuelve esa mezcla histórica de fondo.
+
+**Fix de código** (`ProductoRepository.buscarUsoHistoricoDeMarca` + nuevo método privado
+`MarcaService.crearDesdeUsoHistorico`): antes de generar un código nuevo, `resolverOCrear` busca si
+el nombre ya se usó en `productos` (case-insensitive) y, si es así, crea la fila de catálogo
+reciclando el `(numeroMarca, marca)` — código y capitalización real — que más se repite para ese
+nombre, en vez de la capitalización que tipeó quien carga el producto nuevo. Sólo un nombre que
+nunca apareció en ningún producto recibe un código nuevo del rango 41-99. Tests nuevos en
+`MarcaServiceTest.java` (no existía antes de esta sesión).
+
+**Datos reales corregidos a mano en Supabase** (con confirmación del dueño, verificando antes que
+no colisionaran con nada): producto `id_producto=9214` ("llave tesorito") actualizado a
+`numero_marca='21', marca='KALLAY', codigo_interno='0101210001'` (antes: `42`/`kallay`/
+`0101420001`); las dos filas contaminadas de `marcas` (KALOP código 41, kallay código 42)
+borradas — el catálogo quedó vacío de nuevo, listo para irse poblando de forma correcta con el fix
+nuevo.
+
+### 15.6 BLOQUEANTE sin resolver al cerrar la sesión — leer antes de continuar
+
+El compilador de Java de la máquina se rompió a mitad de sesión:
+`java.lang.ClassFormatError: Illegal UTF8 string in constant pool in class file
+com/sun/tools/javac/code/Symtab$4`, reproducible incluso compilando un `Hello.java` vacío sin
+relación con el proyecto (se probó con `javac` directo, no sólo `mvn`) — así que es 100% un
+problema de la máquina, no de este código. El archivo `C:\Program Files\Java\jdk-24\lib\modules`
+pesa 142.450.906 bytes con fecha de escritura sin cambios desde la instalación (25/8/2025) — nada
+lo tocó durante la sesión; la hipótesis es corrupción real en disco que antes se enmascaraba con la
+página cacheada en RAM del SO y dejó de leerse bien en algún punto de esta sesión larga. El dueño
+va a reiniciar la PC y, si sigue fallando, reinstalar el JDK 24.
+
+Consecuencia directa: **el fix de la sección 15.5 (`MarcaService`/`ProductoRepository`) está
+escrito pero nunca se pudo compilar ni desplegar** — no corrió `mvn test` limpio ni una vez después
+de escribirlo, y el backend que sigue corriendo en el puerto 8080 todavía tiene el `MarcaService`
+VIEJO (sin el fix) cargado en memoria. Tampoco se pudo confirmar en el navegador si el flujo de
+alta de producto con `Código de fábrica` en la tabla, edición en línea, etc. (secciones 15.1-15.4)
+sigue funcionando después de este fix — sí se habían probado *antes* de que el compilador se
+rompiera, así que esas partes están confirmadas, sólo la 15.5 quedó sin verificar en ejecución.
+
+**Primeros pasos de la próxima sesión, en orden**:
+1. Confirmar que `mvn -q -o test` (desde `backend/`) corre limpio, sin el `ClassFormatError` — si
+   sigue fallando, no seguir con nada de código hasta que el dueño resuelva el JDK.
+2. Matar el proceso viejo del puerto 8080 y volver a levantar `mvn spring-boot:run` — el build
+   compilado en memoria ahora mismo NO tiene el fix de marcas.
+3. Repetir la prueba que hizo el dueño: alta de producto con una marca que ya existe en otro
+   producto, tipeada con otra capitalización — confirmar que el cartel dice el código correcto
+   (el que ya usan los productos existentes) y no uno nuevo.
+4. Recién ahí, si el dueño lo pide, considerar el commit de todo lo de esta sesión (nada de lo de
+   hoy está commiteado todavía, sigue en el working tree).
+
+**Pendiente de sesiones anteriores, sigue sin tocar**: RLS deshabilitado en la mayoría de las
+tablas de Supabase; cargar `precioVenta`/`precioCompra` en los productos que siguen en `null`;
+probar en vivo el modal de "abrir caja" sin sesión abierta (pendiente desde la sesión 2026-08-04).

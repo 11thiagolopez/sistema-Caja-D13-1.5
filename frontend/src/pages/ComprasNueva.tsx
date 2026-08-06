@@ -8,8 +8,8 @@ import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
 import type { CompraItemRequest, MarcaResponse, MedioPago, Producto, ProveedorResponse } from '../types/api'
 
-function etiquetaProducto(producto: Producto, nombreMarca: string): string {
-  return `${producto.descripcion} - ${nombreMarca} (${producto.codigoInterno})`
+function etiquetaProducto(producto: Producto): string {
+  return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
 }
 
 interface FilaCompra {
@@ -62,10 +62,8 @@ export function ComprasNueva() {
     getProveedores().then(setProveedores)
   }, [])
 
-  const nombrePorCodigoMarca = Object.fromEntries(marcas.map((m) => [m.codigo, m.nombre]))
-
   function productoDeFila(fila: FilaCompra): Producto | undefined {
-    return productos.find((p) => etiquetaProducto(p, nombrePorCodigoMarca[p.marca] ?? p.marca) === fila.texto)
+    return productos.find((p) => etiquetaProducto(p) === fila.texto)
   }
 
   function actualizarFila(id: number, cambios: Partial<FilaCompra>) {
@@ -282,10 +280,7 @@ export function ComprasNueva() {
         </table>
         <datalist id="productos-compra-datalist">
           {productos.map((producto) => (
-            <option
-              key={producto.idProducto}
-              value={etiquetaProducto(producto, nombrePorCodigoMarca[producto.marca] ?? producto.marca)}
-            />
+            <option key={producto.idProducto} value={etiquetaProducto(producto)} />
           ))}
         </datalist>
         <datalist id="marcas-compra-datalist">

@@ -27,18 +27,30 @@ export interface Producto {
   idProducto: number
   rubro: string
   familia: string
-  // Código interno de 2 dígitos (no el nombre) — usar el mapa de MarcaResponse[] para mostrar
-  // el nombre.
-  marca: string
+  // Nombre de la marca (ej. "KALOP"), listo para mostrar y para buscar. Puede ser null en
+  // productos históricos que todavía no tienen la marca cargada.
+  marca: string | null
+  // Código de 2 dígitos de la marca (Marca.codigo), el que se usa para armar codigoInterno.
+  numeroMarca: string | null
   correlativo: string
   codigoInterno: string
   proveedor: string
-  codigoFabrica: string
+  codigoFabrica: string | null
   descripcion: string
   precioVenta: number | null
   precioCompra: number | null
   stockActual: number
   activo: boolean
+}
+
+// Edición en línea desde la tabla de Productos: cada campo es opcional, el backend solo
+// actualiza el que venga presente (semántica PATCH). No incluye rubro/código porque forman
+// parte de codigoInterno.
+export interface ProductoUpdateRequest {
+  descripcion?: string
+  marca?: string
+  precioVenta?: number
+  stockActual?: number
 }
 
 export interface ProductoRequest {
@@ -255,7 +267,7 @@ export interface CompraItemResponse {
   idItem: number
   idProducto: number
   descripcionProducto: string
-  marcaProducto: string
+  marcaProducto: string | null
   cantidad: number
   precioCompraUnitario: number
   precioVentaUnitario: number | null

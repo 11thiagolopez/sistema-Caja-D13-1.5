@@ -75,6 +75,7 @@ export function Layout() {
   const [seccionAbierta, setSeccionAbierta] = useState<string | null>('Caja')
   const [modalAbierto, setModalAbierto] = useState<ModalKey | null>(null)
   const [cajaObligatoria, setCajaObligatoria] = useState(false)
+  const [sidebarAbierta, setSidebarAbierta] = useState(true)
 
   // Se dispara una sola vez al entrar a cualquier pantalla logueada: si no hay una sesión de
   // caja ABIERTA, fuerza el modal de "abrir caja" (ambos roles) antes de dejar hacer nada más.
@@ -97,7 +98,7 @@ export function Layout() {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarAbierta ? '' : 'sidebar-cerrada'}`}>
         <div className="sidebar-marca">Sistema D13</div>
         <nav>
           {ENLACES_SUELTOS.filter((item) => puedeVer(item.roles, sesion?.rol)).map((item) => (
@@ -156,12 +157,26 @@ export function Layout() {
 
       <div className="layout-contenido">
         <header className="layout-topbar">
-          <span className="nav-usuario">
-            {sesion?.nombre} ({sesion?.rol})
-          </span>
-          <button type="button" onClick={onLogout}>
-            Salir
-          </button>
+          <div className="topbar-espaciador">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={() => setSidebarAbierta((actual) => !actual)}
+              aria-label={sidebarAbierta ? 'Ocultar menú' : 'Mostrar menú'}
+              aria-expanded={sidebarAbierta}
+            >
+              ☰
+            </button>
+          </div>
+          <h1 className="topbar-titulo">Sistema D13</h1>
+          <div className="topbar-usuario">
+            <span className="nav-usuario">
+              {sesion?.nombre} ({sesion?.rol})
+            </span>
+            <button type="button" onClick={onLogout}>
+              Salir
+            </button>
+          </div>
         </header>
         <main>
           <Outlet />

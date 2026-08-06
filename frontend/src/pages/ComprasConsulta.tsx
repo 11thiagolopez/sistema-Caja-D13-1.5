@@ -1,9 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { getCompras, getProductosMasComprados } from '../api/compras'
-import { getMarcas } from '../api/marcas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
-import type { CompraResponse, MarcaResponse, ProductoComprasRankingDTO } from '../types/api'
+import type { CompraResponse, ProductoComprasRankingDTO } from '../types/api'
 
 export function ComprasConsulta() {
   const [desde, setDesde] = useState(hoyIso().slice(0, 8) + '01')
@@ -17,13 +16,6 @@ export function ComprasConsulta() {
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [filtroDescripcion, setFiltroDescripcion] = useState('')
   const [filtroMarca, setFiltroMarca] = useState('')
-  const [marcas, setMarcas] = useState<MarcaResponse[]>([])
-
-  useEffect(() => {
-    getMarcas().then(setMarcas)
-  }, [])
-
-  const nombrePorCodigoMarca = Object.fromEntries(marcas.map((m) => [m.codigo, m.nombre]))
 
   async function onBuscar(e: FormEvent) {
     e.preventDefault()
@@ -51,9 +43,7 @@ export function ComprasConsulta() {
       c.items.some((i) => i.descripcionProducto.toLowerCase().includes(filtroDescripcion.toLowerCase()))
     const matchMarca =
       filtroMarca === '' ||
-      c.items.some((i) =>
-        (nombrePorCodigoMarca[i.marcaProducto] ?? i.marcaProducto).toLowerCase().includes(filtroMarca.toLowerCase()),
-      )
+      c.items.some((i) => (i.marcaProducto ?? '').toLowerCase().includes(filtroMarca.toLowerCase()))
     return matchProveedor && matchDescripcion && matchMarca
   })
 

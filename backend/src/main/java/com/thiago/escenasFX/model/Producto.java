@@ -26,7 +26,16 @@ public class Producto {
 
     private String rubro;
     private String familia;
+
+    // Código de 2 dígitos de Marca.codigo, usado para armar codigoInterno. No confundir con
+    // `marca` (nombre para mostrar/buscar).
+    @Column(name = "numero_marca")
+    private String numeroMarca;
+
+    // Nombre de la marca para mostrar y para buscar en Productos/Ventas/Compras (ej. "KALOP").
+    // Sincronizado con Marca.nombre al crear el producto.
     private String marca;
+
     private String correlativo;
 
     @Column(name = "codigo_interno")

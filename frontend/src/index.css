@@ -4,7 +4,9 @@
   --bg: #eceff1;
   --bg-alt: #ffffff;
   --border: #e5e4e7;
-  --accent: #007acc;
+  --input-border: #b0b6bd;
+  --table-border: #8a9099;
+  --accent: #005a9e;
   --accent-contrast: #fff;
   --error: #c0392b;
 
@@ -48,7 +50,7 @@ table {
 
 th,
 td {
-  border: 1px solid var(--border);
+  border: 2px solid var(--table-border);
   padding: 6px 10px;
   text-align: left;
 }
@@ -70,6 +72,18 @@ button {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+}
+
+input,
+select {
+  border: 1px solid var(--input-border);
+  background: var(--bg-alt);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 button {

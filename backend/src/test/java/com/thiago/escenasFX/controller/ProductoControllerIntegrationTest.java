@@ -2,6 +2,7 @@ package com.thiago.escenasFX.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,7 +41,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(PRODUCTO_BODY))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoInterno").value("0105020001"))
+            .andExpect(jsonPath("$.codigoInterno").value("0105410001"))
             .andExpect(jsonPath("$.activo").value(true));
 
         mockMvc.perform(post("/api/productos")
@@ -48,7 +49,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(PRODUCTO_BODY))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoInterno").value("0105020002"));
+            .andExpect(jsonPath("$.codigoInterno").value("0105410002"));
     }
 
     @Test
@@ -144,7 +145,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
         String tokenVendedor = tokenVendedor();
 
         mockMvc.perform(get("/api/productos/buscar-por-codigo")
-                .param("codigo", "0105020001")
+                .param("codigo", "0105410001")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.descripcion").value("Destornillador Stanley"));
@@ -158,5 +159,48 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .param("codigo", "no-existe")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void actualizar_comoAdmin_editaSoloLosCamposEnviados() throws Exception {
+        String token = tokenAdmin();
+
+        String respuesta = mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(PRODUCTO_BODY))
+            .andReturn().getResponse().getContentAsString();
+        Integer idProducto = objectMapper.readTree(respuesta).get("idProducto").asInt();
+
+        mockMvc.perform(patch("/api/productos/" + idProducto)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"precioVenta": 650, "stockActual": 30}"""))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.precioVenta").value(650))
+            .andExpect(jsonPath("$.stockActual").value(30))
+            // No vino en el body: sigue como en el alta.
+            .andExpect(jsonPath("$.descripcion").value("Destornillador Stanley"));
+    }
+
+    @Test
+    void actualizar_comoVendedor_devuelve403() throws Exception {
+        String tokenAdmin = tokenAdmin();
+        String respuesta = mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
+                .content(PRODUCTO_BODY))
+            .andReturn().getResponse().getContentAsString();
+        Integer idProducto = objectMapper.readTree(respuesta).get("idProducto").asInt();
+
+        String tokenVendedor = tokenVendedor();
+
+        mockMvc.perform(patch("/api/productos/" + idProducto)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor)
+                .content("""
+                    {"precioVenta": 999}"""))
+            .andExpect(status().isForbidden());
     }
 }

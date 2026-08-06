@@ -13,9 +13,23 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByActivoTrueOrderByDescripcionAsc();
 
-    List<Producto> findByRubroAndFamiliaAndMarcaOrderByCorrelativoDesc(String rubro, String familia, String marca);
+    List<Producto> findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc(String rubro, String familia, String numeroMarca);
 
-    boolean existsByMarca(String marca);
+    boolean existsByNumeroMarca(String numeroMarca);
+
+    // Los productos históricos (migrados antes del catálogo Marca, o backfileados a mano en
+    // Supabase) tienen numeroMarca/marca en texto libre sin pasar por MarcaService — y un mismo
+    // numeroMarca puede repetirse para nombres distintos según el rubro. Antes de generar un
+    // código nuevo para un nombre que se tipea por primera vez en el catálogo, hay que revisar
+    // si ese nombre ya se usaba en productos reales y, si es así, reciclar el (numeroMarca,
+    // marca) combinado que más se repite — si no, se termina asignando un código nuevo a una
+    // marca que en realidad ya tenía uno, partiendo en dos el mismo nombre con dos códigos
+    // distintos (bug real detectado: "kallay" ya usaba "01"/"21", pero al tipearlo en minúscula
+    // se le asignó "42" porque el catálogo Marca todavía no lo conocía).
+    @Query("SELECT p.numeroMarca, p.marca, COUNT(p) as cnt FROM Producto p "
+        + "WHERE UPPER(p.marca) = UPPER(:nombre) AND p.numeroMarca IS NOT NULL "
+        + "GROUP BY p.numeroMarca, p.marca ORDER BY cnt DESC")
+    List<Object[]> buscarUsoHistoricoDeMarca(@Param("nombre") String nombre);
 
     // Explícito con @Query (en vez de un nombre derivado tipo
     // findByCodigoFabricaOrCodigoInternoAndActivoTrue) porque Spring Data resolvería

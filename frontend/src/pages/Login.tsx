@@ -17,7 +17,7 @@ export function Login() {
     setCargando(true)
     try {
       await login(usuario, password)
-      navigate('/productos', { replace: true })
+      navigate('/ventas/nueva', { replace: true })
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo iniciar sesión')
     } finally {
