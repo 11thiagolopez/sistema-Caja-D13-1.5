@@ -65,6 +65,38 @@ public class Venta {
     @Column(name = "otp_expira_en")
     private LocalDateTime otpExpiraEn;
 
+    // Se completa recién al enviar el comprobante por email (no se pide al registrar la venta).
+    @Column(name = "cliente_email")
+    private String clienteEmail;
+
+    @Column(name = "comprobante_enviado_por_email")
+    private boolean comprobanteEnviadoPorEmail = false;
+
+    // MOSTRADOR (venta de catálogo, flujo de Cobros) | DOMICILIO (trabajo a domicilio).
+    @Column(name = "tipo_venta", nullable = false)
+    private String tipoVenta = "MOSTRADOR";
+
+    // Campos de trabajo a domicilio: solo se completan cuando tipoVenta = "DOMICILIO".
+    @Column(name = "cliente_nombre")
+    private String clienteNombre;
+
+    @Column(name = "cliente_telefono")
+    private String clienteTelefono;
+
+    @Column(name = "direccion_trabajo")
+    private String direccionTrabajo;
+
+    @Column(name = "descripcion_trabajo")
+    private String descripcionTrabajo;
+
+    // AGENDADO | EN_CURSO | COMPLETADO | COBRADO
+    @Column(name = "estado_trabajo")
+    private String estadoTrabajo;
+
+    @ManyToOne
+    @JoinColumn(name = "id_empleado_tecnico")
+    private Empleado empleadoTecnico;
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleVenta> detalles = new ArrayList<>();
 }

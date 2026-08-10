@@ -1,8 +1,10 @@
-export type Rol = 'ADMIN' | 'VENDEDOR'
+// TECNICO: hace trabajos a domicilio, cobra comisión sobre la mano de obra. No usa la app (sin
+// pantallas propias) — es una categoría de empleado, no un rol con acceso al sistema.
+export type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO'
 
 export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA'
 
-export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION'
+export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO'
 
 export type EstadoSesionCaja = 'ABIERTA' | 'CERRADA'
 
@@ -93,8 +95,21 @@ export interface CargarStockRequest {
   cantidad: number
 }
 
+// Categoría de una línea de detalle: artículo de catálogo, copia de llave (legado, ya no
+// seleccionable desde Cobros) o mano de obra de un trabajo a domicilio.
+export type TipoLinea = 'ARTICULO' | 'COPIA' | 'SERVICIO'
+
+// MOSTRADOR = venta de catálogo (Cobros) | DOMICILIO = trabajo a domicilio.
+export type TipoVenta = 'MOSTRADOR' | 'DOMICILIO'
+
+export type EstadoTrabajo = 'AGENDADO' | 'EN_CURSO' | 'COMPLETADO' | 'COBRADO'
+
+// O trae idProducto (línea de catálogo, descuenta stock) o trae descripcion (mano de obra u otro
+// ítem manual, no toca stock) — viene uno de los dos.
 export interface DetalleVentaRequest {
-  idProducto: number
+  idProducto?: number
+  descripcion?: string
+  tipo: TipoLinea
   cantidad: number
   precioUnitario: number
 }
@@ -109,8 +124,9 @@ export interface VentaRequest {
 }
 
 export interface DetalleVentaResponse {
-  idProducto: number
+  idProducto: number | null
   descripcionProducto: string
+  tipo: TipoLinea
   cantidad: number
   precioUnitario: number
   subtotal: number
@@ -125,7 +141,31 @@ export interface VentaResponse {
   totalVenta: number
   descuento: number
   estado: EstadoVenta
+  clienteEmail: string | null
+  comprobanteEnviadoPorEmail: boolean
+  tipoVenta: TipoVenta
+  clienteNombre: string | null
+  clienteTelefono: string | null
+  direccionTrabajo: string | null
+  descripcionTrabajo: string | null
+  estadoTrabajo: EstadoTrabajo | null
+  idEmpleadoTecnico: number | null
+  nombreTecnico: string | null
   detalles: DetalleVentaResponse[]
+}
+
+// O trae idVenta (actualizar un trabajo existente) o no (crear uno nuevo).
+export interface TrabajoDomicilioRequest {
+  idVenta?: number
+  idEmpleado: number
+  idEmpleadoTecnico?: number
+  clienteNombre: string
+  clienteTelefono?: string
+  direccionTrabajo?: string
+  descripcionTrabajo?: string
+  estadoTrabajo?: EstadoTrabajo
+  detalles: DetalleVentaRequest[]
+  cerrar: boolean
 }
 
 export interface ConfirmarDescuentoRequest {
@@ -333,4 +373,54 @@ export interface ComisionEmpleadoDTO {
   gananciaGenerada: number
   comisionCalculada: number
   cantidadVentas: number
+}
+
+export interface MarcaRankingDTO {
+  marca: string
+  cantidadVendida: number
+  totalFacturado: number
+}
+
+export interface FormaPagoResumenDTO {
+  medioPago: MedioPago
+  cantidadVentas: number
+  totalFacturado: number
+}
+
+// O trae idProducto (línea de catálogo) o trae descripcion (ítem manual, ej. "Apertura de
+// cerradura") — viene uno de los dos.
+export interface DetallePresupuestoRequest {
+  idProducto?: number
+  descripcion?: string
+  cantidad: number
+  precioUnitario: number
+}
+
+export interface PresupuestoRequest {
+  idEmpleado: number
+  clienteNombre: string
+  clienteEmail?: string
+  clienteTelefono?: string
+  detalles: DetallePresupuestoRequest[]
+}
+
+export interface DetallePresupuestoResponse {
+  idProducto: number | null
+  descripcionProducto: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+}
+
+export interface PresupuestoResponse {
+  idPresupuesto: number
+  fecha: string
+  idEmpleado: number
+  nombreEmpleado: string
+  clienteNombre: string
+  clienteEmail: string | null
+  clienteTelefono: string | null
+  totalPresupuesto: number
+  enviadoPorEmail: boolean
+  detalles: DetallePresupuestoResponse[]
 }

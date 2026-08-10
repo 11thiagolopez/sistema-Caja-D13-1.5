@@ -15,6 +15,10 @@ import { PagosProveedores } from './pages/PagosProveedores'
 import { Vendedores } from './pages/Vendedores'
 import { ComisionesVendedores } from './pages/ComisionesVendedores'
 import { VentasPorVendedor } from './pages/VentasPorVendedor'
+import { VentasPorMarca } from './pages/VentasPorMarca'
+import { VentasPorFormaPago } from './pages/VentasPorFormaPago'
+import { Presupuestos } from './pages/Presupuestos'
+import { TrabajoDomicilio } from './pages/TrabajoDomicilio'
 
 function App() {
   return (
@@ -26,10 +30,14 @@ function App() {
           <Route path="/" element={<Navigate to="/ventas/nueva" replace />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/ventas/nueva" element={<RegistrarVenta />} />
+          <Route path="/presupuestos" element={<Presupuestos />} />
           <Route element={<RequireRole allow={['ADMIN']} />}>
             <Route path="/caja/resumen" element={<Caja />} />
             <Route path="/ventas/historial" element={<HistorialVentas />} />
+            <Route path="/ventas/domicilio" element={<TrabajoDomicilio />} />
             <Route path="/reportes" element={<Reportes />} />
+            <Route path="/reportes/marcas" element={<VentasPorMarca />} />
+            <Route path="/reportes/forma-pago" element={<VentasPorFormaPago />} />
             <Route path="/gastos" element={<Gastos />} />
             <Route path="/compras/nueva" element={<ComprasNueva />} />
             <Route path="/compras" element={<ComprasConsulta />} />

@@ -1,15 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
-import { confirmarDescuento, registrarVenta } from '../api/ventas'
+import { confirmarDescuento, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
+import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
-
-function etiquetaProducto(producto: Producto): string {
-  return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
-}
 
 interface ItemCarrito extends DetalleVentaRequest {
   descripcionProducto: string
@@ -18,8 +15,6 @@ interface ItemCarrito extends DetalleVentaRequest {
 export function RegistrarVenta() {
   const { sesion } = useAuth()
   const [productos, setProductos] = useState<Producto[]>([])
-  const [productoTexto, setProductoTexto] = useState('')
-  const [cantidad, setCantidad] = useState(1)
   const [carrito, setCarrito] = useState<ItemCarrito[]>([])
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
   const [descuento, setDescuento] = useState('')
@@ -37,17 +32,23 @@ export function RegistrarVenta() {
 
   const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
 
+  const [emailComprobante, setEmailComprobante] = useState('')
+  const [enviandoComprobante, setEnviandoComprobante] = useState(false)
+  const [errorComprobante, setErrorComprobante] = useState<string | null>(null)
+
   useEffect(() => {
     getProductos()
       .then(setProductos)
       .catch(() => setError('No se pudieron cargar los productos'))
   }, [])
 
-  const productoSeleccionado = productos.find((p) => etiquetaProducto(p) === productoTexto)
-
   function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
     const precioVenta = producto.precioVenta
-    if (precioVenta == null) return false
+    if (precioVenta == null) {
+      setError(`"${producto.descripcion}" no tiene precio de venta cargado, no se puede vender`)
+      return false
+    }
+    setError(null)
     setCarrito((actual) => {
       const indiceExistente = actual.findIndex((item) => item.idProducto === producto.idProducto)
       if (indiceExistente >= 0) {
@@ -63,22 +64,13 @@ export function RegistrarVenta() {
         {
           idProducto: producto.idProducto,
           descripcionProducto: producto.descripcion,
+          tipo: 'ARTICULO',
           cantidad: cantidadAAgregar,
           precioUnitario: precioVenta,
         },
       ]
     })
     return true
-  }
-
-  function agregarAlCarrito() {
-    if (!productoSeleccionado || cantidad <= 0) return
-    if (!agregarProductoAlCarrito(productoSeleccionado, cantidad)) {
-      setError(`"${productoSeleccionado.descripcion}" no tiene precio de venta cargado, no se puede vender`)
-      return
-    }
-    setCantidad(1)
-    setProductoTexto('')
   }
 
   async function onEscanear(codigo: string) {
@@ -109,8 +101,9 @@ export function RegistrarVenta() {
       const venta = await registrarVenta({
         idEmpleado: sesion.idEmpleado,
         medioPago,
-        detalles: carrito.map(({ idProducto, cantidad, precioUnitario }) => ({
+        detalles: carrito.map(({ idProducto, tipo, cantidad, precioUnitario }) => ({
           idProducto,
+          tipo,
           cantidad,
           precioUnitario,
         })),
@@ -122,6 +115,8 @@ export function RegistrarVenta() {
       setCarrito([])
       setDescuento('')
       setMotivoDescuento('')
+      setEmailComprobante('')
+      setErrorComprobante(null)
       // Precargamos el id de venta abajo (sigue editable): quien registró la venta con
       // descuento es normalmente quien la va a confirmar apenas el admin le pase el código.
       if (venta.estado === 'PENDIENTE_AUTORIZACION') {
@@ -152,6 +147,20 @@ export function RegistrarVenta() {
     }
   }
 
+  async function onEnviarComprobante() {
+    if (!resultado || !emailComprobante) return
+    setErrorComprobante(null)
+    setEnviandoComprobante(true)
+    try {
+      const actualizada = await enviarComprobanteEmail(resultado.idVenta, emailComprobante)
+      setResultado(actualizada)
+    } catch (err) {
+      setErrorComprobante(err instanceof ApiRequestError ? err.message : 'No se pudo enviar el comprobante')
+    } finally {
+      setEnviandoComprobante(false)
+    }
+  }
+
   return (
     <div>
       <h2>Registrar venta</h2>
@@ -162,28 +171,11 @@ export function RegistrarVenta() {
         {errorEscaneo && <p className="error">{errorEscaneo}</p>}
       </section>
 
-      <div className="agregar-producto">
-        <input
-          list="productos-datalist"
-          placeholder="Buscar producto por descripción o marca"
-          value={productoTexto}
-          onChange={(e) => setProductoTexto(e.target.value)}
-        />
-        <datalist id="productos-datalist">
-          {productos.map((producto) => (
-            <option key={producto.idProducto} value={etiquetaProducto(producto)} />
-          ))}
-        </datalist>
-        <input
-          type="number"
-          min={1}
-          value={cantidad}
-          onChange={(e) => setCantidad(Number(e.target.value))}
-        />
-        <button type="button" onClick={agregarAlCarrito} disabled={!productoSeleccionado}>
-          Agregar
-        </button>
-      </div>
+      <BuscadorProductoCarrito
+        productos={productos}
+        datalistId="productos-datalist"
+        onAgregar={agregarProductoAlCarrito}
+      />
 
       <table>
         <thead>
@@ -262,6 +254,33 @@ export function RegistrarVenta() {
             <button type="button" onClick={() => setMostrarComprobante(true)}>
               Generar comprobante
             </button>
+          )}
+          {resultado.estado === 'CONFIRMADA' && (
+            <div>
+              <h4>Enviar comprobante por email</h4>
+              <input
+                type="email"
+                placeholder="Email del cliente"
+                value={emailComprobante}
+                onChange={(e) => setEmailComprobante(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={onEnviarComprobante}
+                disabled={enviandoComprobante || !emailComprobante}
+              >
+                {enviandoComprobante && <span className="spinner" />}
+                {enviandoComprobante
+                  ? 'Enviando...'
+                  : resultado.comprobanteEnviadoPorEmail
+                    ? 'Reenviar por email'
+                    : 'Enviar por email'}
+              </button>
+              {errorComprobante && <p className="error">{errorComprobante}</p>}
+              {resultado.comprobanteEnviadoPorEmail && resultado.clienteEmail && (
+                <p className="resultado">Comprobante enviado a {resultado.clienteEmail}.</p>
+              )}
+            </div>
           )}
         </div>
       )}

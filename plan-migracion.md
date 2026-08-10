@@ -1189,3 +1189,196 @@ rompiera, así que esas partes están confirmadas, sólo la 15.5 quedó sin veri
 **Pendiente de sesiones anteriores, sigue sin tocar**: RLS deshabilitado en la mayoría de las
 tablas de Supabase; cargar `precioVenta`/`precioCompra` en los productos que siguen en `null`;
 probar en vivo el modal de "abrir caja" sin sesión abierta (pendiente desde la sesión 2026-08-04).
+
+## 16. Sesión 2026-08-10: Reportes ampliados, Presupuestos, PDF branded, Trabajo a domicilio y rol TECNICO
+
+Sesión larga con cuatro pedidos encadenados del dueño (el bloqueante de JDK de la sección 15.6 se
+resolvió — el dueño reinició la máquina, `mvn -q -o test` volvió a correr limpio desde el arranque
+de esta sesión).
+
+### 16.1 Reportes ampliados
+
+Nuevos métodos en `ReporteService`, todos filtrando ventas `estado='CONFIRMADA'` en el rango como
+ya hacía `productosGanadores`:
+
+- `ventasPorMarca(desde, hasta)` → `GET /api/reportes/ventas-por-marca` — agrupa `DetalleVenta`
+  por `producto.marca` (los ítems manuales, sin producto, quedan afuera).
+- `ventasPorFormaPago(desde, hasta)` → `GET /api/reportes/ventas-por-forma-pago` — agrupa `Venta`
+  por `medioPago`.
+
+"Pagos a proveedores" (`PagosProveedores.tsx`) ganó un desglose por proveedor puntual: no hizo
+falta endpoint nuevo, `CompraResponse` ya traía `idProveedor` así que el filtro es client-side
+sobre el `GET /api/compras?desde&hasta` que ya se usaba en Consultar compras.
+
+Se reorganizó `Layout.tsx`: "Ventas por vendedor" y "Comisiones" (que ya existían como pantallas
+propias bajo "Vendedores") y "Pagos a proveedores" (bajo "Compras") se movieron a una sola sección
+"Reportes" nueva, junto con Balance/productos ganadores y los dos reportes nuevos. Solo se movieron
+los `NavItem`, ninguna lógica cambió.
+
+### 16.2 Módulo Presupuestos
+
+Tablas nuevas `presupuestos`/`detalle_presupuestos` (migración aditiva, mismo patrón padre/hijo que
+`compras`/`compra_items`). Entidades `Presupuesto`/`DetallePresupuesto`, servicio
+`PresupuestoService`, controller `PresupuestoController` (`/api/presupuestos`, **ambos roles** —
+es una herramienta de venta del día a día como Cobros, no un reporte administrativo, así que no
+sigue la regla de que todo `/api/reportes/**` es ADMIN-only).
+
+Una cotización de productos de catálogo que **no** descuenta stock ni genera una `Venta`. Se puede
+enviar por email (con PDF adjunto, ver 16.3) y descargar en PDF
+(`GET /api/presupuestos/{id}/pdf`). Pantalla `Presupuestos.tsx` con dos vistas: "Nuevo presupuesto"
+y "Consultar presupuestos" (con filtro de fechas y expandir detalle).
+
+Los ítems de un presupuesto pueden venir de catálogo (`idProducto`) o ser manuales
+(`descripcion` a mano, sin producto ni stock) — `DetallePresupuesto` guarda un snapshot de
+`descripcion` en ambos casos, no depende de que el producto siga existiendo después.
+
+### 16.3 PDF branded compartido (infraestructura nueva, reusada por Presupuestos y Ventas)
+
+- `service/ComprobanteHtmlBuilder.java` (package-private): arma el XHTML branded — logo, dirección
+  (`Arce 790, CABA`), teléfono (`1123752626`), una lista de "líneas de info" libres (cliente,
+  medio de pago, técnico, lo que corresponda), la tabla de ítems y el total. Todo texto dinámico
+  pasa por un `escapeXml()` propio — openhtmltopdf exige XHTML válido, un nombre con `&` sin
+  escapar rompe el render.
+- `service/PdfService.java`: `generarPdf(String html)` con `openhtmltopdf-pdfbox` (dependencia
+  nueva en `pom.xml`, versión `1.0.10`). El logo (`static/logo-d13.png`) se lee una sola vez del
+  classpath y se cachea como data URI base64 — el renderer de PDF no entiende `cid:` (eso es solo
+  válido dentro de un email), necesita el binario embebido inline en el HTML.
+- `EmailService.enviarConAdjuntoPdf(destinatario, asunto, cuerpoTexto, nombreArchivo, pdfBytes)`:
+  reemplazó al método viejo `enviarHtmlConLogo` (HTML inline con `cid:`, ya no se usa) — ahora el
+  cuerpo del mail es texto simple y el membrete completo vive en el PDF adjunto
+  (`MimeMessageHelper.addAttachment`).
+
+### 16.4 Ida y vuelta en Cobros — importante para no confundirse
+
+Dentro de esta misma sesión, un pedido intermedio agregó a `RegistrarVenta.tsx` (Cobros) un
+selector "Artículo / Copia de llave" (`DetalleVenta.tipo`, columna nueva) y un mini-formulario de
+ítem manual de precio libre (mismo mecanismo que ya tenía Presupuestos). Un pedido posterior del
+dueño, en un documento aparte (`prompt-claude-code-trabajos-domicilio.md`, no versionado en el
+repo — vive fuera, en su carpeta de sesiones locales de Claude), pidió sacar **ambas cosas** de
+Cobros: que volviera a ser solo catálogo, porque ese caso de uso (mano de obra sin precio fijo) es
+en realidad un trabajo a domicilio.
+
+Se revirtió la UI (`RegistrarVenta.tsx` volvió a ser solo buscador de catálogo + cantidad,
+extraído a un componente compartido — ver 16.5) pero **se conservó el modelo de datos**:
+`detalle_ventas.id_producto` sigue siendo nullable, `descripcion` sigue existiendo como snapshot,
+y `tipo` (`ARTICULO` | `COPIA` legado | `SERVICIO` nuevo) lo reusa Trabajo a domicilio. **No
+hay ninguna forma de generar una línea `COPIA` desde la UI hoy** — quedó como valor histórico
+válido, no como funcionalidad activa.
+
+### 16.5 Trabajo a domicilio (módulo nuevo, exclusivo ADMIN)
+
+Se decidió **extender `ventas`/`detalle_ventas`** en vez de crear una tabla paralela de "trabajos",
+para no duplicar la lógica de cobro/caja que ya existía (mismo criterio que ya se había usado para
+Compras). Columnas nuevas en `ventas` (migración aditiva):
+
+- `tipo_venta varchar not null default 'MOSTRADOR'` (`check in ('MOSTRADOR','DOMICILIO')`)
+- `cliente_nombre`, `cliente_telefono`, `direccion_trabajo`, `descripcion_trabajo`,
+  `estado_trabajo` (`AGENDADO`|`EN_CURSO`|`COMPLETADO`|`COBRADO`, sin CHECK — se valida en el
+  frontend, mismo criterio laxo que ya tenía `ventas.estado`)
+- `id_empleado_tecnico integer references empleados`
+
+`Venta.estado` suma un tercer valor de código (`EN_PROGRESO`, sin CHECK en la base — igual que los
+dos anteriores): un trabajo guardado como borrador queda en `EN_PROGRESO` hasta que se cierra.
+Como `ReporteService`/`CajaService` ya filtraban estrictamente por `estado='CONFIRMADA'` en todos
+lados, un trabajo `EN_PROGRESO` queda automáticamente afuera de ingresos/comisiones/caja sin tocar
+esos filtros — solo cuenta cuando se cierra.
+
+`VentaService.guardarTrabajoDomicilio(TrabajoDomicilioRequest req, Empleado empleado)` crea o
+actualiza según venga o no `req.idVenta`. Al reeditar un trabajo existente: primero devuelve el
+stock de las líneas viejas con producto (`producto.stockActual += cantidad`), limpia la lista de
+detalles (el `orphanRemoval=true` que ya tenía `Venta.detalles` borra las filas viejas) y recién
+después reprocesa las líneas nuevas — así una edición puede sacar/agregar/cambiar cantidades sin
+descuadrar el inventario, sin necesidad de un diff línea por línea. Si `cerrar=true` exige al
+menos un ítem y total > 0, fija `estadoTrabajo="COBRADO"` y `estado="CONFIRMADA"`; si no,
+`estado="EN_PROGRESO"` y `estadoTrabajo` queda el que eligió el usuario.
+
+Endpoints nuevos en `VentaController`, todos ADMIN-only (matchers explícitos en `SecurityConfig`,
+ver 16.7): `GET /api/ventas/{id}` (obtener una venta puntual, usado para reabrir un trabajo),
+`POST /api/ventas/trabajo-domicilio` (crear), `PUT /api/ventas/trabajo-domicilio/{id}` (editar).
+
+Pantalla `TrabajoDomicilio.tsx` (`/ventas/domicilio`): carga/reapertura por número de trabajo
+(lee también `?id=` de la URL, para el link "Abrir para editar" desde Consulta de ventas),
+artículos de catálogo vía `<BuscadorProductoCarrito>` (componente extraído de `RegistrarVenta.tsx`,
+ahora compartido — el mismo buscador+cantidad+botón "Agregar" que usa Cobros), mano de obra de
+precio libre, técnico asignado (`<select>` filtrado a `rol==='TECNICO'`, ver 16.8), resumen
+calculado en el cliente (total, comisión del técnico sobre la mano de obra, ganancia neta), y
+botones "Guardar borrador" / "Cerrar y cobrar".
+
+### 16.6 Comprobantes automáticos indexados por `id_venta`
+
+Regla: toda venta de mostrador y todo trabajo a domicilio, al cerrarse, tiene automáticamente su
+comprobante — **no se genera ni guarda un PDF de antemano**, se arma al vuelo a partir de
+`Venta`+`DetalleVenta` cada vez que se pide (descargar/enviar), usando `id_venta` como índice
+único. `VentaService` extrajo un método privado `construirHtmlComprobante(Venta)` (compartido entre
+el envío por mail que ya existía y el nuevo `generarPdf`), sensible a `tipoVenta`:
+
+- `MOSTRADOR` → "Comprobante de venta #N", info = medio de pago (+ descuento si hay).
+- `DOMICILIO` → "Remito de trabajo #N", info = cliente + teléfono, dirección, descripción del
+  trabajo, técnico.
+
+`GET /api/ventas/{id}/pdf` (ADMIN-only, mismo patrón que `PresupuestoController.descargarPdf`).
+Desde `HistorialVentas.tsx` (Consulta de ventas): columna "Tipo" (Mostrador/Domicilio), filtros de
+tipo/técnico/estado del trabajo (client-side sobre la lista ya traída por rango de fechas), y por
+cada fila `CONFIRMADA` botones "Descargar" y "Enviar por mail" (reusa
+`enviarComprobantePorEmail`, ya existía para mostrador, ahora también arma remitos).
+
+### 16.7 SecurityConfig — matchers nuevos
+
+```java
+.requestMatchers(HttpMethod.POST, "/api/ventas/*/enviar-comprobante").hasAnyRole("ADMIN", "VENDEDOR")
+.requestMatchers(HttpMethod.GET, "/api/ventas/*").hasRole("ADMIN")            // GET /api/ventas/{id}
+.requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasRole("ADMIN")
+.requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
+.requestMatchers("/api/presupuestos/**").hasAnyRole("ADMIN", "VENDEDOR")
+```
+
+Enviar el comprobante de una venta de mostrador por mail sigue siendo día a día (ambos roles,
+como registrar la venta); todo el módulo de Trabajo a domicilio (crear/editar/reabrir/descargar)
+es exclusivo ADMIN, decisión explícita del dueño — VENDEDOR no lo usa.
+
+### 16.8 Comisión reescrita por línea + rol TECNICO nuevo
+
+`ReporteService.comisionesPorVendedor` agrupaba por venta y sumaba el margen de **todos** los
+detalles al `venta.getEmpleado()`. Se reescribió para atribuir por línea: una línea `tipo="SERVICIO"`
+de una venta `DOMICILIO` con técnico asignado atribuye su monto **bruto** (`precioUnitario ×
+cantidad`, sin restar costo — "comisión únicamente sobre el monto de mano de obra", pedido
+explícito del dueño) al `empleadoTecnico`, nunca a quien cobró; cualquier otra línea sigue
+atribuyendo el margen (`precioUnitario - precioCompra`) a `venta.getEmpleado()`, sin cambios.
+`cantidadVentas` del DTO pasa a contar ventas *distintas* que aportaron algo a ese empleado (antes
+era simplemente el tamaño del grupo).
+
+Rol `TECNICO` agregado a `Empleado.rol` (antes `@Pattern(regexp = "ADMIN|VENDEDOR")` en
+`EmpleadoRequest`/`EmpleadoUpdateRequest`, ahora suma `|TECNICO`). Regla de negocio del dueño:
+**solo TECNICO cobra comisión** — VENDEDOR tiene sueldo fijo, ADMIN no cobra comisión.
+`EmpleadoService.crear`/`actualizar` fuerza `comision=null` para cualquier rol que no sea TECNICO,
+sin importar lo que traiga el request (`comisionSegunRol(rol, comision)`), así el dato nunca queda
+inconsistente aunque el frontend fallara en ocultar el campo. `TECNICO` **no tiene acceso al
+sistema** a propósito — no se agregó ningún matcher de rol en `SecurityConfig`, así que si alguna
+vez alguien loguea con ese rol, cualquier endpoint protegido por `hasRole`/`hasAnyRole` le devuelve
+403 (decisión explícita del dueño, no hace falta definir pantallas para este rol).
+
+### 16.9 Verificación
+
+Backend: **118 tests** verdes (`mvn -q -o test`), incluye `EmpleadoServiceTest` nuevo (no existía
+antes), casos nuevos en `VentaServiceTest` (trabajo a domicilio: borrador sin ítems, cerrar exige
+ítems, reeditar restaura y reaplica stock, rechaza reabrir una venta que no es `DOMICILIO`),
+`ReporteServiceTest` (comisión de mano de obra atribuida al técnico) y `SecurityIntegrationTest`
+(VENDEDOR recibe 403 en `GET /api/ventas/{id}` y en `/api/ventas/trabajo-domicilio`). `tsc -b`
+limpio. Probado end-to-end en Chrome contra Supabase real en cada punto — presupuesto con ítem
+manual enviado por mail y descargado en PDF, trabajo a domicilio completo (crear borrador, reabrir,
+agregar artículo + mano de obra, cerrar y cobrar sin duplicar el descuento de stock), remito
+descargado y enviado por mail, comisión del técnico verificada en el reporte real, alta de técnico
+con comisión y confirmación de que el selector de Trabajo a domicilio lo filtra correctamente.
+Datos y stock de prueba restaurados al terminar cada prueba. Migraciones aplicadas directamente
+sobre el proyecto real (`jyumiicapspsxgucirjd`); `get_advisors` corrido después de cada tanda —
+sin tablas nuevas sin RLS (todo columnas aditivas sobre `ventas`).
+
+### 16.10 Pendiente — dolarización de precios (pedido nuevo, sin arrancar)
+
+El dueño quiere pasar el precio de venta de los productos a dólar oficial VENTA: que el sistema
+busque la cotización del día al abrir caja (fija por sesión/turno) y calcule el precio en pesos
+automáticamente al vender. Viable técnicamente (precio en USD por producto + cotización guardada
+en `sesiones_caja` al abrir, con alguna API pública tipo dolarapi.com), pero antes de tocar código
+hacen falta decisiones del dueño — el detalle completo de las cuatro preguntas abiertas está en la
+sección "Estado Actual" de `CLAUDE.md` (no se repite acá para no desincronizar dos copias del
+mismo texto).

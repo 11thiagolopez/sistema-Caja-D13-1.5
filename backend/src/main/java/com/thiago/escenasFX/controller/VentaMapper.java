@@ -30,14 +30,25 @@ final class VentaMapper {
             venta.getTotalVenta(),
             venta.getDescuento(),
             venta.getEstado(),
+            venta.getClienteEmail(),
+            venta.isComprobanteEnviadoPorEmail(),
+            venta.getTipoVenta(),
+            venta.getClienteNombre(),
+            venta.getClienteTelefono(),
+            venta.getDireccionTrabajo(),
+            venta.getDescripcionTrabajo(),
+            venta.getEstadoTrabajo(),
+            venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getIdEmpleado() : null,
+            venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getNombre() : null,
             detalles);
     }
 
     private static DetalleVentaResponse toResponse(DetalleVenta d) {
         return new DetalleVentaResponse(
             d.getIdDetalle(),
-            d.getProducto().getIdProducto(),
-            d.getProducto().getDescripcion(),
+            d.getProducto() != null ? d.getProducto().getIdProducto() : null,
+            d.getDescripcion(),
+            d.getTipo(),
             d.getCantidad(),
             d.getPrecioUnitario(),
             d.getSubtotal());

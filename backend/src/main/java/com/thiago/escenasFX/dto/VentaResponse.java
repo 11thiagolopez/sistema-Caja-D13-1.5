@@ -18,5 +18,15 @@ public class VentaResponse {
     private BigDecimal totalVenta;
     private BigDecimal descuento;
     private String estado;
+    private String clienteEmail;
+    private boolean comprobanteEnviadoPorEmail;
+    private String tipoVenta;
+    private String clienteNombre;
+    private String clienteTelefono;
+    private String direccionTrabajo;
+    private String descripcionTrabajo;
+    private String estadoTrabajo;
+    private Integer idEmpleadoTecnico;
+    private String nombreTecnico;
     private List<DetalleVentaResponse> detalles;
 }

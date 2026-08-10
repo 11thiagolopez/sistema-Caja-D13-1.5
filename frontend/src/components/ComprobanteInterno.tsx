@@ -31,8 +31,8 @@ export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps)
             </tr>
           </thead>
           <tbody>
-            {venta.detalles.map((d) => (
-              <tr key={d.idProducto}>
+            {venta.detalles.map((d, i) => (
+              <tr key={i}>
                 <td>{d.descripcionProducto}</td>
                 <td>{d.cantidad}</td>
                 <td>{d.precioUnitario.toFixed(2)}</td>

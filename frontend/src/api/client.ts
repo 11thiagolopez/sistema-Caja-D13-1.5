@@ -37,3 +37,20 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   return (await response.json()) as T
 }
+
+// Para descargas binarias (PDF): mismo manejo de auth/errores que request<T>, sin parsear JSON.
+export async function requestBlob(path: string): Promise<Blob> {
+  const headers = new Headers()
+  if (authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, { headers })
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiError | null
+    throw new ApiRequestError(response.status, body?.message ?? response.statusText)
+  }
+
+  return response.blob()
+}

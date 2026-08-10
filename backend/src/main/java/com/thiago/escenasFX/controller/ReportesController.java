@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.BalanceFinancieroResponse;
 import com.thiago.escenasFX.dto.ComisionEmpleadoDTO;
+import com.thiago.escenasFX.dto.FormaPagoResumenDTO;
+import com.thiago.escenasFX.dto.MarcaRankingDTO;
 import com.thiago.escenasFX.dto.ProductoRankingDTO;
 import com.thiago.escenasFX.dto.VentaResponse;
 import com.thiago.escenasFX.service.ReporteService;
@@ -58,5 +60,19 @@ public class ReportesController {
         return reporteService.ventasPorVendedor(desde, hasta, idEmpleado).stream()
             .map(VentaMapper::toResponse)
             .toList();
+    }
+
+    @GetMapping("/ventas-por-marca")
+    public List<MarcaRankingDTO> ventasPorMarca(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteService.ventasPorMarca(desde, hasta);
+    }
+
+    @GetMapping("/ventas-por-forma-pago")
+    public List<FormaPagoResumenDTO> ventasPorFormaPago(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteService.ventasPorFormaPago(desde, hasta);
     }
 }

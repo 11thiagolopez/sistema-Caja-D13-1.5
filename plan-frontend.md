@@ -52,8 +52,11 @@ Sin token → 401. Con token pero sin el rol requerido → 403. Formato de error
 |---|---|---|---|
 | POST | `/api/auth/login` | `{usuario, password}` | `{idEmpleado, nombre, usuario, rol, token}` |
 
-`rol` es `"ADMIN"` o `"VENDEDOR"`. Guardar `token` y `rol` (ej. en memoria + `localStorage` para
-persistir la sesión) para el resto de los llamados y para decidir qué mostrar en la UI.
+`rol` es `"ADMIN"`, `"VENDEDOR"` o `"TECNICO"` (desde 2026-08-10 — ver "Estado actual"). En la
+práctica TECNICO nunca inicia sesión: es una categoría de empleado (para asignarlo a trabajos a
+domicilio y calcular su comisión), no tiene ningún endpoint habilitado en `SecurityConfig`. Guardar
+`token` y `rol` (ej. en memoria + `localStorage` para persistir la sesión) para el resto de los
+llamados y para decidir qué mostrar en la UI.
 
 ### Productos (`/api/productos`) — ADMIN y VENDEDOR
 
@@ -254,7 +257,37 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-08-04)
+## Estado actual (Actualizado al 2026-08-10)
+
+**Sesión larga con cuatro pedidos encadenados del dueño** — detalle técnico completo (backend,
+decisiones de diseño, qué se verificó) en `plan-migracion.md`, sección 16. Resumen del lado
+frontend:
+
+- **Pantallas nuevas**: `Presupuestos.tsx` (`/presupuestos`, ambos roles — cotización sin stock,
+  con envío por mail y descarga en PDF), `VentasPorMarca.tsx` (`/reportes/marcas`, ADMIN),
+  `VentasPorFormaPago.tsx` (`/reportes/forma-pago`, ADMIN), `TrabajoDomicilio.tsx`
+  (`/ventas/domicilio`, **exclusivo ADMIN** — cliente, artículos de catálogo, mano de obra de
+  precio libre, técnico asignado, borrador/reapertura, resumen con comisión en vivo).
+- **`components/BuscadorProductoCarrito.tsx`, nuevo**: buscador de producto + cantidad + botón
+  "Agregar" extraído de `RegistrarVenta.tsx`, compartido ahora entre Cobros y Trabajo a domicilio.
+- **`RegistrarVenta.tsx` (Cobros) volvió a ser solo catálogo** — en un pedido intermedio de esta
+  misma sesión había ganado un selector "Artículo/Copia" y un ítem manual; un pedido posterior
+  pidió sacar ambas cosas de ahí (ver plan-migracion.md 16.4). Si ves `tipo`/`descripcion` en
+  `DetalleVentaRequest` y te preguntás para qué sirven ya que Cobros no los usa: los sigue usando
+  Trabajo a domicilio.
+- **`HistorialVentas.tsx` (Consulta de ventas)**: columna "Tipo" (Mostrador/Domicilio), filtros de
+  tipo/técnico/estado del trabajo, botones "Descargar" y "Enviar por mail" por fila `CONFIRMADA`,
+  link "Abrir para editar" en trabajos `EN_PROGRESO`.
+- **`Vendedores.tsx`**: rol `TECNICO` nuevo en el alta; el campo "Comisión %" solo aparece si el
+  rol elegido es TECNICO (VENDEDOR tiene sueldo fijo, ADMIN no cobra comisión).
+- **`Layout.tsx`**: sección "Reportes" consolidada (ver plan-migracion.md 16.1), nuevo ítem suelto
+  "Trabajo a domicilio" (ADMIN).
+
+`tsc -b` limpio. Probado end-to-end en Chrome contra Supabase real (ver plan-migracion.md 16.9
+para el detalle de qué se probó). **Pendiente, sin arrancar**: dolarización de precios — ver
+`CLAUDE.md`, sección "Estado Actual", para las cuatro preguntas abiertas antes de tocar código.
+
+## Estado anterior (Actualizado al 2026-08-04)
 
 **Rediseño grande de interfaz + seis dominios de negocio nuevos**, pedidos por el dueño después de
 usar el sistema real (detalle completo, decisiones de diseño y qué se verificó en

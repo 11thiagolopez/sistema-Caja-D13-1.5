@@ -44,16 +44,23 @@ const SECCIONES: NavSection[] = [
     items: [
       { label: 'Agregar compra', to: '/compras/nueva' },
       { label: 'Consultar compras', to: '/compras' },
-      { label: 'Pagos a proveedores', to: '/compras/pagos-proveedores' },
     ],
   },
   {
     label: 'Vendedores',
     roles: ['ADMIN'],
+    items: [{ label: 'Vendedores', to: '/vendedores' }],
+  },
+  {
+    label: 'Reportes',
+    roles: ['ADMIN'],
     items: [
-      { label: 'Vendedores', to: '/vendedores' },
-      { label: 'Comisiones', to: '/vendedores/comisiones' },
+      { label: 'Balance y productos', to: '/reportes' },
       { label: 'Ventas por vendedor', to: '/vendedores/ventas' },
+      { label: 'Comisiones', to: '/vendedores/comisiones' },
+      { label: 'Compras por proveedor', to: '/compras/pagos-proveedores' },
+      { label: 'Ventas por marca', to: '/reportes/marcas' },
+      { label: 'Ventas por forma de pago', to: '/reportes/forma-pago' },
     ],
   },
 ]
@@ -61,8 +68,9 @@ const SECCIONES: NavSection[] = [
 const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Cobros', to: '/ventas/nueva' },
   { label: 'Productos', to: '/productos' },
+  { label: 'Presupuestos', to: '/presupuestos' },
   { label: 'Historial de ventas', to: '/ventas/historial', roles: ['ADMIN'] },
-  { label: 'Reportes', to: '/reportes', roles: ['ADMIN'] },
+  { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
 ]
 
 function puedeVer(roles: Rol[] | undefined, rol: Rol | undefined): boolean {

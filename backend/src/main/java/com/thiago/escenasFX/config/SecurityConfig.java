@@ -110,6 +110,20 @@ public class SecurityConfig {
                 // Confirmar el descuento: cualquiera de los dos roles (ver nota arriba sobre el
                 // flujo real de autorización — el control está en quién recibe el OTP por email).
                 .requestMatchers("/api/ventas/descuento/confirmar").hasAnyRole("ADMIN", "VENDEDOR")
+                // Enviar el comprobante de una venta por email: día a día, igual que registrarla.
+                // El historial (GET /api/ventas, arriba) sigue siendo lo único exclusivo de ADMIN.
+                .requestMatchers(HttpMethod.POST, "/api/ventas/*/enviar-comprobante")
+                    .hasAnyRole("ADMIN", "VENDEDOR")
+                // Trabajo a domicilio (crear/editar/reabrir un trabajo, ver una venta puntual,
+                // descargar su comprobante): a diferencia de Cobros, todo el módulo queda
+                // exclusivo de ADMIN — VENDEDOR no lo usa.
+                .requestMatchers(HttpMethod.GET, "/api/ventas/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasRole("ADMIN")
+                .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
+                // Presupuestos: herramienta de venta del día a día (como Cobros), no un reporte
+                // administrativo — no afecta stock ni caja, así que no sigue la regla de abajo
+                // de que todo "/api/reportes/**" es exclusivo de ADMIN.
+                .requestMatchers("/api/presupuestos/**").hasAnyRole("ADMIN", "VENDEDOR")
                 // Abrir/cerrar caja, solicitar y confirmar un retiro: operación del día a día,
                 // VENDEDOR también puede. Ver resúmenes sigue exclusivo de ADMIN (matcher general
                 // de abajo).

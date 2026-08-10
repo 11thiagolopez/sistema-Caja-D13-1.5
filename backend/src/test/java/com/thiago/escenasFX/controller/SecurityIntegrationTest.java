@@ -1,10 +1,12 @@
 package com.thiago.escenasFX.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 /**
  * Verifica las reglas por rol de SecurityConfig contra el filtro JWT real (no @WithMockUser):
@@ -60,6 +62,76 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
         String tokenAdmin = login("admin1", "clave123");
 
         mockMvc.perform(get("/api/productos").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void listarPresupuestos_comoVendedorOAdmin_permiteAmbosRoles() throws Exception {
+        // A diferencia de /api/reportes (exclusivo ADMIN), Presupuestos es una herramienta de
+        // venta del día a día como Cobros — ambos roles generan y consultan.
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String tokenVendedor = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/presupuestos")
+                .param("desde", "2026-01-01").param("hasta", "2026-01-31")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
+            .andExpect(status().isOk());
+
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String tokenAdmin = login("admin1", "clave123");
+
+        mockMvc.perform(get("/api/presupuestos")
+                .param("desde", "2026-01-01").param("hasta", "2026-01-31")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void enviarComprobanteDeVenta_comoVendedor_noDevuelve403() throws Exception {
+        // Día a día como registrar la venta — solo el historial (GET /api/ventas) es ADMIN-only.
+        // La venta #1 no existe en este test, así que el endpoint es alcanzable (no 403) pero
+        // responde 400 por regla de negocio, no por permisos.
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/ventas/1/enviar-comprobante")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"cliente@test.com\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void verVentaPuntual_comoVendedor_devuelve403() throws Exception {
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/ventas/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void trabajoADomicilio_comoVendedor_devuelve403() throws Exception {
+        // Todo el módulo (a diferencia de Presupuestos) queda exclusivo de ADMIN.
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/ventas/trabajo-domicilio")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idEmpleado\":1,\"clienteNombre\":\"Cliente\",\"cerrar\":false}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void trabajoADomicilio_comoAdmin_noDevuelve403() throws Exception {
+        var admin = crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String token = login("admin1", "clave123");
+
+        mockMvc.perform(post("/api/ventas/trabajo-domicilio")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idEmpleado\":" + admin.getIdEmpleado() + ",\"clienteNombre\":\"Cliente\",\"cerrar\":false}"))
             .andExpect(status().isOk());
     }
 }

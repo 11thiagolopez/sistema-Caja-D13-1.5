@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,7 +37,7 @@ public class EmpleadoService {
         empleado.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         empleado.setEmail(req.getEmail());
         empleado.setRol(req.getRol());
-        empleado.setComision(req.getComision());
+        empleado.setComision(comisionSegunRol(req.getRol(), req.getComision()));
         empleado.setActivo(true);
         return empleadoRepo.save(empleado);
     }
@@ -54,11 +55,20 @@ public class EmpleadoService {
         empleado.setUsuario(req.getUsuario());
         empleado.setEmail(req.getEmail());
         empleado.setRol(req.getRol());
-        empleado.setComision(req.getComision());
+        empleado.setComision(comisionSegunRol(req.getRol(), req.getComision()));
         if (req.getPassword() != null && !req.getPassword().isBlank()) {
             empleado.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         }
         return empleadoRepo.save(empleado);
+    }
+
+    /**
+     * Solo TECNICO cobra comisión (por mano de obra en trabajos a domicilio) — VENDEDOR tiene
+     * sueldo fijo y ADMIN no cobra comisión. Se ignora cualquier valor que venga en el request
+     * para otros roles, así no queda un dato inconsistente aunque el frontend lo permitiera.
+     */
+    private BigDecimal comisionSegunRol(String rol, BigDecimal comision) {
+        return "TECNICO".equals(rol) ? comision : null;
     }
 
     public void desactivar(Integer id) {

@@ -25,7 +25,7 @@ public class EmpleadoUpdateRequest {
     private String email;
 
     @NotBlank
-    @Pattern(regexp = "ADMIN|VENDEDOR")
+    @Pattern(regexp = "ADMIN|VENDEDOR|TECNICO")
     private String rol;
 
     @DecimalMin(value = "0")

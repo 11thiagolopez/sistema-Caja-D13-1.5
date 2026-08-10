@@ -9,7 +9,95 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-08-05, sesión larga — hay un bloqueante de máquina, leer el
+Estado Actual (Actualizado al 2026-08-10, sesión larga con cuatro pedidos encadenados del dueño):
+
+**1. Reportes ampliados.** Nuevos reportes "Ventas por marca" (`ReporteService.ventasPorMarca`,
+`GET /api/reportes/ventas-por-marca`) y "Ventas por forma de pago" (`ventasPorFormaPago`,
+`GET /api/reportes/ventas-por-forma-pago`). "Pagos a proveedores" ganó un drill-down por
+proveedor puntual (filtro client-side sobre el `GET /api/compras` que ya existía, sin endpoint
+nuevo). De paso se descubrió que "Ventas por vendedor" y "Comisiones" ya existían como pantallas
+propias bajo la sección "Vendedores" del sidebar — se reorganizó todo bajo una sola sección
+"Reportes" consolidada en `Layout.tsx` (solo se movieron los links, sin tocar lógica).
+
+**2. Módulo Presupuestos** (`/presupuestos`, ambos roles). Cotización de productos de catálogo
+que NO descuenta stock ni genera una `Venta` — modelo `Presupuesto`/`DetallePresupuesto`, espejo
+de `Venta`/`DetalleVenta` pero sin OTP ni caja. Se puede enviar por email y descargar en PDF.
+
+**3. PDF branded compartido, nuevo.** Infraestructura reusable para generar PDFs con el logo,
+dirección y teléfono del local (`Arce 790, CABA — Tel: 1123752626`): `ComprobanteHtmlBuilder`
+(arma el XHTML), `PdfService` (HTML→PDF con `openhtmltopdf`; el logo se cachea en base64 desde
+`backend/src/main/resources/static/logo-d13.png`) y `EmailService.enviarConAdjuntoPdf` (adjunta
+el PDF, el cuerpo del mail queda simple). Presupuestos y Ventas comparten esta misma
+infraestructura — no hay dos generadores de PDF distintos.
+
+**4. Ida y vuelta importante en Cobros — leer antes de tocar `RegistrarVenta.tsx`.** En un pedido
+intermedio de esta sesión se agregó a Cobros un selector "Artículo / Copia de llave" y un ítem
+manual de precio libre (columna nueva `DetalleVenta.tipo`). Un pedido posterior del dueño
+(documento `prompt-claude-code-trabajos-domicilio.md`, guardado fuera del repo) pidió sacar
+**ambas cosas** de Cobros — que volviera a ser solo catálogo — porque ese caso de uso en realidad
+es un trabajo a domicilio, no una venta de mostrador. Se revirtió la UI de Cobros pero **se
+conservó el modelo de datos**: `DetalleVenta.tipo` sigue existiendo, ahora con los valores
+`ARTICULO` | `COPIA` (legado, ya no seleccionable desde ningún lado) | `SERVICIO` (mano de obra),
+porque el módulo nuevo de Trabajo a domicilio lo reusa.
+
+**5. Trabajo a domicilio** (`/ventas/domicilio`, **exclusivo ADMIN**). Pantalla nueva: cliente,
+teléfono, dirección, descripción del trabajo, artículos de catálogo (mismo componente que Cobros,
+extraído a `components/BuscadorProductoCarrito.tsx`, con descuento real de stock), mano de obra
+de precio libre (`tipo="SERVICIO"`, sin producto) y técnico asignado. Botones "Guardar borrador"
+(estado `EN_PROGRESO`, no genera comprobante) y "Cerrar y cobrar" (estado `CONFIRMADA`). Un
+borrador se puede reabrir por número de trabajo y seguir editando — al reeditar,
+`VentaService.guardarTrabajoDomicilio` primero devuelve el stock de las líneas viejas con
+producto y recién después vuelve a descontar las nuevas, para no descuadrar el inventario.
+`Venta` ganó columnas nuevas: `tipo_venta` (`MOSTRADOR`|`DOMICILIO`), `cliente_nombre`,
+`cliente_telefono`, `direccion_trabajo`, `descripcion_trabajo`, `estado_trabajo`
+(`AGENDADO`|`EN_CURSO`|`COMPLETADO`|`COBRADO`), `id_empleado_tecnico`.
+
+**6. Comprobantes automáticos indexados por `id_venta`**, sin guardar PDFs de antemano — se
+arman al vuelo con la infraestructura del punto 3: ticket para venta de mostrador, remito (con
+cliente/dirección/técnico) para trabajo a domicilio. Desde Consulta de ventas
+(`HistorialVentas.tsx`, ADMIN) se puede descargar o mandar por mail el comprobante de cualquier
+venta/trabajo `CONFIRMADA`, y filtrar la lista por tipo de venta, técnico y estado del trabajo.
+
+**7. Comisión reescrita para atribuir por línea, no por venta**
+(`ReporteService.comisionesPorVendedor`). Una línea `SERVICIO` de un trabajo a domicilio atribuye
+su monto BRUTO (sin restar costo) al **técnico asignado**, nunca a quien cobró la venta; cualquier
+otra línea (artículo/copia, en mostrador o en domicilio) sigue atribuyendo el margen a quien
+registró la venta, como siempre. Verificado en vivo: en un trabajo con 1 artículo + 1 línea de
+mano de obra, el reporte de Comisiones mostró la ganancia del artículo del lado del vendedor y el
+monto de mano de obra separado del lado del técnico.
+
+**8. Rol TECNICO, nuevo.** Se agregó a `Empleado.rol` (antes solo ADMIN|VENDEDOR). Solo TECNICO
+tiene comisión — en el alta de empleado (`Vendedores.tsx`) el campo "Comisión %" solo se muestra
+si el rol elegido es TECNICO, y `EmpleadoService.crear`/`actualizar` fuerza `comision=null` para
+cualquier otro rol aunque el request traiga un valor (VENDEDOR tiene sueldo fijo, ADMIN no cobra
+comisión — regla de negocio explícita del dueño). El selector de "Técnico asignado" en Trabajo a
+domicilio filtra `empleados` a solo `rol==='TECNICO'`. TECNICO **no tiene acceso al sistema** a
+propósito: no se agregó ningún matcher de rol nuevo en `SecurityConfig`, así que si algún día
+alguien loguea con ese rol, todo endpoint protegido por `hasRole`/`hasAnyRole` le devuelve 403
+(decisión explícita del dueño: "no hace falta definir qué pantallas puede ver").
+
+Todo compilado (backend **118 tests** / `tsc -b` limpio) y probado end-to-end en Chrome contra
+Supabase real en cada punto (presupuesto con ítem manual + PDF + email, trabajo a domicilio
+completo con reapertura y sin doble descuento de stock, comprobantes por mail, alta de técnico
+con filtro del selector) — datos y stock de prueba restaurados al terminar cada prueba.
+Migraciones aplicadas directamente sobre el proyecto real (`jyumiicapspsxgucirjd`) vía MCP de
+Supabase; `get_advisors` corrido después para confirmar que no quedó ninguna tabla nueva sin RLS
+(no se crearon tablas — todo fueron columnas nuevas sobre `ventas`).
+
+**PENDIENTE — dolarización de precios (pedido del dueño, sin arrancar, retomar mañana).** La idea:
+pasar el precio de venta de los productos a dólar oficial VENTA, que el sistema busque la
+cotización del día al abrir caja (fija por sesión/turno, no se recalcula venta a venta), y que al
+vender se calcule el precio en pesos automáticamente. Es técnicamente viable (agregar un precio en
+USD por producto + guardar la cotización del día en la sesión de caja al abrirla, usando alguna
+API pública tipo dolarapi.com), pero faltan decisiones de negocio del dueño antes de tocar código:
+1. ¿El precio de COMPRA (costo) también pasa a dólares, o solo el de venta?
+2. Migración de los ~6900 productos que ya están cargados en pesos: ¿con qué cotización se hace la
+   conversión inicial a USD?
+3. ¿Se redondea el precio final en pesos (a qué múltiplo — $100, $500), o queda el cálculo exacto?
+4. Si la API de cotización falla el día que se abre caja: ¿usar la última cotización guardada,
+   bloquear la apertura de caja, o permitir cargarla a mano ese día?
+
+Estado Anterior (Actualizado al 2026-08-05, sesión larga — hay un bloqueante de máquina, leer el
 final de esta sección antes de tocar nada):
 
 **Continuación de la sesión de búsqueda por marca: ABM en línea de Productos, rediseño de
