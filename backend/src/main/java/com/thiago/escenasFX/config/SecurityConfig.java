@@ -96,6 +96,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/marcas").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.GET, "/api/caja/sesion-abierta").hasAnyRole("ADMIN", "VENDEDOR")
+                // Gate diario de cotización (dolarización): se consulta/dispara para cualquier rol
+                // apenas loguea — nadie puede operar sin la cotización del día. Cargarla a mano
+                // (cuando fallan las dos APIs) queda exclusivo de ADMIN.
+                .requestMatchers(HttpMethod.GET, "/api/cotizacion/actual").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.POST, "/api/cotizacion/cargar").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.POST, "/api/cotizacion/manual").hasRole("ADMIN")
                 .requestMatchers("/api/proveedores/**").hasRole("ADMIN")
                 .requestMatchers("/api/gastos/**").hasRole("ADMIN")
                 .requestMatchers("/api/compras/**").hasRole("ADMIN")

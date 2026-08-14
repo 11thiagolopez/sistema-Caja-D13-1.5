@@ -1373,12 +1373,132 @@ Datos y stock de prueba restaurados al terminar cada prueba. Migraciones aplicad
 sobre el proyecto real (`jyumiicapspsxgucirjd`); `get_advisors` corrido después de cada tanda —
 sin tablas nuevas sin RLS (todo columnas aditivas sobre `ventas`).
 
-### 16.10 Pendiente — dolarización de precios (pedido nuevo, sin arrancar)
+## 17. Sesión 2026-08-12 a 2026-08-14: Dolarización de precios + gate diario de cotización + Compras en ARS/USD
 
-El dueño quiere pasar el precio de venta de los productos a dólar oficial VENTA: que el sistema
-busque la cotización del día al abrir caja (fija por sesión/turno) y calcule el precio en pesos
-automáticamente al vender. Viable técnicamente (precio en USD por producto + cotización guardada
-en `sesiones_caja` al abrir, con alguna API pública tipo dolarapi.com), pero antes de tocar código
-hacen falta decisiones del dueño — el detalle completo de las cuatro preguntas abiertas está en la
-sección "Estado Actual" de `CLAUDE.md` (no se repite acá para no desincronizar dos copias del
-mismo texto).
+Retoma el pendiente de la sección 16.10: el dueño confirmó las cuatro decisiones de negocio (ver
+respuestas abajo) y en una sesión posterior pidió además que Compras pueda cargar precios en
+USD con un cálculo de % de ganancia, lo que a su vez llevó a un pedido más grande: que la
+cotización del día sea un requisito de todo el sistema, no solo de la apertura de caja.
+
+### 17.1 Decisiones de negocio confirmadas (resuelven las 4 preguntas de 16.10)
+
+1. **Alternativa elegida**: recálculo masivo (bulk UPDATE) de `productos` al abrir caja — no
+   cálculo en vivo venta a venta.
+2. **Ambos precios se dolarizan** (venta y compra), visible en `Productos.tsx` para uso
+   interno/ADMIN — pero **nunca** en un comprobante de cara al cliente.
+3. **Migración inicial** de los productos ya cargados en pesos: con la cotización real del día que
+   se corrió la migración.
+4. **Redondeo**: al múltiplo de $100 más cercano.
+5. **Fallback si las dos APIs fallan**: permitir que el ADMIN la cargue a mano ese día (nunca
+   reusar en silencio una cotización vieja, nunca bloquear sin alternativa).
+
+### 17.2 Cotización del dólar — dominio nuevo
+
+- **`CotizacionDolar`** (tabla `cotizaciones_dolar`, nueva): `idCotizacion`, `fecha`, `valorVenta`,
+  `fuente` (`'dolarapi.com'` | `'dolar-bna'` | `'MANUAL'`), `manual`, `creadoEn`. Una fila por
+  consulta exitosa (nunca se pisa la anterior — queda historial de qué cotización se usó cada día).
+- **`CotizacionApiClient`**: wrapper fino de `RestClient` (ya incluido en
+  `spring-boot-starter-web`, sin dependencia Maven nueva) contra las dos APIs públicas gratuitas
+  verificadas: `https://dolarapi.com/v1/dolares/oficial` (primaria) y
+  `https://dolar-bna.vercel.app/api/cotizacion` (secundaria). Nunca propaga excepciones — cualquier
+  falla (timeout, HTTP no-2xx, parseo) se traduce en `Optional.empty()`. URLs/timeout configurables
+  en `application.properties` (`cotizacion.dolar.api-primaria`/`-secundaria`/`-timeout-ms`).
+- **`CotizacionService`**: `obtenerCotizacionDelDia()` (si ya hay fila de hoy la reusa; si no,
+  prueba primaria y después secundaria; si las dos fallan tira `CotizacionNoDisponibleException`),
+  `registrarManual(valorVenta)`, `ultimaConocida()` (la fila más reciente sin importar fecha, usada
+  como ancla fuera del flujo de apertura de caja). **Refactor del 2026-08-14**: los dos primeros
+  métodos devuelven la entidad `CotizacionDolar` completa (antes solo el `BigDecimal`), para que
+  `CotizacionController` (17.4) pueda informar fecha/fuente — único caller a ajustar fue
+  `CajaService.abrirSesion`.
+- `CotizacionNoDisponibleException` (nueva) → `GlobalExceptionHandler` la mapea a `502`, mismo
+  patrón que ya existía ahí para `MailException`.
+
+### 17.3 Ancla en USD por producto + recálculo masivo al abrir caja
+
+- `Producto` gana `precioVentaUsd`/`precioCompraUsd` (nullable). `ProductoService.crear`/
+  `actualizar` y `CompraService.registrarCompra` llaman, sin condición, un método nuevo
+  `ProductoService.sincronizarAnclaUsd(producto)` que recalcula ambas anclas contra
+  `cotizacionService.ultimaConocida()` cada vez que se guarda un precio en pesos — si todavía no
+  hay ninguna cotización cargada en el sistema, el ancla queda `null` hasta que exista una.
+- `ProductoRepository.reajustarPreciosPorCotizacion(BigDecimal cotizacion)`: `@Modifying @Query`
+  **nativo** (Postgres, `ROUND((precio_venta_usd * :cotizacion) / 100) * 100`) que solo toca
+  productos con ancla ya asignada (`precio_venta_usd IS NOT NULL`) — un producto sin ancla queda
+  afuera hasta que se le vuelva a fijar un precio.
+- `CajaService.abrirSesion` (ahora `@Transactional`) gana un parámetro `cotizacionManual`
+  (nullable): si viene, `registrarManual`; si no, `obtenerCotizacionDelDia()`. Corre el bulk
+  update, guarda `SesionCaja.cotizacionUsdVenta` (columna nueva) y devuelve también
+  `productosActualizados` (campo `@Transient`, no persistido — solo para informar en la respuesta
+  cuántos productos se ajustaron). `AbrirCajaRequest`/`SesionCajaResponse`/`CajaController`
+  actualizados en consecuencia.
+- **Comprobantes sin tocar**: `ComprobanteHtmlBuilder`/`PdfService`/`VentaService`/
+  `PresupuestoService` siguen leyendo únicamente `precioVenta`/`precioCompra` en pesos — ninguna
+  ruta de código lleva un monto en USD a un documento de venta.
+
+### 17.4 Gate diario de cotización (pedido del 2026-08-14, amplía el alcance original)
+
+Sobre la marcha, mientras se diseñaba que Compras pudiera cargar precios en USD (17.6), el dueño
+pidió que la cotización del día pase a ser un requisito de **todo el sistema**, no solo de abrir
+caja: nadie (ni ADMIN ni VENDEDOR) puede operar hasta que exista una cotización cargada para hoy.
+
+`CotizacionController` nuevo (`/api/cotizacion`):
+- `GET /actual` → `200 CotizacionResponse` si hay fila de HOY, `204` si no (ADMIN y VENDEDOR).
+- `POST /cargar` → intenta `obtenerCotizacionDelDia()` (ADMIN y VENDEDOR — el auto-intento no
+  requiere criterio de negocio, cualquiera lo puede disparar).
+- `POST /manual` → `registrarManual(valorVenta)`, **exclusivo ADMIN**.
+
+No se toca `CajaService`/`CajaController` más allá del refactor de tipo de 17.2: para cuando se
+llega a abrir caja, la cotización de hoy casi siempre ya existe (la dejó el gate), así que
+`obtenerCotizacionDelDia()` la encuentra por el dedup existente sin pegarle de nuevo a las APIs. El
+fallback manual que ya tenía `AbrirCajaModal.tsx` queda como red de seguridad para el caso borde
+(cambio de día en medio de una sesión larga).
+
+### 17.5 Migración de datos inicial (una sola vez, vía Supabase MCP)
+
+Aplicada sobre el proyecto real (`jyumiicapspsxgucirjd`) el 2026-08-12, con la cotización real de
+ese día (**$1515**, dolarapi.com, confirmada con el dueño antes de correrla):
+```sql
+UPDATE productos
+SET precio_venta_usd = ROUND(precio_venta / 1515, 2),
+    precio_compra_usd = CASE WHEN precio_compra IS NOT NULL
+                         THEN ROUND(precio_compra / 1515, 2) ELSE NULL END
+WHERE activo = true AND precio_venta_usd IS NULL;
+```
+**6.898 productos** anclados. Esto solo estableció el ancla en USD a partir de los precios en
+pesos vigentes ese día — no tocó `precio_venta`/`precio_compra` en sí (el primer recálculo real de
+precios ocurrió recién al probar la apertura de caja real, ver 17.7).
+
+### 17.6 Compras en ARS/USD + % de ganancia (2026-08-14, principalmente frontend)
+
+Pedido del dueño para `ComprasNueva.tsx`: poder tipear precio de compra y precio de venta en pesos
+o en USD (por renglón, independiente uno del otro), y una columna nueva "% de ganancia" entre
+ambos que autocompleta el precio de venta (recargo sobre el costo, confirmado con el dueño:
+`precioVenta = precioCompra × (1 + %/100)` — 100% es vender al doble). Sin cambios de contrato en
+el backend: `CompraItemRequest.precioCompraUnitario`/`precioVentaUnitario` siguen siendo siempre
+pesos, la conversión ARS↔USD es enteramente de UI contra `GET /api/cotizacion/actual` (garantizada
+por el gate de 17.4). Detalle de la implementación frontend en `plan-frontend.md`.
+
+### 17.7 Verificación
+
+Backend: **134 tests** verdes (`mvn -q -o test`), incluye `CotizacionServiceTest`,
+`CompraServiceTest` (nuevo, no existía antes), casos nuevos en `ProductoServiceTest` (ancla se
+sincroniza en crear/actualizar), `CajaServiceTest` (bulk update disparado al abrir, camino manual,
+propagación de `CotizacionNoDisponibleException`) y `SecurityIntegrationTest` (VENDEDOR 403 en
+`POST /api/cotizacion/manual`, ambos roles OK en `/actual` y `/cargar`). `tsc -b` limpio.
+
+Migración de esquema aplicada vía `apply_migration`; `get_advisors` corrido después — la única
+tabla nueva (`cotizaciones_dolar`) aparece con el mismo patrón de RLS deshabilitado que las otras
+12, sin regresión nueva.
+
+**Probado en vivo contra Supabase real, por API (`curl`) — no había navegador automatizado
+disponible en ninguna de las dos sesiones**: se creó un empleado ADMIN temporal, se cerró una
+sesión de caja real que había quedado abierta desde el 2026-08-04 (dato viejo, no de esta sesión),
+se abrió una nueva y se confirmó `cotizacionUsdVenta: 1515` / `productosActualizados: 6898` en la
+respuesta real, con un producto de muestra (id 50, $2000 con ancla $1.32) verificado en la base
+después del reprice. El gate de cotización se probó el 2026-08-14 (día nuevo, sin fila de hoy):
+`GET /actual` → `204`, `POST /cargar` → cotización real del día ($1510, dolarapi.com), `GET
+/actual` de nuevo → `200` sin volver a pegarle a la API (dedup funcionando), `POST /manual` como
+ADMIN → `200`. La fila manual de prueba ($1520) se borró después para no pisar la cotización real
+del día ($1510) que iba a usar el negocio. Empleados de prueba borrados al terminar cada tanda.
+**Pendiente real: nunca se vio ninguna de las dos pantallas nuevas (gate, Compras con ARS/USD)
+renderizada en un navegador** — toda la verificación fue por API; la próxima sesión con Chrome
+disponible debería confirmar visualmente que no hay sorpresas de layout.

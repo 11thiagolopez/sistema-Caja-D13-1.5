@@ -4,12 +4,30 @@ import { getProductos } from '../api/productos'
 import { getMarcas } from '../api/marcas'
 import { getProveedores } from '../api/proveedores'
 import { registrarCompra } from '../api/compras'
+import { getCotizacionActual } from '../api/cotizacion'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
 import type { CompraItemRequest, MarcaResponse, MedioPago, Producto, ProveedorResponse } from '../types/api'
 
+type Moneda = 'ARS' | 'USD'
+
 function etiquetaProducto(producto: Producto): string {
   return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
+}
+
+// El valor canónico de precioCompraUnitario/precioVentaUnitario siempre es pesos, igual que lo
+// que espera el backend (CompraItemRequest) — monedaCompra/monedaVenta son puramente de UI, para
+// mostrar/tipear ese mismo valor en USD. pesosDesde/formatearEnMoneda son las dos únicas
+// conversiones: tipear no convierte nada (se guarda crudo), solo cambiar el <select> de moneda
+// dispara una conversión puntual.
+function pesosDesde(texto: string, moneda: Moneda, cotizacion: number): number {
+  const numero = Number(texto) || 0
+  return moneda === 'USD' ? numero * cotizacion : numero
+}
+
+function formatearEnMoneda(pesos: number, moneda: Moneda, cotizacion: number): string {
+  const valor = moneda === 'USD' ? pesos / cotizacion : pesos
+  return valor.toFixed(2)
 }
 
 interface FilaCompra {
@@ -17,7 +35,10 @@ interface FilaCompra {
   texto: string
   cantidad: string
   precioCompraUnitario: string
+  monedaCompra: Moneda
+  gananciaPct: string
   precioVentaUnitario: string
+  monedaVenta: Moneda
   nuevoRubro: string
   nuevoFamilia: string
   nuevoMarca: string
@@ -32,7 +53,10 @@ function filaVacia(): FilaCompra {
     texto: '',
     cantidad: '1',
     precioCompraUnitario: '',
+    monedaCompra: 'ARS',
+    gananciaPct: '',
     precioVentaUnitario: '',
+    monedaVenta: 'ARS',
     nuevoRubro: '',
     nuevoFamilia: '',
     nuevoMarca: '',
@@ -46,6 +70,7 @@ export function ComprasNueva() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [marcas, setMarcas] = useState<MarcaResponse[]>([])
   const [proveedores, setProveedores] = useState<ProveedorResponse[]>([])
+  const [cotizacion, setCotizacion] = useState<number | null>(null)
 
   const [fecha, setFecha] = useState(hoyIso())
   const [proveedorNombre, setProveedorNombre] = useState('')
@@ -60,6 +85,7 @@ export function ComprasNueva() {
     getProductos().then(setProductos)
     getMarcas().then(setMarcas)
     getProveedores().then(setProveedores)
+    getCotizacionActual().then((c) => setCotizacion(c?.valorVenta ?? null))
   }, [])
 
   function productoDeFila(fila: FilaCompra): Producto | undefined {
@@ -78,17 +104,60 @@ export function ComprasNueva() {
     setFilas((actual) => (actual.length > 1 ? actual.filter((f) => f.id !== id) : actual))
   }
 
+  // Recalcula precio venta a partir de % de ganancia (recargo sobre el costo: 100% = vender al
+  // doble). Se llama después de tocar precio compra, moneda de compra o % de ganancia — si el %
+  // está vacío no hace nada (venta queda editable a mano, como siempre).
+  function recalcularVenta(filaActualizada: FilaCompra): Partial<FilaCompra> {
+    const pct = Number(filaActualizada.gananciaPct)
+    if (!filaActualizada.gananciaPct || Number.isNaN(pct) || cotizacion == null) return {}
+    const pesosCompra = pesosDesde(filaActualizada.precioCompraUnitario, filaActualizada.monedaCompra, cotizacion)
+    const pesosVenta = pesosCompra * (1 + pct / 100)
+    return { precioVentaUnitario: formatearEnMoneda(pesosVenta, filaActualizada.monedaVenta, cotizacion) }
+  }
+
+  function onCambiarPrecioCompra(fila: FilaCompra, texto: string) {
+    const actualizada = { ...fila, precioCompraUnitario: texto }
+    actualizarFila(fila.id, { precioCompraUnitario: texto, ...recalcularVenta(actualizada) })
+  }
+
+  function onCambiarGananciaPct(fila: FilaCompra, texto: string) {
+    const actualizada = { ...fila, gananciaPct: texto }
+    actualizarFila(fila.id, { gananciaPct: texto, ...recalcularVenta(actualizada) })
+  }
+
+  function onCambiarMonedaCompra(fila: FilaCompra, nuevaMoneda: Moneda) {
+    if (cotizacion == null) return
+    const nuevoTexto = fila.precioCompraUnitario
+      ? formatearEnMoneda(pesosDesde(fila.precioCompraUnitario, fila.monedaCompra, cotizacion), nuevaMoneda, cotizacion)
+      : ''
+    const actualizada = { ...fila, monedaCompra: nuevaMoneda, precioCompraUnitario: nuevoTexto }
+    actualizarFila(fila.id, {
+      monedaCompra: nuevaMoneda,
+      precioCompraUnitario: nuevoTexto,
+      ...recalcularVenta(actualizada),
+    })
+  }
+
+  function onCambiarMonedaVenta(fila: FilaCompra, nuevaMoneda: Moneda) {
+    if (cotizacion == null) return
+    const nuevoTexto = fila.precioVentaUnitario
+      ? formatearEnMoneda(pesosDesde(fila.precioVentaUnitario, fila.monedaVenta, cotizacion), nuevaMoneda, cotizacion)
+      : ''
+    actualizarFila(fila.id, { monedaVenta: nuevaMoneda, precioVentaUnitario: nuevoTexto })
+  }
+
   function subtotalFila(fila: FilaCompra): number {
+    if (cotizacion == null) return 0
     const cantidad = Number(fila.cantidad) || 0
-    const precio = Number(fila.precioCompraUnitario) || 0
-    return cantidad * precio
+    const pesos = pesosDesde(fila.precioCompraUnitario, fila.monedaCompra, cotizacion)
+    return cantidad * pesos
   }
 
   const total = filas.reduce((acc, f) => acc + subtotalFila(f), 0)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!sesion) return
+    if (!sesion || cotizacion == null) return
     setError(null)
     setMensaje(null)
 
@@ -100,10 +169,12 @@ export function ComprasNueva() {
     const items: CompraItemRequest[] = []
     for (const fila of filas) {
       const cantidad = Number(fila.cantidad)
-      const precioCompraUnitario = Number(fila.precioCompraUnitario)
+      const precioCompraUnitario = pesosDesde(fila.precioCompraUnitario, fila.monedaCompra, cotizacion)
       if (!cantidad || !precioCompraUnitario) continue
 
-      const precioVentaUnitario = fila.precioVentaUnitario ? Number(fila.precioVentaUnitario) : undefined
+      const precioVentaUnitario = fila.precioVentaUnitario
+        ? pesosDesde(fila.precioVentaUnitario, fila.monedaVenta, cotizacion)
+        : undefined
       const productoExistente = productoDeFila(fila)
 
       if (productoExistente) {
@@ -145,6 +216,17 @@ export function ComprasNueva() {
     }
   }
 
+  if (cotizacion == null) {
+    return (
+      <div>
+        <h2>Agregar compra</h2>
+        <p>
+          <span className="spinner" /> Cargando cotización del día...
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div>
       <h2>Agregar compra</h2>
@@ -183,6 +265,7 @@ export function ComprasNueva() {
               <th>Producto</th>
               <th>Cantidad</th>
               <th>Precio compra</th>
+              <th>% Ganancia</th>
               <th>Precio venta</th>
               <th>Subtotal</th>
               <th />
@@ -211,16 +294,33 @@ export function ComprasNueva() {
                         onChange={(e) => actualizarFila(fila.id, { cantidad: e.target.value })}
                       />
                     </td>
-                    <td>
+                    <td className="celda-precio-moneda">
                       <input
                         type="number"
                         min={0}
                         step="0.01"
                         value={fila.precioCompraUnitario}
-                        onChange={(e) => actualizarFila(fila.id, { precioCompraUnitario: e.target.value })}
+                        onChange={(e) => onCambiarPrecioCompra(fila, e.target.value)}
                       />
+                      <select
+                        value={fila.monedaCompra}
+                        onChange={(e) => onCambiarMonedaCompra(fila, e.target.value as Moneda)}
+                      >
+                        <option value="ARS">ARS</option>
+                        <option value="USD">USD</option>
+                      </select>
                     </td>
                     <td>
+                      <input
+                        type="number"
+                        min={0}
+                        step="1"
+                        placeholder="%"
+                        value={fila.gananciaPct}
+                        onChange={(e) => onCambiarGananciaPct(fila, e.target.value)}
+                      />
+                    </td>
+                    <td className="celda-precio-moneda">
                       <input
                         type="number"
                         min={0}
@@ -228,6 +328,13 @@ export function ComprasNueva() {
                         value={fila.precioVentaUnitario}
                         onChange={(e) => actualizarFila(fila.id, { precioVentaUnitario: e.target.value })}
                       />
+                      <select
+                        value={fila.monedaVenta}
+                        onChange={(e) => onCambiarMonedaVenta(fila, e.target.value as Moneda)}
+                      >
+                        <option value="ARS">ARS</option>
+                        <option value="USD">USD</option>
+                      </select>
                     </td>
                     <td>{subtotalFila(fila).toFixed(2)}</td>
                     <td>
@@ -238,7 +345,7 @@ export function ComprasNueva() {
                   </tr>
                   {esNuevo && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <em>"{fila.texto}" no está en el catálogo — completá los datos para darlo de alta:</em>
                         <div className="agregar-producto">
                           <input

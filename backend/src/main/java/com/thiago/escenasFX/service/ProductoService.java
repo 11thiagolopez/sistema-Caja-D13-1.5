@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.service;
 
+import java.math.RoundingMode;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -16,12 +17,14 @@ public class ProductoService {
     private final ProductoRepository productoRepo;
     private final MarcaService marcaService;
     private final ProveedorService proveedorService;
+    private final CotizacionService cotizacionService;
 
     public ProductoService(ProductoRepository productoRepo, MarcaService marcaService,
-            ProveedorService proveedorService) {
+            ProveedorService proveedorService, CotizacionService cotizacionService) {
         this.productoRepo = productoRepo;
         this.marcaService = marcaService;
         this.proveedorService = proveedorService;
+        this.cotizacionService = cotizacionService;
     }
 
     public List<Producto> listarTodos() {
@@ -64,6 +67,7 @@ public class ProductoService {
         producto.setStockActual(req.getStockActual());
         producto.setActivo(true);
 
+        sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);
     }
 
@@ -85,7 +89,24 @@ public class ProductoService {
         if (req.getStockActual() != null) {
             producto.setStockActual(req.getStockActual());
         }
+        sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);
+    }
+
+    /**
+     * Recalcula el ancla en USD de precioVenta/precioCompra contra la última cotización conocida
+     * (dolarización). Se llama sin condición cada vez que se guarda un precio en pesos — si sólo
+     * cambió otro campo, recalcular es un no-op salvo redondeo de centavos, y de paso autocorrige
+     * el ancla si la cotización cambió desde la última vez. Si todavía no hay ninguna cotización
+     * cargada (sistema recién migrado), el ancla queda en null hasta que exista una.
+     */
+    public void sincronizarAnclaUsd(Producto producto) {
+        cotizacionService.ultimaConocida().ifPresent(cotizacion -> {
+            producto.setPrecioVentaUsd(producto.getPrecioVenta().divide(cotizacion, 2, RoundingMode.HALF_UP));
+            if (producto.getPrecioCompra() != null) {
+                producto.setPrecioCompraUsd(producto.getPrecioCompra().divide(cotizacion, 2, RoundingMode.HALF_UP));
+            }
+        });
     }
 
     /** Baja lógica: no se borra la fila para no romper ventas históricas que la referencian. */

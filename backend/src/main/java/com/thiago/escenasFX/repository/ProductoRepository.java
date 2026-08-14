@@ -1,9 +1,11 @@
 package com.thiago.escenasFX.repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,4 +38,19 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     // "X Or Y And Z" como "X Or (Y And Z)", no "(X Or Y) And Z".
     @Query("SELECT p FROM Producto p WHERE p.activo = true AND (p.codigoFabrica = :codigo OR p.codigoInterno = :codigo)")
     Optional<Producto> buscarActivoPorCodigo(@Param("codigo") String codigo);
+
+    // Dolarización: recálculo masivo al abrir caja. Solo toca productos que ya tienen ancla en
+    // USD (precio_venta_usd IS NOT NULL) — un producto dado de alta antes de que exista alguna
+    // cotización queda afuera hasta que se le vuelva a fijar un precio (ProductoService.
+    // sincronizarAnclaUsd). Nativo porque el redondeo a múltiplos de $100 (ROUND(x/100)*100) es
+    // más simple en SQL directo que en JPQL, y este proyecto ya apunta a Postgres sin necesidad
+    // de portabilidad de dialecto.
+    @Modifying
+    @Query(value = "UPDATE productos SET "
+        + "precio_venta = ROUND((precio_venta_usd * :cotizacion) / 100) * 100, "
+        + "precio_compra = CASE WHEN precio_compra_usd IS NOT NULL "
+        + "THEN ROUND((precio_compra_usd * :cotizacion) / 100) * 100 ELSE precio_compra END "
+        + "WHERE activo = true AND precio_venta_usd IS NOT NULL",
+        nativeQuery = true)
+    int reajustarPreciosPorCotizacion(@Param("cotizacion") BigDecimal cotizacion);
 }

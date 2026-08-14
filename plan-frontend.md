@@ -62,8 +62,14 @@ llamados y para decidir qué mostrar en la UI.
 
 | Método | Ruta | Devuelve |
 |---|---|---|
-| GET | `/api/productos` | `Producto[]` (entidad completa: incluye `stockActual`, `precioVenta`, `precioCompra`) |
+| GET | `/api/productos` | `Producto[]` (entidad completa: incluye `stockActual`, `precioVenta`, `precioCompra`, `precioVentaUsd`, `precioCompraUsd`) |
 | GET | `/api/productos/{id}` | `Producto` |
+
+`precioVentaUsd`/`precioCompraUsd` (dolarización, 2026-08-12): ancla en USD de los precios en
+pesos, recalculada sola cada vez que se guarda un precio (alta, edición en línea, compra) contra
+la última cotización conocida — nunca se editan directo, son de solo lectura en el frontend
+(`Productos.tsx` los muestra como dos columnas extra). Pueden ser `null` si todavía no hay ninguna
+cotización cargada en el sistema.
 
 ### Ventas (`/api/ventas`)
 
@@ -102,14 +108,17 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 
 | Método | Ruta | Rol | Body | Devuelve |
 |---|---|---|---|---|
-| POST | `/api/caja/abrir` | ADMIN, VENDEDOR | `{idEmpleado, montoInicial}` | `SesionCajaResponse` |
+| POST | `/api/caja/abrir` | ADMIN, VENDEDOR | `{idEmpleado, montoInicial, cotizacionManual?}` | `SesionCajaResponse` |
 | POST | `/api/caja/cerrar` | ADMIN, VENDEDOR | — | `SesionCajaResponse` |
 | POST | `/api/caja/retiro/solicitar` | ADMIN, VENDEDOR | `{idEmpleado, monto, motivo, medioPago}` | `SolicitudRetiroResponse` |
 | POST | `/api/caja/retiro/confirmar` | ADMIN, VENDEDOR | `{idSolicitud, codigo}` | `MovimientoCajaResponse` |
 | GET | `/api/caja/resumen-dia` | **solo ADMIN** | — | `ResumenDiaResponse` |
 | GET | `/api/caja/resumen?desde=&hasta=` | **solo ADMIN** | — | `ResumenRangoResponse` |
 
-`SesionCajaResponse`: `{idSesion, fecha, montoInicial, estado}` (`estado`: `"ABIERTA"`/`"CERRADA"`).
+`SesionCajaResponse`: `{idSesion, fecha, montoInicial, estado, cotizacionUsdVenta, productosActualizados}`
+(`estado`: `"ABIERTA"`/`"CERRADA"`; los dos últimos campos son de dolarización — la cotización
+usada para repricear en esta apertura y cuántos productos se ajustaron; ver sección Cotización
+abajo para de dónde sale `cotizacionManual`).
 
 `ResumenDiaResponse`: `{ventas: VentaResponse[], retiros: MovimientoCajaResponse[], montoInicial,
 ventasEfectivo, ventasTransferencia, ventasTarjeta, retirosEfectivo, retirosTransferencia,
@@ -125,6 +134,31 @@ crea el movimiento de caja real. Desde el 2026-07-30 cualquiera de los dos roles
 VENDEDOR quien está en la caja y termina la operación apenas el ADMIN se lo pasa (llamada,
 WhatsApp, etc.). El frontend necesita un form de dos pasos (monto/motivo/medio → después el
 código).
+
+### Cotización (`/api/cotizacion`) — dolarización, nuevo 2026-08-14
+
+| Método | Ruta | Rol | Body | Devuelve |
+|---|---|---|---|---|
+| GET | `/api/cotizacion/actual` | ADMIN, VENDEDOR | — | `200 CotizacionResponse` si ya se cargó la de HOY, `204` si no |
+| POST | `/api/cotizacion/cargar` | ADMIN, VENDEDOR | — | `CotizacionResponse`, o `502` si las dos APIs de cotización fallan |
+| POST | `/api/cotizacion/manual` | **solo ADMIN** | `{valorVenta}` | `CotizacionResponse` |
+
+`CotizacionResponse`: `{valorVenta, fecha, fuente, manual}` (`fuente`: `"dolarapi.com"` |
+`"dolar-bna"` | `"MANUAL"`).
+
+**Gate diario obligatorio, para los dos roles**: nadie puede operar el sistema sin que exista una
+cotización cargada para hoy. `Layout.tsx` la chequea al loguear (`GET /actual`); si no hay, bloquea
+todo con `CotizacionGateModal` (sin `onClose`, igual patrón que el modal de "abrir caja") que
+dispara `POST /cargar` sola. Si eso falla (las dos APIs caídas), solo ADMIN ve el input para
+cargarla a mano (`POST /manual`) — VENDEDOR solo puede reintentar `POST /cargar` (que primero
+revisa si ya hay una fila de hoy, así que si mientras tanto un ADMIN la cargó desde otra sesión,
+se destraba sin pegarle de nuevo a ninguna API). Una vez cargada, si fue **esta** sesión la que la
+disparó y el rol es ADMIN, aparece un cartel puntual y dismisible ("Cotización del día: USD $X") —
+nunca a VENDEDOR, y nunca en un segundo login del mismo día (la cotización ya existía).
+
+Este endpoint no toca stock ni precios de productos — el recálculo masivo de precios (redondeado a
+múltiplos de $100) sigue pasando únicamente al abrir caja (`POST /api/caja/abrir`), que reusa la
+fila de hoy que este gate ya dejó creada.
 
 ### Reportes (`/api/reportes`) — **solo ADMIN**
 
@@ -200,6 +234,13 @@ cambios en ese contrato).
 Cargar una compra **actualiza stock y precio** del producto (suma `cantidad` al stock, refresca
 `precioCompra` siempre y `precioVenta` si vino) — no es solo un asiento contable.
 
+**`precioCompraUnitario`/`precioVentaUnitario` siempre viajan en pesos** — el contrato no cambió.
+`ComprasNueva.tsx` (2026-08-14) agregó un `<select>` ARS/USD por renglón para cada uno de los dos
+precios más una columna "% Ganancia" (recargo sobre el costo: `precioVenta = precioCompra × (1 +
+%/100)`) — todo eso es conversión puramente de UI contra la cotización del día
+(`GET /api/cotizacion/actual`, garantizada por el gate de arriba); antes de armar el request,
+`ComprasNueva.tsx` convierte cualquier valor tipeado en USD a pesos.
+
 ### Empleados (`/api/empleados`) — ADMIN (antes no existía este controller)
 
 | Método | Ruta | Body | Devuelve |
@@ -257,7 +298,39 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-08-10)
+## Estado actual (Actualizado al 2026-08-14)
+
+**Dolarización de precios + gate diario de cotización + Compras en ARS/USD** — detalle técnico
+completo (backend, decisiones de diseño, qué se verificó) en `plan-migracion.md`, sección 17.
+Resumen del lado frontend:
+
+- **`Productos.tsx`**: dos columnas nuevas de solo lectura, "USD venta"/"USD compra"
+  (`precioVentaUsd`/`precioCompraUsd`), junto a las columnas de precio en pesos — se recalculan
+  solas, no son editables.
+- **`components/CotizacionGateModal.tsx`, nuevo**: bloqueo obligatorio post-login (ambos roles,
+  sin `onClose`) hasta que exista la cotización del dólar de hoy. Intenta cargarla sola; si falla,
+  solo ADMIN ve el input manual, VENDEDOR solo puede reintentar. Wireado en `Layout.tsx` **antes**
+  que el gate de "abrir caja" ya existente (`cotizacionObligatoria` se resuelve primero).
+- **`Layout.tsx`**: cartel dismisible "Cotización del día: USD $X" (`.aviso-cotizacion`), solo para
+  ADMIN y solo cuando la carga la disparó la sesión actual — nunca a VENDEDOR.
+- **`components/AbrirCajaModal.tsx`**: si `POST /api/caja/abrir` devuelve 502 (las dos APIs de
+  cotización fallaron — caso borde ahora, ya que el gate de arriba casi siempre la deja cargada de
+  antes), revela un input de cotización manual y reintenta. En la práctica esta rama casi no se
+  dispara: el gate diario ya la cargó antes de llegar acá.
+- **`ComprasNueva.tsx`**: `<select>` ARS/USD por renglón en precio compra y precio venta, columna
+  nueva "% Ganancia" entre ambos que autocompleta el precio de venta. Ver contrato de API arriba
+  (sección Cotización) para el detalle de conversión — el valor que viaja al backend sigue siendo
+  siempre pesos.
+- **`api/cotizacion.ts`, nuevo**: `getCotizacionActual`, `cargarCotizacion`,
+  `cargarCotizacionManual`.
+
+`tsc -b` limpio. Probado por API (`curl`) contra Supabase real — no había navegador automatizado
+disponible en esta sesión para probarlo clickeando en Chrome (ver plan-migracion.md 17 para el
+detalle exacto de qué se verificó así). **Pendiente: confirmar visualmente en el navegador** el
+modal del gate, el cartel de ADMIN, y los selectores ARS/USD de Compras — la próxima vez que se
+abra el sistema en Chrome, revisar que no haya sorpresas visuales (nunca se vio renderizado).
+
+## Estado anterior (Actualizado al 2026-08-10)
 
 **Sesión larga con cuatro pedidos encadenados del dueño** — detalle técnico completo (backend,
 decisiones de diseño, qué se verificó) en `plan-migracion.md`, sección 16. Resumen del lado

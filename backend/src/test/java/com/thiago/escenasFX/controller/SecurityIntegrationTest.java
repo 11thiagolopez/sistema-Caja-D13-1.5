@@ -2,6 +2,7 @@ package com.thiago.escenasFX.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
@@ -133,5 +134,59 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idEmpleado\":" + admin.getIdEmpleado() + ",\"clienteNombre\":\"Cliente\",\"cerrar\":false}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    void cotizacionActual_comoVendedorOAdmin_permiteAmbosRoles() throws Exception {
+        // Gate diario de cotización: cualquier rol puede consultarla apenas loguea (no la
+        // dispara, solo pregunta si ya existe).
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String tokenVendedor = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/cotizacion/actual").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
+            .andExpect(status().isNoContent());
+
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String tokenAdmin = login("admin1", "clave123");
+
+        mockMvc.perform(get("/api/cotizacion/actual").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void cargarCotizacion_comoVendedor_noDevuelve403() throws Exception {
+        // La carga automática (misma API que ya está mockeada en AbstractIntegrationTest) la
+        // puede disparar cualquiera de los dos roles.
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/cotizacion/cargar").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.valorVenta").value(1000));
+    }
+
+    @Test
+    void cargarCotizacionManual_comoVendedor_devuelve403() throws Exception {
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/cotizacion/manual")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"valorVenta\": 1300}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cargarCotizacionManual_comoAdmin_noDevuelve403() throws Exception {
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String token = login("admin1", "clave123");
+
+        mockMvc.perform(post("/api/cotizacion/manual")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"valorVenta\": 1300}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.manual").value(true));
     }
 }

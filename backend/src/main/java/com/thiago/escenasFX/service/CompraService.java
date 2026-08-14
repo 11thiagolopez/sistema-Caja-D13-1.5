@@ -62,6 +62,7 @@ public class CompraService {
             if (itemReq.getPrecioVentaUnitario() != null) {
                 producto.setPrecioVenta(itemReq.getPrecioVentaUnitario());
             }
+            productoService.sincronizarAnclaUsd(producto);
             productoRepo.save(producto);
 
             BigDecimal subtotal = itemReq.getPrecioCompraUnitario().multiply(BigDecimal.valueOf(itemReq.getCantidad()));

@@ -25,6 +25,11 @@ public class GlobalExceptionHandler {
             .body(new ErrorResponse("No se pudo enviar el email con el código OTP. Verifique la configuración SMTP."));
     }
 
+    @ExceptionHandler(CotizacionNoDisponibleException.class)
+    public ResponseEntity<ErrorResponse> handleCotizacionNoDisponible(CotizacionNoDisponibleException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(ex.getMessage()));
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(ex.getMessage()));

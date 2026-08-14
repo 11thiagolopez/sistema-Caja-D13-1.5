@@ -13,4 +13,6 @@ public class SesionCajaResponse {
     private LocalDate fecha;
     private BigDecimal montoInicial;
     private String estado;
+    private BigDecimal cotizacionUsdVenta;
+    private Integer productosActualizados;
 }

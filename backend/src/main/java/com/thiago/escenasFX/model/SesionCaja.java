@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -37,6 +38,16 @@ public class SesionCaja {
     private BigDecimal montoInicial;
 
     private String estado = "ABIERTA"; // ABIERTA | CERRADA
+
+    // Cotización USD venta usada para el recálculo masivo de precios al abrir esta sesión
+    // (dolarización). Nullable: sesiones de antes de esta funcionalidad no la tienen.
+    @Column(name = "cotizacion_usd_venta", precision = 12, scale = 2)
+    private BigDecimal cotizacionUsdVenta;
+
+    // No persistido: cantidad de productos repriceados en esta apertura (dolarización), sólo
+    // presente en el objeto que devuelve CajaService.abrirSesion para informar al ADMIN.
+    @Transient
+    private int productosActualizados;
 
     @ManyToOne
     @JoinColumn(name = "id_empleado_apertura")

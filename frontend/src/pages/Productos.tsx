@@ -313,6 +313,8 @@ export function Productos() {
             <th>Código interno</th>
             <th>Código de fábrica</th>
             <th>Precio venta</th>
+            <th>USD venta</th>
+            <th>USD compra</th>
             <th>Stock</th>
             {esAdmin && <th />}
           </tr>
@@ -332,6 +334,8 @@ export function Productos() {
                 'number',
                 '0.01',
               )}
+              <td>{producto.precioVentaUsd != null ? `USD ${producto.precioVentaUsd.toFixed(2)}` : '—'}</td>
+              <td>{producto.precioCompraUsd != null ? `USD ${producto.precioCompraUsd.toFixed(2)}` : '—'}</td>
               {celdaEditable(producto, 'stockActual', String(producto.stockActual), 'number', '1')}
               {esAdmin && (
                 <td>

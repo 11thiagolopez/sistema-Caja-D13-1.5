@@ -61,6 +61,16 @@ public class Producto {
     @Column(name = "precio_compra", precision = 12, scale = 2)
     private BigDecimal precioCompra;
 
+    // Ancla en USD de precioVenta/precioCompra (dolarización): se recalcula sola cada vez que se
+    // fija un precio en pesos (ver ProductoService.sincronizarAnclaUsd) y es lo que usa el
+    // recálculo masivo al abrir caja para volver a pesos con la cotización del día. Uso interno —
+    // nunca aparece en comprobantes de cara al cliente.
+    @Column(name = "precio_venta_usd", precision = 12, scale = 2)
+    private BigDecimal precioVentaUsd;
+
+    @Column(name = "precio_compra_usd", precision = 12, scale = 2)
+    private BigDecimal precioCompraUsd;
+
     @Column(name = "stock_actual")
     private int stockActual;
 

@@ -9,7 +9,43 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-08-10, sesión larga con cuatro pedidos encadenados del dueño):
+Estado Actual (Actualizado al 2026-08-14, dolarización de precios completa + gate diario de
+cotización + Compras en ARS/USD):
+
+**Dolarización de precios, implementada de punta a punta** (retoma el PENDIENTE del corte
+anterior). Cada producto tiene ahora un ancla en USD (`precioVentaUsd`/`precioCompraUsd`,
+recalculada sola cada vez que se guarda un precio en pesos vía alta/edición/compra) y, al abrir
+caja, un recálculo masivo (`ProductoRepository.reajustarPreciosPorCotizacion`) vuelve a pesos
+contra la cotización oficial VENTA del día, redondeando al múltiplo de $100 más cercano — dominio
+nuevo `CotizacionDolar`/`CotizacionService`/`CotizacionApiClient` (dos APIs públicas gratuitas
+encadenadas, dolarapi.com → dolar-bna.vercel.app). Migración inicial aplicada sobre los ~6900
+productos reales el 2026-08-12 con la cotización real de ese día ($1515) — solo estableció el
+ancla, no tocó los precios en pesos vigentes. Los comprobantes (tickets/remitos/PDFs) no se
+tocaron: siguen mostrando únicamente pesos.
+
+**Gate diario de cotización, nuevo** (pedido posterior del dueño, amplía el alcance original más
+allá de solo "abrir caja"): nadie —ni ADMIN ni VENDEDOR— puede operar el sistema hasta que exista
+una cotización cargada para hoy. Se intenta cargar sola al loguear (`GET/POST /api/cotizacion/*`,
+nuevo `CotizacionController`); si las dos APIs fallan, solo ADMIN puede cargarla a mano y recién
+ahí se desbloquea también VENDEDOR. `components/CotizacionGateModal.tsx` (nuevo) bloquea el
+sistema entero desde `Layout.tsx`, con prioridad sobre el modal de "abrir caja" ya existente. Un
+cartel puntual ("Cotización del día: USD $X") avisa **solo a ADMIN**, y solo cuando la carga la
+disparó esa misma sesión — VENDEDOR nunca ve el valor del dólar.
+
+**Compras en ARS/USD + % de ganancia** (`ComprasNueva.tsx`). Cada renglón tiene un `<select>`
+ARS/USD independiente para precio de compra y precio de venta, más una columna nueva "%
+Ganancia" entre ambos que autocompleta el precio de venta (recargo sobre el costo: 100% = vender
+al doble). Todo el cálculo es de UI contra la cotización del día — el contrato del backend
+(`CompraItemRequest`) no cambió, sigue recibiendo siempre pesos.
+
+Backend: **134 tests** verdes (`mvn -q -o test`). `tsc -b` limpio. Probado por API (`curl`) contra
+Supabase real en las dos sesiones — **no hubo navegador automatizado disponible en ninguna de las
+dos**, así que ninguna de las pantallas nuevas (gate, cartel, Compras con ARS/USD) se vio todavía
+renderizada en Chrome; queda pendiente confirmarlo visualmente la próxima vez que se abra el
+sistema. Detalle técnico completo en `plan-migracion.md` sección 17 y `plan-frontend.md` "Estado
+actual".
+
+Estado Anterior (Actualizado al 2026-08-10, sesión larga con cuatro pedidos encadenados del dueño):
 
 **1. Reportes ampliados.** Nuevos reportes "Ventas por marca" (`ReporteService.ventasPorMarca`,
 `GET /api/reportes/ventas-por-marca`) y "Ventas por forma de pago" (`ventasPorFormaPago`,

@@ -41,6 +41,10 @@ export interface Producto {
   descripcion: string
   precioVenta: number | null
   precioCompra: number | null
+  // Ancla en USD (dolarización), uso interno/ADMIN — nunca se muestra a un cliente. Null hasta
+  // que exista alguna cotización cargada (ver CotizacionService).
+  precioVentaUsd: number | null
+  precioCompraUsd: number | null
   stockActual: number
   activo: boolean
 }
@@ -176,6 +180,9 @@ export interface ConfirmarDescuentoRequest {
 export interface AbrirCajaRequest {
   idEmpleado: number
   montoInicial: number
+  // Solo se envía cuando las dos APIs de cotización fallaron (ver SesionCajaResponse) y el ADMIN
+  // la carga a mano.
+  cotizacionManual?: number
 }
 
 export interface RetiroSolicitarRequest {
@@ -195,6 +202,22 @@ export interface SesionCajaResponse {
   fecha: string
   montoInicial: number
   estado: EstadoSesionCaja
+  // Dolarización: cotización USD venta usada para repricear productos al abrir esta sesión.
+  cotizacionUsdVenta: number | null
+  productosActualizados: number
+}
+
+// Gate diario de dolarización: /api/cotizacion/actual devuelve esto si ya se cargó la cotización
+// de HOY (204 si no, ver getCotizacionActual). fuente: 'dolarapi.com' | 'dolar-bna' | 'MANUAL'.
+export interface CotizacionResponse {
+  valorVenta: number
+  fecha: string
+  fuente: string
+  manual: boolean
+}
+
+export interface CotizacionManualRequest {
+  valorVenta: number
 }
 
 export interface SolicitudRetiroResponse {

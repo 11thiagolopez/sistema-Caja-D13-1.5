@@ -1,8 +1,13 @@
 package com.thiago.escenasFX.controller;
 
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +22,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.service.CotizacionApiClient;
 
 /**
  * Base para los tests de integración HTTP: levanta el contexto Spring completo (controller ->
@@ -45,6 +51,18 @@ abstract class AbstractIntegrationTest {
 
     @MockBean
     protected JavaMailSender javaMailSender;
+
+    // Dolarización: evita que abrir caja le pegue a las APIs públicas de cotización durante los
+    // tests (red real, flaky, lenta). Con un valor por defecto fijo, cualquier test que abra caja
+    // obtiene una cotización determinística sin tener que mockear esto uno por uno.
+    @MockBean
+    protected CotizacionApiClient cotizacionApiClient;
+
+    @BeforeEach
+    void configurarCotizacionPorDefecto() {
+        lenient().when(cotizacionApiClient.consultarPrimaria()).thenReturn(Optional.of(new BigDecimal("1000")));
+        lenient().when(cotizacionApiClient.consultarSecundaria()).thenReturn(Optional.of(new BigDecimal("1000")));
+    }
 
     protected Empleado crearEmpleado(String usuario, String passwordPlano, String rol, String email) {
         Empleado empleado = new Empleado();

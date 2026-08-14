@@ -260,6 +260,38 @@
   background: var(--bg-alt);
 }
 
+.celda-precio-moneda {
+  display: flex;
+  gap: 4px;
+}
+
+.celda-precio-moneda input {
+  width: 90px;
+}
+
+.celda-precio-moneda select {
+  width: 66px;
+}
+
+.aviso-cotizacion {
+  margin: 0;
+  padding: 8px 20px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--table-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.aviso-cotizacion button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+}
+
 section {
   margin-bottom: 24px;
 }

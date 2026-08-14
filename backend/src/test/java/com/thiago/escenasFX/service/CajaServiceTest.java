@@ -24,12 +24,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
+import com.thiago.escenasFX.exception.CotizacionNoDisponibleException;
+import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.MovimientoCaja;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.MovimientoCajaRepository;
+import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.SolicitudRetiroRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -49,6 +52,10 @@ class CajaServiceTest {
     private OtpService otpService;
     @Mock
     private EmailService emailService;
+    @Mock
+    private CotizacionService cotizacionService;
+    @Mock
+    private ProductoRepository productoRepo;
 
     @InjectMocks
     private CajaService cajaService;
@@ -69,20 +76,56 @@ class CajaServiceTest {
         return m;
     }
 
+    private CotizacionDolar cotizacion(String valorVenta) {
+        CotizacionDolar c = new CotizacionDolar();
+        c.setValorVenta(new BigDecimal(valorVenta));
+        return c;
+    }
+
     @Test
     void abrirSesion_sinSesionAbierta_creaSesion() {
         when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.empty());
         when(sesionRepo.save(any(SesionCaja.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionService.obtenerCotizacionDelDia()).thenReturn(cotizacion("1234.56"));
+        when(productoRepo.reajustarPreciosPorCotizacion(new BigDecimal("1234.56"))).thenReturn(42);
 
         Empleado empleado = new Empleado();
         empleado.setIdEmpleado(1);
 
-        SesionCaja creada = cajaService.abrirSesion(new BigDecimal("1000"), empleado);
+        SesionCaja creada = cajaService.abrirSesion(new BigDecimal("1000"), empleado, null);
 
         assertThat(creada.getEstado()).isEqualTo("ABIERTA");
         assertThat(creada.getMontoInicial()).isEqualByComparingTo("1000");
         assertThat(creada.getEmpleadoApertura()).isEqualTo(empleado);
         assertThat(creada.getFecha()).isEqualTo(LocalDate.now());
+        assertThat(creada.getCotizacionUsdVenta()).isEqualByComparingTo("1234.56");
+        assertThat(creada.getProductosActualizados()).isEqualTo(42);
+        verify(cotizacionService, never()).registrarManual(any());
+    }
+
+    @Test
+    void abrirSesion_conCotizacionManual_laRegistraYNoConsultaLasApis() {
+        when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.empty());
+        when(sesionRepo.save(any(SesionCaja.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionService.registrarManual(new BigDecimal("1300"))).thenReturn(cotizacion("1300"));
+        when(productoRepo.reajustarPreciosPorCotizacion(new BigDecimal("1300"))).thenReturn(10);
+
+        SesionCaja creada = cajaService.abrirSesion(new BigDecimal("1000"), new Empleado(), new BigDecimal("1300"));
+
+        assertThat(creada.getCotizacionUsdVenta()).isEqualByComparingTo("1300");
+        verify(cotizacionService, never()).obtenerCotizacionDelDia();
+    }
+
+    @Test
+    void abrirSesion_sinManualYCotizacionNoDisponible_propagaExcepcion() {
+        when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.empty());
+        when(cotizacionService.obtenerCotizacionDelDia())
+            .thenThrow(new CotizacionNoDisponibleException("No se pudo obtener la cotización"));
+
+        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado(), null))
+            .isInstanceOf(CotizacionNoDisponibleException.class);
+
+        verify(sesionRepo, never()).save(any());
     }
 
     @Test
@@ -90,7 +133,7 @@ class CajaServiceTest {
         when(sesionRepo.findByEstado(eq("ABIERTA")))
             .thenReturn(Optional.of(new SesionCaja()));
 
-        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado()))
+        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado(), null))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Ya existe una sesión de caja abierta");
 
@@ -112,7 +155,7 @@ class CajaServiceTest {
         sesionDeAyer.setEstado("ABIERTA");
         when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.of(sesionDeAyer));
 
-        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado()))
+        assertThatThrownBy(() -> cajaService.abrirSesion(new BigDecimal("1000"), new Empleado(), null))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Ya existe una sesión de caja abierta");
 

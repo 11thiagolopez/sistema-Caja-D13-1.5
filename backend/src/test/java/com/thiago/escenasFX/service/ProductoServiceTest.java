@@ -34,6 +34,9 @@ class ProductoServiceTest {
     @Mock
     private ProveedorService proveedorService;
 
+    @Mock
+    private CotizacionService cotizacionService;
+
     @InjectMocks
     private ProductoService productoService;
 
@@ -174,5 +177,55 @@ class ProductoServiceTest {
 
         assertThatThrownBy(() -> productoService.actualizar(999, new ProductoUpdateRequest()))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void crear_conCotizacionConocida_calculaAnclaUsd() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of());
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionService.ultimaConocida()).thenReturn(Optional.of(new BigDecimal("1000")));
+
+        ProductoRequest req = request("01", "05", "02");
+        req.setPrecioVenta(new BigDecimal("100000"));
+        req.setPrecioCompra(new BigDecimal("50000"));
+
+        Producto creado = productoService.crear(req);
+
+        assertThat(creado.getPrecioVentaUsd()).isEqualByComparingTo("100.00");
+        assertThat(creado.getPrecioCompraUsd()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void crear_sinCotizacionConocida_dejaAnclaUsdEnNull() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of());
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionService.ultimaConocida()).thenReturn(Optional.empty());
+
+        Producto creado = productoService.crear(request("01", "05", "02"));
+
+        assertThat(creado.getPrecioVentaUsd()).isNull();
+        assertThat(creado.getPrecioCompraUsd()).isNull();
+    }
+
+    @Test
+    void actualizar_recalculaAnclaUsdContraElPrecioVigente() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setPrecioVenta(new BigDecimal("200000"));
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionService.ultimaConocida()).thenReturn(Optional.of(new BigDecimal("1000")));
+
+        // Edita solo el stock -- el ancla igual se recalcula contra el precio ya vigente.
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setStockActual(3);
+
+        Producto actualizado = productoService.actualizar(7, req);
+
+        assertThat(actualizado.getPrecioVentaUsd()).isEqualByComparingTo("200.00");
     }
 }

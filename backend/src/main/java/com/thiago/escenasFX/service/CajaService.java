@@ -13,12 +13,14 @@ import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
 import com.thiago.escenasFX.dto.ResumenSesionDTO;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
+import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.MovimientoCaja;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.MovimientoCajaRepository;
+import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.SolicitudRetiroRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -34,15 +36,20 @@ public class CajaService {
     private final SolicitudRetiroRepository solicitudRetiroRepo;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final CotizacionService cotizacionService;
+    private final ProductoRepository productoRepo;
 
     public CajaService(VentaRepository ventaRepo, MovimientoCajaRepository movRepo, SesionCajaRepository sesionRepo,
-            SolicitudRetiroRepository solicitudRetiroRepo, OtpService otpService, EmailService emailService) {
+            SolicitudRetiroRepository solicitudRetiroRepo, OtpService otpService, EmailService emailService,
+            CotizacionService cotizacionService, ProductoRepository productoRepo) {
         this.ventaRepo = ventaRepo;
         this.movRepo = movRepo;
         this.sesionRepo = sesionRepo;
         this.solicitudRetiroRepo = solicitudRetiroRepo;
         this.otpService = otpService;
         this.emailService = emailService;
+        this.cotizacionService = cotizacionService;
+        this.productoRepo = productoRepo;
     }
 
     /**
@@ -52,18 +59,28 @@ public class CajaService {
      * sesión vieja sin cerrar, hay que cerrarla primero — no se auto-cierra sola para no perder de
      * vista la diferencia de caja de ese turno.
      */
-    public SesionCaja abrirSesion(BigDecimal montoInicial, Empleado empleado) {
+    @Transactional
+    public SesionCaja abrirSesion(BigDecimal montoInicial, Empleado empleado, BigDecimal cotizacionManual) {
         sesionRepo.findByEstado("ABIERTA").ifPresent(s -> {
             throw new IllegalStateException(
                 "Ya existe una sesión de caja abierta (del " + s.getFecha() + "); hay que cerrarla antes de abrir una nueva");
         });
+
+        CotizacionDolar cotizacionEntidad = cotizacionManual != null
+            ? cotizacionService.registrarManual(cotizacionManual)
+            : cotizacionService.obtenerCotizacionDelDia();
+        BigDecimal cotizacion = cotizacionEntidad.getValorVenta();
+        int productosActualizados = productoRepo.reajustarPreciosPorCotizacion(cotizacion);
 
         SesionCaja sesion = new SesionCaja();
         sesion.setFecha(LocalDate.now());
         sesion.setMontoInicial(montoInicial);
         sesion.setEstado("ABIERTA");
         sesion.setEmpleadoApertura(empleado);
-        return sesionRepo.save(sesion);
+        sesion.setCotizacionUsdVenta(cotizacion);
+        sesion = sesionRepo.save(sesion);
+        sesion.setProductosActualizados(productosActualizados);
+        return sesion;
     }
 
     public SesionCaja obtenerSesionAbierta() {

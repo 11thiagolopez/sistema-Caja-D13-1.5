@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getSesionAbierta } from '../api/caja'
-import type { Rol } from '../types/api'
+import { getCotizacionActual } from '../api/cotizacion'
+import type { CotizacionResponse, Rol } from '../types/api'
 import { AbrirCajaModal } from './AbrirCajaModal'
 import { CerrarCajaModal } from './CerrarCajaModal'
 import { RetiroModal } from './RetiroModal'
 import { ProveedoresModal } from './ProveedoresModal'
+import { CotizacionGateModal } from './CotizacionGateModal'
 
 type ModalKey = 'abrir-caja' | 'cerrar-caja' | 'retiro' | 'proveedores'
 
@@ -85,6 +87,18 @@ export function Layout() {
   const [cajaObligatoria, setCajaObligatoria] = useState(false)
   const [sidebarAbierta, setSidebarAbierta] = useState(true)
 
+  // Dolarización: gate diario que va ANTES que el de caja — nadie (ningún rol) puede operar el
+  // sistema sin la cotización del día cargada. Arranca en true (bloquea) hasta que el chequeo
+  // inicial confirme que ya existe una cotización de hoy.
+  const [cotizacionObligatoria, setCotizacionObligatoria] = useState(true)
+  const [avisoCotizacion, setAvisoCotizacion] = useState<CotizacionResponse | null>(null)
+
+  useEffect(() => {
+    getCotizacionActual().then((cotizacion) => {
+      setCotizacionObligatoria(!cotizacion)
+    })
+  }, [])
+
   // Se dispara una sola vez al entrar a cualquier pantalla logueada: si no hay una sesión de
   // caja ABIERTA, fuerza el modal de "abrir caja" (ambos roles) antes de dejar hacer nada más.
   useEffect(() => {
@@ -94,6 +108,15 @@ export function Layout() {
       }
     })
   }, [])
+
+  function onCotizacionCargada(cotizacion: CotizacionResponse) {
+    setCotizacionObligatoria(false)
+    // El cartelito solo aparece cuando ESTA sesión disparó la carga (no si ya existía de antes
+    // al entrar), y nunca para VENDEDOR — no tiene que saber el valor del dólar.
+    if (sesion?.rol === 'ADMIN') {
+      setAvisoCotizacion(cotizacion)
+    }
+  }
 
   function onLogout() {
     logout()
@@ -186,12 +209,22 @@ export function Layout() {
             </button>
           </div>
         </header>
+        {avisoCotizacion && (
+          <p className="aviso-cotizacion">
+            Cotización del día: USD ${avisoCotizacion.valorVenta.toFixed(2)}
+            <button type="button" onClick={() => setAvisoCotizacion(null)} aria-label="Cerrar aviso">
+              ×
+            </button>
+          </p>
+        )}
         <main>
           <Outlet />
         </main>
       </div>
 
-      {cajaObligatoria ? (
+      {cotizacionObligatoria ? (
+        <CotizacionGateModal onExito={onCotizacionCargada} />
+      ) : cajaObligatoria ? (
         <AbrirCajaModal
           onExito={() => {
             setCajaObligatoria(false)

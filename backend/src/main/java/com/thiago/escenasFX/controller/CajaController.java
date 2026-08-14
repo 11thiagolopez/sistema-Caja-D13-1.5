@@ -51,7 +51,7 @@ public class CajaController {
     public SesionCajaResponse abrir(@Valid @RequestBody AbrirCajaRequest request) {
         Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
             .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
-        SesionCaja sesion = cajaService.abrirSesion(request.getMontoInicial(), empleado);
+        SesionCaja sesion = cajaService.abrirSesion(request.getMontoInicial(), empleado, request.getCotizacionManual());
         return toResponse(sesion);
     }
 
@@ -136,7 +136,7 @@ public class CajaController {
 
     private SesionCajaResponse toResponse(SesionCaja sesion) {
         return new SesionCajaResponse(sesion.getIdSesion(), sesion.getFecha(), sesion.getMontoInicial(),
-            sesion.getEstado());
+            sesion.getEstado(), sesion.getCotizacionUsdVenta(), sesion.getProductosActualizados());
     }
 
     private MovimientoCajaResponse toResponse(MovimientoCaja m) {

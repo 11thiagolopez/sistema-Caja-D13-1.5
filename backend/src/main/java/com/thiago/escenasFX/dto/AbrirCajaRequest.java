@@ -17,4 +17,8 @@ public class AbrirCajaRequest {
     @NotNull
     @PositiveOrZero
     private BigDecimal montoInicial;
+
+    // Solo se envía cuando las dos APIs de cotización fallaron y el ADMIN la carga a mano
+    // (ver CotizacionNoDisponibleException).
+    private BigDecimal cotizacionManual;
 }
