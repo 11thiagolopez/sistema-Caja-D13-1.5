@@ -230,6 +230,11 @@ export function HistorialVentas() {
               <td>{venta.descuento.toFixed(2)}</td>
               <td>
                 {venta.estado}
+                {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
+                  <Link to={`/ventas/domicilio?id=${venta.idVenta}`}> Abrir para editar</Link>
+                )}
+              </td>
+              <td>
                 {venta.estado === 'PENDIENTE_AUTORIZACION' && (
                   <span className="confirmar-descuento">
                     <input
@@ -248,9 +253,6 @@ export function HistorialVentas() {
                       {confirmandoId === venta.idVenta ? 'Confirmando...' : 'Confirmar'}
                     </button>
                   </span>
-                )}
-                {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
-                  <Link to={`/ventas/domicilio?id=${venta.idVenta}`}> Abrir para editar</Link>
                 )}
               </td>
               <td>

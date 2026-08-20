@@ -19,10 +19,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ex.getMessage()));
     }
 
+    // Handler compartido por todos los flujos que mandan email (OTP de retiro/descuento,
+    // comprobante interno, presupuesto) — el mensaje no puede asumir que siempre es un OTP.
+    // Se agrega la causa real (ej. credenciales SMTP rechazadas) para poder diagnosticar sin
+    // acceso a los logs del servidor.
     @ExceptionHandler(MailException.class)
     public ResponseEntity<ErrorResponse> handleMailError(MailException ex) {
+        String causa = ex.getMostSpecificCause().getMessage();
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(new ErrorResponse("No se pudo enviar el email con el código OTP. Verifique la configuración SMTP."));
+            .body(new ErrorResponse("No se pudo enviar el email. Verifique la configuración SMTP. Detalle: " + causa));
     }
 
     @ExceptionHandler(CotizacionNoDisponibleException.class)
