@@ -104,6 +104,24 @@ cliente y termina la venta apenas el ADMIN le pasa el código).
 qué ventas están esperando confirmación, hay que pedir `GET /api/ventas?desde=hoy&hasta=hoy` y
 filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 
+### Facturación fiscal (`/api/ventas/{idVenta}/factura`) — **solo ADMIN**, nuevo 2026-08-19
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| POST | `/api/ventas/{idVenta}/factura` | `{clienteDocTipo, clienteDocNro?}` | `FacturaFiscalResponse` |
+| GET | `/api/ventas/{idVenta}/factura` | — | `200 FacturaFiscalResponse` si ya se facturó, `204` si no |
+
+`clienteDocTipo`: `80` (CUIT) \| `96` (DNI) \| `99` (Consumidor Final — en ese caso `clienteDocNro`
+va vacío, cualquier otro valor lo exige). `FacturaFiscalResponse`: `{idFactura, idVenta,
+puntoVenta, tipoComprobante, numero, clienteDocTipo, clienteDocNro, cae, caeVencimiento, importe,
+estado, errorDetalle}` (`estado`: `"PENDIENTE"` \| `"EMITIDA"` \| `"ERROR"` — con `ERROR`,
+`errorDetalle` trae el motivo que devolvió ARCA, reintentable llamando `POST` de nuevo).
+
+**Acción aparte del comprobante interno** (no lo reemplaza, no se dispara sola): D13 es Monotributo,
+así que siempre emite Factura C real contra ARCA de producción — **no hay ambiente de
+homologación**, cada llamada exitosa genera un comprobante fiscal irreversible. Vive únicamente en
+Consulta de ventas (`HistorialVentas.tsx`), pantalla ya exclusiva de ADMIN.
+
 ### Caja (`/api/caja`)
 
 | Método | Ruta | Rol | Body | Devuelve |
@@ -298,7 +316,24 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-08-14)
+## Estado actual (Actualizado al 2026-08-19)
+
+**Facturación fiscal ARCA/AFIP (Factura C, D13 Monotributo)** — detalle técnico completo
+(backend, decisiones, qué se verificó, el bug del punto de venta) en `plan-migracion.md`, sección
+18. Resumen del lado frontend:
+
+- **`HistorialVentas.tsx`**: columna nueva "Factura fiscal" (solo filas `CONFIRMADA`) — selector de
+  tipo de documento del cliente (CUIT/DNI/Consumidor Final) + input de número + botón "Facturar";
+  una vez emitida muestra número de comprobante y CAE. Componente `FacturaFiscalCelda` local al
+  archivo. Las facturas ya emitidas se traen en batch (`Promise.all`) junto con la búsqueda de
+  ventas, no por fila.
+- **`api/facturas.ts`, nuevo**: `facturarVenta`, `getFactura`.
+- **`types/api.ts`**: `FacturarVentaRequest`, `FacturaFiscalResponse`, `ClienteDocTipo`.
+
+`tsc -b` limpio. Probado en Chrome contra ARCA de producción real (no hay homologación) — una
+venta real, CAE obtenido y verificado.
+
+## Estado anterior (Actualizado al 2026-08-14)
 
 **Dolarización de precios + gate diario de cotización + Compras en ARS/USD** — detalle técnico
 completo (backend, decisiones de diseño, qué se verificó) en `plan-migracion.md`, sección 17.

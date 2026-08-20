@@ -126,6 +126,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/ventas/*").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasRole("ADMIN")
                 .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
+                // Facturación fiscal (ARCA/WSFE): vive únicamente en Consulta de ventas, pantalla
+                // ya exclusiva de ADMIN — se mantiene ADMIN-only acá también, es una acción
+                // irreversible (emite un comprobante fiscal real).
+                .requestMatchers("/api/ventas/*/factura").hasRole("ADMIN")
                 // Presupuestos: herramienta de venta del día a día (como Cobros), no un reporte
                 // administrativo — no afecta stock ni caja, así que no sigue la regla de abajo
                 // de que todo "/api/reportes/**" es exclusivo de ADMIN.

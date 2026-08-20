@@ -1502,3 +1502,119 @@ del día ($1510) que iba a usar el negocio. Empleados de prueba borrados al term
 **Pendiente real: nunca se vio ninguna de las dos pantallas nuevas (gate, Compras con ARS/USD)
 renderizada en un navegador** — toda la verificación fue por API; la próxima sesión con Chrome
 disponible debería confirmar visualmente que no hay sorpresas de layout.
+
+## 18. Sesión 2026-08-19: Facturación fiscal ARCA/AFIP (WSFEv1) — primera versión, verificada con una factura real
+
+Pedido del dueño: que el sistema pueda emitir facturas fiscales. D13 es Monotributo, así que
+siempre es Factura C (no discrimina IVA). Decisiones confirmadas antes de escribir código:
+integración **directa con ARCA vía SOAP** (WSAA + WSFEv1, sin intermediario tipo AfipSDK), acción
+**aparte** ("Facturar" en Consulta de ventas, no reemplaza el comprobante interno), aplica a
+**Cobros de mostrador y Trabajo a domicilio** (Presupuestos no, nunca genera una venta real).
+
+**Contexto importante que no está en el código, solo acá y en la memoria del proyecto**: no existe
+certificado de homologación — fue decisión explícita del dueño no generarlo — así que toda prueba
+real de esta integración, desde la primera, le pega a ARCA de **producción** y emite un comprobante
+fiscal real e irreversible. El certificado (clave privada `D13_privada.key` + `D13.crt`, CUIT
+`20300238379`) se generó y autorizó para WSFE en una sesión anterior (ver CLAUDE.md e historial de
+esa sesión) y vive fuera del repo en `C:\Users\thiag\afip-d13\` en la máquina de desarrollo.
+
+### 18.1 Esquema — tabla nueva, no se ensancha `ventas`
+
+`facturas_fiscales` (migración aplicada a mano por el dueño vía SQL Editor de Supabase, MCP no
+disponible en el momento — verificado después arrancando el backend con `ddl-auto=validate` contra
+Supabase real, sin errores de esquema):
+```sql
+create table if not exists public.facturas_fiscales (
+  id_factura serial primary key,
+  id_venta integer not null references public.ventas(id_venta),
+  punto_venta integer not null,
+  tipo_comprobante integer not null,
+  numero integer,
+  cliente_doc_tipo integer not null,
+  cliente_doc_nro varchar,
+  cae varchar,
+  cae_vencimiento date,
+  importe numeric(12,2),
+  estado varchar not null default 'PENDIENTE',
+  error_detalle text,
+  creado_en timestamp not null default now(),
+  constraint facturas_fiscales_id_venta_unique unique (id_venta)
+);
+```
+Es dominio propio (llamada externa con su propio ciclo de vida: pendiente/emitida/error), no
+comparte motor de cobro/caja como Trabajo a domicilio — mismo criterio que `CotizacionDolar`.
+
+### 18.2 WSAA — autenticación (`AfipAuthService`, nuevo)
+
+Dependencia nueva: `bcpkix-jdk18on`/`bcprov-jdk18on` 1.81 (BouncyCastle) — Java no trae una API de
+alto nivel para firmar CMS/PKCS7, y además la clave privada generada con `openssl genrsa` viene en
+formato PKCS#1 (`BEGIN RSA PRIVATE KEY`), que el `KeyFactory` estándar del JDK no entiende — se usa
+`PEMParser`/`JcaPEMKeyConverter` de BouncyCastle, que soporta ambos formatos sin necesidad de
+convertir el archivo a mano.
+
+- Arma el `LoginTicketRequest` (uniqueId, generationTime = ahora-10min, expirationTime =
+  ahora+10min, service=wsfe), lo firma como CMS con la clave+certificado, lo manda en base64 a
+  `https://wsaa.afip.gov.ar/ws/services/LoginCms` (operación `loginCms`).
+- Parsea la respuesta (SOAP → `loginCmsReturn` con el `LoginTicketResponse` escapado adentro →
+  `token`/`sign`) y **cachea en memoria** hasta 5 minutos antes del `expirationTime` real que
+  devuelve ARCA (no un valor fijo de 12hs) — evita pedir un login nuevo en cada factura.
+- El certificado/clave se cargan lazy (primer uso real, no al arrancar la app) desde
+  `AFIP_CERT_KEY_BASE64`/`-PATH` y `AFIP_CERT_CRT_BASE64`/`-PATH` — así el backend arranca normal
+  aunque el certificado no esté configurado (dev sin AFIP, tests) y solo falla al intentar
+  facturar de verdad.
+
+### 18.3 WSFEv1 — emisión (`AfipFacturacionService`, nuevo)
+
+Solo las dos operaciones que hacen falta, sobres SOAP armados a mano (mismo criterio de
+simplicidad que `CotizacionApiClient` con REST — no vale la pena generar stubs JAX-WS del WSDL
+completo para dos llamadas):
+- `FECompUltimoAutorizado` (`https://servicios1.afip.gov.ar/wsfev1/service.asmx`) → siguiente
+  número = último autorizado + 1, consultado **antes de cada emisión** (nunca se lleva un
+  contador propio, ARCA es la única fuente de verdad).
+- `FECAESolicitar`: un comprobante por llamada, Concepto según los `DetalleVenta` de la venta
+  (1=Productos si no hay ninguna línea `SERVICIO`, 2=Servicios si son todas, 3=mixto — Concepto
+  ≠1 exige `FchServDesde`/`FchServHasta`/`FchVtoPago`, se usa la fecha de la venta para las tres).
+  Factura C: `ImpNeto = ImpTotal`, `ImpIVA = 0` siempre (Monotributo no discrimina IVA).
+- Parseo de la respuesta escanea específicamente dentro de `FECAEDetResponse` (no en la cabecera
+  `FeCabResp`, que repite algunos de los mismos nombres de tag) para no confundir el `Resultado`
+  del comprobante puntual con el de la cabecera del lote.
+
+### 18.4 Orquestación y endpoint
+
+`FacturaFiscalService.facturar(idVenta, clienteDocTipo, clienteDocNro)`: valida venta
+`CONFIRMADA` y que no tenga ya una factura `EMITIDA`, exige documento si no es Consumidor Final
+(99), arma los datos y llama a ARCA — si aprueba guarda `EMITIDA`+CAE, si ARCA rechaza o falla la
+conexión guarda `ERROR` con el detalle **sin** tocar la `Venta` (que sigue confirmada
+independientemente). `FacturaFiscalController`: `POST/GET /api/ventas/{id}/factura`, **ADMIN-only**
+en `SecurityConfig` — vive únicamente en Consulta de ventas, pantalla ya exclusiva de ADMIN, y es
+una acción irreversible.
+
+### 18.5 Bug real encontrado probando en vivo — punto de venta equivocado
+
+Primer intento real: ARCA devolvió `10005 - NO AUTORIZADO A EMITIR COMPROBANTES - EL PUNTO DE
+VENTA INFORMADO DEBE ESTAR DADO DE ALTA Y SER DEL TIPO RECE`. El punto de venta `0001` que D13 ya
+tenía en ARCA era del tipo **"Comprobantes en línea"** (carga manual desde la web de ARCA) — un
+tipo completamente distinto a **"Web Services"**, no convertible uno en otro. El dueño dio de alta
+un punto de venta nuevo específico ("Factura Electrónica – Monotributo – Web Services") con
+número **4**, que quedó cargado en `afip.punto-venta`. Segundo intento: CAE aprobado.
+
+**Dato para el negocio, no un bug**: la factura emitida por webservice no aparece de inmediato en
+"Mis Comprobantes"/"Comprobantes en línea" de la web de ARCA — hay una demora de sincronización
+normal de ~1 día. Se verificó que el CAE era válido igual con el verificador público de
+"Constancia de CAE" (consulta en el momento, sin esa demora).
+
+### 18.6 Verificación
+
+Backend: **149 tests** verdes (`mvn -q -o test`), 15 nuevos — `AfipAuthServiceTest` (armado del
+`LoginTicketRequest`, parseo de una respuesta WSAA con la forma real documentada, sin red),
+`AfipFacturacionServiceTest` (armado del sobre `FECAESolicitar` para Concepto 1 y 3, parseo de
+aprobado/rechazado con observaciones, sin red), `FacturaFiscalServiceTest` (venta no confirmada,
+ya facturada, cliente identificado sin documento, ARCA rechaza, falla de conexión, cálculo de
+Concepto). `AfipFacturacionService` se mockea a nivel de `AbstractIntegrationTest` (como ya se
+hacía con `CotizacionApiClient`) para que ningún test de integración le pegue a ARCA real. `tsc
+-b` limpio.
+
+**Probado end-to-end contra ARCA de producción real** (no hay ambiente de homologación): venta de
+mostrador real chica, Consumidor Final, CAE obtenido y verificado con el verificador público de
+CAE. Migración de esquema corrida a mano por el dueño (Supabase MCP no disponible esa sesión),
+verificada por `ddl-auto=validate` al arrancar el backend contra Supabase real.

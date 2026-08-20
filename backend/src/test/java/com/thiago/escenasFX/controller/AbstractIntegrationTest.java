@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.service.AfipFacturacionService;
 import com.thiago.escenasFX.service.CotizacionApiClient;
 
 /**
@@ -58,10 +59,24 @@ abstract class AbstractIntegrationTest {
     @MockBean
     protected CotizacionApiClient cotizacionApiClient;
 
+    // Facturación fiscal: evita que "Facturar" le pegue a ARCA de verdad durante los tests (además
+    // de que no hay certificado configurado en el entorno de test). Mockeado en el nivel más alto
+    // (AfipFacturacionService, no AfipAuthService) para que FacturaFiscalService corra su lógica
+    // real de todos modos.
+    @MockBean
+    protected AfipFacturacionService afipFacturacionService;
+
     @BeforeEach
     void configurarCotizacionPorDefecto() {
         lenient().when(cotizacionApiClient.consultarPrimaria()).thenReturn(Optional.of(new BigDecimal("1000")));
         lenient().when(cotizacionApiClient.consultarSecundaria()).thenReturn(Optional.of(new BigDecimal("1000")));
+    }
+
+    @BeforeEach
+    void configurarFacturacionPorDefecto() {
+        lenient().when(afipFacturacionService.emitirFacturaC(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(new AfipFacturacionService.ResultadoCae(true, 1, "12345678901234",
+                java.time.LocalDate.now().plusDays(10), null));
     }
 
     protected Empleado crearEmpleado(String usuario, String passwordPlano, String rol, String email) {

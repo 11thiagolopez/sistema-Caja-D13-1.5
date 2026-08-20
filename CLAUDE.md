@@ -9,7 +9,47 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-08-14, dolarización de precios completa + gate diario de
+Estado Actual (Actualizado al 2026-08-19, facturación fiscal ARCA/AFIP funcionando de punta a
+punta contra producción):
+
+**Facturación fiscal, primera versión completa y verificada con una factura real.** D13 es
+Monotributo → todo lo que emite el sistema es Factura C (no discrimina IVA). Es una acción aparte
+("Facturar" en Consulta de ventas), no reemplaza el comprobante interno. Dominio nuevo:
+`FacturaFiscal` (tabla `facturas_fiscales`, una por venta), `AfipAuthService` (WSAA: firma el
+login con CMS/PKCS7 vía BouncyCastle usando el certificado real de D13, cachea el token ~12hs),
+`AfipFacturacionService` (WSFEv1: consulta el último comprobante autorizado y pide el CAE armando
+el SOAP a mano, sin generar stubs del WSDL), `FacturaFiscalService` (orquesta, guarda `EMITIDA`
+con CAE o `ERROR` con el detalle si ARCA rechaza — la Venta en sí no se toca). Endpoints
+`POST/GET /api/ventas/{id}/factura`, exclusivos ADMIN.
+
+**No hay certificado de homologación** (decisión explícita del dueño) — todo se probó y se sigue
+probando contra ARCA de **producción** real, así que cada factura de prueba es un comprobante
+fiscal real e irreversible. Certificado (clave privada + `.crt`, emitido y autorizado para WSFE)
+vive fuera del repo en `C:\Users\thiag\afip-d13\` en la máquina de desarrollo — nunca commitear.
+Se carga vía `AFIP_CERT_KEY_PATH`/`AFIP_CERT_CRT_PATH` (desarrollo, apunta directo a los archivos)
+o `AFIP_CERT_KEY_BASE64`/`AFIP_CERT_CRT_BASE64` (Railway/producción, contenido en base64) — mismo
+patrón que el resto de los secretos.
+
+**Bug real encontrado y resuelto probando en vivo**: el primer intento de facturar devolvió el
+error de ARCA "10005 — NO AUTORIZADO A EMITIR COMPROBANTES — EL PUNTO DE VENTA INFORMADO DEBE
+ESTAR DADO DE ALTA Y SER DEL TIPO RECE". El punto de venta `0001` que ya tenía D13 en ARCA era del
+tipo "Comprobantes en línea" (carga manual desde la web), no "Web Services" — son tipos separados,
+no se puede convertir uno en otro. El dueño dio de alta un punto de venta nuevo específico para
+Web Services ("Factura Electrónica – Monotributo – Web Services") con el número **4**, que es el
+que quedó configurado (`afip.punto-venta`). Segundo intento: ARCA devolvió CAE válido, confirmado
+además con el verificador público de "Constancia de CAE" (la factura no aparece todavía en "Mis
+Comprobantes" de la web de ARCA — demora de sincronización normal de ~1 día para todo lo emitido
+por webservice, no es un error).
+
+Backend: **149 tests** verdes (`mvn -q -o test`), incluye `AfipAuthServiceTest`/
+`AfipFacturacionServiceTest` (armado y firma del `LoginTicketRequest`, armado del sobre
+`FECAESolicitar`, parseo de respuestas con la forma real de WSFEv1 — todo sin red, no hay
+homologación contra la cual correr tests automáticos) y `FacturaFiscalServiceTest`. `tsc -b`
+limpio. Probado end-to-end en Chrome contra ARCA de producción real: una venta de mostrador real,
+Consumidor Final, CAE obtenido y verificado. Detalle técnico completo en `plan-migracion.md`
+sección 18 y `plan-frontend.md` "Estado actual".
+
+Estado Anterior (Actualizado al 2026-08-14, dolarización de precios completa + gate diario de
 cotización + Compras en ARS/USD):
 
 **Dolarización de precios, implementada de punta a punta** (retoma el PENDIENTE del corte

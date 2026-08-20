@@ -91,6 +91,19 @@
 			<version>1.0.10</version>
 		</dependency>
 
+		<!-- Firma CMS/PKCS7 del LoginTicketRequest de WSAA (facturación fiscal ARCA) — Java no trae
+		     una API de alto nivel para esto, BouncyCastle es la vía estándar. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<version>1.81</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.81</version>
+		</dependency>
+
 		<!-- JWT -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

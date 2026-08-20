@@ -158,6 +158,30 @@ export interface VentaResponse {
   detalles: DetalleVentaResponse[]
 }
 
+// 80 = CUIT | 96 = DNI | 99 = Consumidor Final (clienteDocNro va vacío en ese caso).
+export type ClienteDocTipo = 80 | 96 | 99
+
+export interface FacturarVentaRequest {
+  clienteDocTipo: ClienteDocTipo
+  clienteDocNro?: string
+}
+
+// estado: PENDIENTE (creada, todavía sin CAE) | EMITIDA | ERROR.
+export interface FacturaFiscalResponse {
+  idFactura: number
+  idVenta: number
+  puntoVenta: number
+  tipoComprobante: number
+  numero: number | null
+  clienteDocTipo: number
+  clienteDocNro: string | null
+  cae: string | null
+  caeVencimiento: string | null
+  importe: number
+  estado: 'PENDIENTE' | 'EMITIDA' | 'ERROR'
+  errorDetalle: string | null
+}
+
 // O trae idVenta (actualizar un trabajo existente) o no (crear uno nuevo).
 export interface TrabajoDomicilioRequest {
   idVenta?: number
