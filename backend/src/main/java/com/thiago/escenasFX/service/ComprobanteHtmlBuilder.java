@@ -21,6 +21,7 @@ final class ComprobanteHtmlBuilder {
     record Linea(String descripcion, int cantidad, BigDecimal precioUnitario, BigDecimal subtotal) {
     }
 
+    /** {@code notaFinal} es opcional (puede ser {@code null}) — no todo comprobante lleva una aclaración al pie. */
     static String construir(String titulo, List<String> infoLineas, List<Linea> items, BigDecimal total,
             String notaFinal, String logoSrc) {
         StringBuilder filas = new StringBuilder();
@@ -62,7 +63,9 @@ final class ComprobanteHtmlBuilder {
             + "<tbody>" + filas + "</tbody>"
             + "</table>"
             + "<p style='margin-top:12px;'><strong>Total: $" + total + "</strong></p>"
-            + "<p style='color:#777;font-size:0.9em;'>" + escapeXml(notaFinal) + "</p>"
+            + (notaFinal != null && !notaFinal.isBlank()
+                ? "<p style='color:#777;font-size:0.9em;'>" + escapeXml(notaFinal) + "</p>"
+                : "")
             + "</div></body></html>";
     }
 

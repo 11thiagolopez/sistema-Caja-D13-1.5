@@ -120,7 +120,7 @@ public class PresupuestoService {
             List.of("Para: " + presupuesto.getClienteNombre()),
             lineas,
             presupuesto.getTotalPresupuesto(),
-            "Este presupuesto es informativo y no genera ningún movimiento de stock ni venta.",
+            null,
             pdfService.logoDataUri());
     }
 }
