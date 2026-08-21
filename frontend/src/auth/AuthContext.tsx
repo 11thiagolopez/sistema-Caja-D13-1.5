@@ -22,7 +22,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 function leerSesionGuardada(): Sesion | null {
-  const raw = localStorage.getItem(STORAGE_KEY)
+  const raw = sessionStorage.getItem(STORAGE_KEY)
   if (!raw) return null
   try {
     return JSON.parse(raw) as Sesion
@@ -53,12 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rol: respuesta.rol,
       token: respuesta.token,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nuevaSesion))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nuevaSesion))
     setSesion(nuevaSesion)
   }
 
   function logout(): void {
-    localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
     setSesion(null)
   }
 

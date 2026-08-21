@@ -46,7 +46,11 @@ final class ComprobanteHtmlBuilder {
             + "<p style='margin:4px 0;color:#555;'>" + escapeXml(DIRECCION_LOCAL) + " — Tel: "
             + escapeXml(TELEFONO_LOCAL) + "</p>"
             + "<hr/>"
-            + "<p><strong>" + escapeXml(titulo) + "</strong></p>"
+            + "<table style='margin:8px 0;'><tr>"
+            + "<td style='border:2px solid #000;width:36px;height:36px;text-align:center;"
+            + "font-size:22px;font-weight:bold;'>X</td>"
+            + "<td style='padding-left:10px;'><strong>" + escapeXml(titulo) + "</strong></td>"
+            + "</tr></table>"
             + info
             + "<table style='width:100%;border-collapse:collapse;margin-top:8px;'>"
             + "<thead><tr>"

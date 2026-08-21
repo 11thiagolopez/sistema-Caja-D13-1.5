@@ -8,8 +8,9 @@ interface ComprobanteInternoProps {
 
 /**
  * Comprobante interno no fiscal: numeración propia (basada en idVenta, que ya es un correlativo
- * real de la tabla ventas) y un CAE placeholder. El día que haya integración con ARCA, este es el
- * único componente a tocar para mostrar el CAE real — el resto del flujo de ventas no cambia.
+ * real de la tabla ventas), marcado con una "X" junto al título — igual que una Factura A/B/C
+ * muestra su letra — para que no se confunda con la factura fiscal real (ver Consulta de ventas,
+ * columna "Factura fiscal", que sí emite un CAE de ARCA).
  */
 export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps) {
   const numero = String(venta.idVenta).padStart(4, '0')
@@ -18,7 +19,10 @@ export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps)
   return (
     <Modal onClose={onCerrar}>
       <div className="comprobante">
-        <h3>COMPROBANTE INTERNO N° {numero}</h3>
+        <div className="comprobante-titulo">
+          <span className="comprobante-x">X</span>
+          <h3>COMPROBANTE INTERNO N° {numero}</h3>
+        </div>
         <p className="comprobante-aviso">(no válido como factura fiscal)</p>
         <p>Fecha: {fecha}</p>
         <table>
@@ -46,7 +50,6 @@ export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps)
           <strong>TOTAL: {venta.totalVenta.toFixed(2)}</strong>
         </p>
         <p>Medio de pago: {venta.medioPago}</p>
-        <p>CAE: PENDIENTE (ARCA no configurado)</p>
         <div className="comprobante-acciones">
           <button type="button" onClick={() => window.print()}>
             Imprimir
