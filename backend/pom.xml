@@ -78,12 +78,6 @@
 			<optional>true</optional>
 		</dependency>
 
-		<!-- Envio de emails para los flujos de OTP (retiro de caja, descuento de venta) -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-mail</artifactId>
-		</dependency>
-
 		<!-- Genera el PDF de presupuestos y comprobantes de venta a partir del HTML branded -->
 		<dependency>
 			<groupId>com.openhtmltopdf</groupId>

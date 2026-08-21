@@ -1,29 +1,44 @@
 package com.thiago.escenasFX.service;
 
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
+import com.thiago.escenasFX.exception.EmailEnvioException;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-
+/**
+ * Envío de emails vía la API HTTPS de Resend (https://resend.com), no SMTP directo: Railway
+ * bloquea el puerto 587 saliente en los planes Free/Trial/Hobby (política antispam de la
+ * plataforma), así que un JavaMailSender tradicional nunca conecta desde ahí. Requiere un
+ * dominio propio verificado en Resend para poder mandarle a cualquier destinatario — con el
+ * remitente de prueba (onboarding@resend.dev) solo se puede mandar a la casilla del dueño de la
+ * cuenta de Resend.
+ */
 @Service
 public class EmailService {
 
-    private final JavaMailSender mailSender;
-    private final EmpleadoRepository empleadoRepo;
+    private static final String RESEND_URL = "https://api.resend.com/emails";
 
-    public EmailService(JavaMailSender mailSender, EmpleadoRepository empleadoRepo) {
-        this.mailSender = mailSender;
+    private final RestClient restClient;
+    private final EmpleadoRepository empleadoRepo;
+    private final String apiKey;
+    private final String remitente;
+
+    public EmailService(RestClient.Builder builder, EmpleadoRepository empleadoRepo,
+            @Value("${resend.api-key}") String apiKey, @Value("${resend.remitente}") String remitente) {
+        this.restClient = builder.build();
         this.empleadoRepo = empleadoRepo;
+        this.apiKey = apiKey;
+        this.remitente = remitente;
     }
 
     public void enviarOtpAAdmins(String asunto, String cuerpo) {
@@ -38,11 +53,7 @@ public class EmailService {
                 "No hay ningún ADMIN con email configurado para recibir el código OTP");
         }
 
-        SimpleMailMessage mensaje = new SimpleMailMessage();
-        mensaje.setTo(emails.toArray(new String[0]));
-        mensaje.setSubject(asunto);
-        mensaje.setText(cuerpo);
-        mailSender.send(mensaje);
+        enviar(emails, asunto, cuerpo, null, null);
     }
 
     /**
@@ -51,16 +62,32 @@ public class EmailService {
      */
     public void enviarConAdjuntoPdf(String destinatario, String asunto, String cuerpoTexto, String nombreArchivo,
             byte[] pdfBytes) {
+        enviar(List.of(destinatario), asunto, cuerpoTexto, nombreArchivo, pdfBytes);
+    }
+
+    private void enviar(List<String> destinatarios, String asunto, String cuerpo, String nombreArchivo,
+            byte[] adjuntoPdf) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("from", remitente);
+        body.put("to", destinatarios);
+        body.put("subject", asunto);
+        body.put("text", cuerpo);
+        if (adjuntoPdf != null) {
+            body.put("attachments", List.of(Map.of(
+                "filename", nombreArchivo,
+                "content", Base64.getEncoder().encodeToString(adjuntoPdf))));
+        }
+
         try {
-            MimeMessage mensaje = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mensaje, true, "UTF-8");
-            helper.setTo(destinatario);
-            helper.setSubject(asunto);
-            helper.setText(cuerpoTexto);
-            helper.addAttachment(nombreArchivo, new ByteArrayResource(pdfBytes), "application/pdf");
-            mailSender.send(mensaje);
-        } catch (MessagingException e) {
-            throw new IllegalStateException("No se pudo armar el email con el PDF adjunto", e);
+            restClient.post()
+                .uri(RESEND_URL)
+                .header("Authorization", "Bearer " + apiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toBodilessEntity();
+        } catch (Exception e) {
+            throw new EmailEnvioException("No se pudo enviar el email vía Resend: " + e.getMessage(), e);
         }
     }
 }

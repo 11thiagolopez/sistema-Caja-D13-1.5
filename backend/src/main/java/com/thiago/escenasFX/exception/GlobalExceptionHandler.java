@@ -4,7 +4,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mail.MailException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -21,13 +20,9 @@ public class GlobalExceptionHandler {
 
     // Handler compartido por todos los flujos que mandan email (OTP de retiro/descuento,
     // comprobante interno, presupuesto) — el mensaje no puede asumir que siempre es un OTP.
-    // Se agrega la causa real (ej. credenciales SMTP rechazadas) para poder diagnosticar sin
-    // acceso a los logs del servidor.
-    @ExceptionHandler(MailException.class)
-    public ResponseEntity<ErrorResponse> handleMailError(MailException ex) {
-        String causa = ex.getMostSpecificCause().getMessage();
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(new ErrorResponse("No se pudo enviar el email. Verifique la configuración SMTP. Detalle: " + causa));
+    @ExceptionHandler(EmailEnvioException.class)
+    public ResponseEntity<ErrorResponse> handleEmailEnvio(EmailEnvioException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(ex.getMessage()));
     }
 
     @ExceptionHandler(CotizacionNoDisponibleException.class)

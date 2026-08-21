@@ -2,6 +2,7 @@ package com.thiago.escenasFX.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -17,7 +18,6 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mail.SimpleMailMessage;
 
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.Producto;
@@ -44,9 +44,9 @@ class VentaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     private String extraerCodigoOtpDelUltimoEmail() {
-        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(javaMailSender).send(captor.capture());
-        Matcher m = PATRON_CODIGO.matcher(captor.getValue().getText());
+        ArgumentCaptor<String> cuerpoCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService).enviarOtpAAdmins(anyString(), cuerpoCaptor.capture());
+        Matcher m = PATRON_CODIGO.matcher(cuerpoCaptor.getValue());
         assertThat(m.find()).as("el email debe contener el código OTP de 6 dígitos").isTrue();
         return m.group(1);
     }

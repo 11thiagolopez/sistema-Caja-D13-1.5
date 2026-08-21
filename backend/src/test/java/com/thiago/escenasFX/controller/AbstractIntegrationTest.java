@@ -13,7 +13,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +23,13 @@ import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.service.AfipFacturacionService;
 import com.thiago.escenasFX.service.CotizacionApiClient;
+import com.thiago.escenasFX.service.EmailService;
 
 /**
  * Base para los tests de integración HTTP: levanta el contexto Spring completo (controller ->
  * service -> repository -> H2 real) con seguridad JWT activa, y mockea el envío de emails
- * (JavaMailSender) para no depender de un SMTP real en los flujos de OTP.
+ * (EmailService, que le pega a la API de Resend) para no depender de un servicio de mail real en
+ * los flujos de OTP.
  *
  * Cada test corre dentro de una transacción que se revierte al final (@Transactional), así que
  * los datos que crea un test no afectan a los demás sin necesidad de limpieza manual.
@@ -51,7 +52,7 @@ abstract class AbstractIntegrationTest {
     protected PasswordEncoder passwordEncoder;
 
     @MockBean
-    protected JavaMailSender javaMailSender;
+    protected EmailService emailService;
 
     // Dolarización: evita que abrir caja le pegue a las APIs públicas de cotización durante los
     // tests (red real, flaky, lenta). Con un valor por defecto fijo, cualquier test que abra caja
