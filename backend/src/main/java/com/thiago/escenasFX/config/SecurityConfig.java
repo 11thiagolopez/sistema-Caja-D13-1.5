@@ -54,8 +54,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         
         // 1. Poné el dominio fijo para descartar errores de lectura de variables
-        config.setAllowedOrigins(List.of("https://www.distribuidorad13.com.ar")); 
-        
+config.setAllowedOrigins(allowedOrigins);        
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         
         // 2. CLAVE: Permitir todas las cabeceras (asterisco)
