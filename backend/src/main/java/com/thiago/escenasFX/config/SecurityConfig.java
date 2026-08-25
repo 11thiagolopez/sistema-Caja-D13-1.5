@@ -49,12 +49,18 @@ public class SecurityConfig {
      * Vite/CRA en desarrollo local. En producción, sobreescribir con el dominio real del
      * frontend.
      */
-    @Bean
+   @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(allowedOrigins);
+        
+        // 1. Poné el dominio fijo para descartar errores de lectura de variables
+        config.setAllowedOrigins(List.of("https://www.distribuidorad13.com.ar")); 
+        
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        
+        // 2. CLAVE: Permitir todas las cabeceras (asterisco)
+        config.setAllowedHeaders(List.of("*")); 
+        
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
