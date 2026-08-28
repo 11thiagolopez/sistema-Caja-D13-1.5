@@ -1,5 +1,5 @@
 package com.thiago.escenasFX.controller;
-
+import com.thiago.escenasFX.service.EmailService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.FacturaFiscalResponse;
@@ -24,10 +25,12 @@ public class FacturaFiscalController {
 
     private final FacturaFiscalService facturaFiscalService;
     private final FacturaPdfService facturaPdfService;
+    private final EmailService emailService; 
 
-    public FacturaFiscalController(FacturaFiscalService facturaFiscalService, FacturaPdfService facturaPdfService) {
+    public FacturaFiscalController(FacturaFiscalService facturaFiscalService, FacturaPdfService facturaPdfService, EmailService emailService) {
         this.facturaFiscalService = facturaFiscalService;
         this.facturaPdfService = facturaPdfService;
+        this.emailService = emailService;
     }
 
     @PostMapping
@@ -68,5 +71,29 @@ public class FacturaFiscalController {
         return new FacturaFiscalResponse(f.getIdFactura(), f.getVenta().getIdVenta(), f.getPuntoVenta(),
             f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getCae(),
             f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
+    }
+    @PostMapping("/enviar-email")
+    public ResponseEntity<?> enviarFacturaPorEmail(
+            @PathVariable Integer idVenta, 
+            @RequestParam String email) {
+        try {
+            FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
+
+            // 1. Generamos el PDF
+            byte[] pdfBytes = facturaPdfService.generarPdf(factura);
+
+            // 2. Lo mandamos usando tu servicio de correos existente
+            String asunto = "Factura Electrónica Nro: " + factura.getPuntoVenta() + "-" + factura.getNumero();
+            String cuerpo = "Adjuntamos la factura electrónica correspondiente a su compra. Gracias por elegir Distribuidora D13.";
+            String nombreArchivo = "Factura_D13_" + factura.getNumero() + ".pdf";
+
+            emailService.enviarConAdjuntoPdf(email, asunto, cuerpo, nombreArchivo, pdfBytes);
+
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
