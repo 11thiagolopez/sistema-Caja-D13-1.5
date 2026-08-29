@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, getVentas } from '../api/ventas'
 import { getEmpleados } from '../api/empleados'
-import { facturarVenta, getFactura } from '../api/facturas'
+import { facturarVenta, getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import type {
@@ -343,13 +343,78 @@ function FacturaFiscalCelda({
   onCambiarDocNro,
   onFacturar,
 }: FacturaFiscalCeldaProps) {
+  // Estados locales para la descarga y envío de esta factura puntual
+  const [descargando, setDescargando] = useState(false)
+  const [enviandoMail, setEnviandoMail] = useState(false)
+  const [emailCliente, setEmailCliente] = useState('')
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
+  const [errorFactura, setErrorFactura] = useState<string | null>(null)
+
+  async function onDescargarPdf() {
+    if (!factura) return
+    setDescargando(true)
+    setErrorFactura(null)
+    try {
+      await descargarPdfFactura(factura.idVenta)
+    } catch (err) {
+      setErrorFactura(err instanceof Error ? err.message : 'Error al abrir el PDF')
+    } finally {
+      setDescargando(false)
+    }
+  }
+
+  async function onEnviarMail() {
+    if (!factura || !emailCliente) return
+    setEnviandoMail(true)
+    setErrorFactura(null)
+    setMensajeExito(null)
+    try {
+      await enviarFacturaEmail(factura.idVenta, emailCliente)
+      setMensajeExito(`Enviada a ${emailCliente}`)
+      setEmailCliente('')
+    } catch (err) {
+      setErrorFactura(err instanceof ApiRequestError ? err.message : 'Error al enviar email')
+    } finally {
+      setEnviandoMail(false)
+    }
+  }
+
   if (factura?.estado === 'EMITIDA') {
     return (
-      <span>
-        Nº {String(factura.puntoVenta).padStart(4, '0')}-{String(factura.numero).padStart(8, '0')}
-        <br />
-        CAE {factura.cae}
-      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <span>
+          Nº {String(factura.puntoVenta).padStart(4, '0')}-{String(factura.numero).padStart(8, '0')}
+          <br />
+          CAE {factura.cae}
+        </span>
+        
+        <div>
+          <button type="button" onClick={onDescargarPdf} disabled={descargando}>
+            {descargando && <span className="spinner" />}
+            {descargando ? 'Abriendo...' : 'Ver PDF Fiscal'}
+          </button>
+        </div>
+
+        <span className="confirmar-descuento">
+          <input
+            type="email"
+            placeholder="Email del cliente"
+            value={emailCliente}
+            onChange={(e) => setEmailCliente(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={onEnviarMail}
+            disabled={enviandoMail || !emailCliente}
+          >
+            {enviandoMail && <span className="spinner" />}
+            {enviandoMail ? 'Enviando...' : 'Enviar PDF'}
+          </button>
+        </span>
+        
+        {errorFactura && <p className="error">{errorFactura}</p>}
+        {mensajeExito && <p className="resultado" style={{ margin: 0, padding: '4px' }}>{mensajeExito}</p>}
+      </div>
     )
   }
 
