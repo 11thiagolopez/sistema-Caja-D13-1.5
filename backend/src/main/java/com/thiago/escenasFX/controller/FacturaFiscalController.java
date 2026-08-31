@@ -90,10 +90,13 @@ public class FacturaFiscalController {
 
             emailService.enviarConAdjuntoPdf(email, asunto, cuerpo, nombreArchivo, pdfBytes);
 
-            return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build(); 
+            
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
+            // Y acá devolvemos el error real en formato JSON para que el frontend lo pueda leer
+            return ResponseEntity.status(500)
+                .body(java.util.Collections.singletonMap("message", "Error al enviar: " + e.getMessage()));
         }
     }
 }
