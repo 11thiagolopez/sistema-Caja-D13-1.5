@@ -13,7 +13,7 @@ public final class FacturaFiscalHtmlBuilder {
     private static final String NOMBRE_LOCAL = "D13 Distribuidora";
     private static final String DIRECCION_LOCAL = "Arce 790, CABA";
     private static final String TELEFONO_LOCAL = "1123752626";
-    private static final String CUIT_LOCAL = "30-12345678-9"; // Agregá el CUIT real de D13
+    private static final String CUIT_LOCAL = "20-30023837-9";
     private static final String CONDICION_IVA = "Responsable Inscripto"; // o Monotributo
 
     private FacturaFiscalHtmlBuilder() {
