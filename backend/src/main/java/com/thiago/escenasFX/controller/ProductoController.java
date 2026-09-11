@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.CargarStockRequest;
 import com.thiago.escenasFX.dto.ProductoRequest;
+import com.thiago.escenasFX.dto.ProductoResponse;
 import com.thiago.escenasFX.dto.ProductoUpdateRequest;
-import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.service.ProductoService;
 
 import jakarta.validation.Valid;
@@ -33,33 +33,33 @@ public class ProductoController {
     }
 
     @GetMapping
-    public List<Producto> listar() {
-        return productoService.listarTodos();
+    public List<ProductoResponse> listar() {
+        return productoService.listarTodos().stream().map(ProductoMapper::toResponse).toList();
     }
 
     @GetMapping("/buscar-por-codigo")
-    public Producto buscarPorCodigo(@RequestParam String codigo) {
-        return productoService.buscarPorCodigo(codigo);
+    public ProductoResponse buscarPorCodigo(@RequestParam String codigo) {
+        return ProductoMapper.toResponse(productoService.buscarPorCodigo(codigo));
     }
 
     @GetMapping("/{id}")
-    public Producto obtener(@PathVariable Integer id) {
-        return productoService.obtenerPorId(id);
+    public ProductoResponse obtener(@PathVariable Integer id) {
+        return ProductoMapper.toResponse(productoService.obtenerPorId(id));
     }
 
     @PostMapping
-    public ResponseEntity<Producto> crear(@Valid @RequestBody ProductoRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(productoService.crear(request));
+    public ResponseEntity<ProductoResponse> crear(@Valid @RequestBody ProductoRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ProductoMapper.toResponse(productoService.crear(request)));
     }
 
     @PostMapping("/cargar-stock")
-    public Producto cargarStock(@Valid @RequestBody CargarStockRequest request) {
-        return productoService.cargarStock(request.getCodigo(), request.getCantidad());
+    public ProductoResponse cargarStock(@Valid @RequestBody CargarStockRequest request) {
+        return ProductoMapper.toResponse(productoService.cargarStock(request.getCodigo(), request.getCantidad()));
     }
 
     @PatchMapping("/{id}")
-    public Producto actualizar(@PathVariable Integer id, @Valid @RequestBody ProductoUpdateRequest request) {
-        return productoService.actualizar(id, request);
+    public ProductoResponse actualizar(@PathVariable Integer id, @Valid @RequestBody ProductoUpdateRequest request) {
+        return ProductoMapper.toResponse(productoService.actualizar(id, request));
     }
 
     @DeleteMapping("/{id}")

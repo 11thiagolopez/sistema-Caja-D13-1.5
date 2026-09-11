@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
@@ -30,6 +32,11 @@ public class CajaService {
 
     private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
 
+    // JVM lock que serializa abrirSesion() de punta a punta, incluido el commit — ver el
+    // comentario en ese método. Esto asume un solo proceso de backend corriendo a la vez (el
+    // despliegue real de este sistema), no múltiples instancias detrás de un balanceador.
+    private static final Object LOCK_ABRIR_SESION = new Object();
+
     private final VentaRepository ventaRepo;
     private final MovimientoCajaRepository movRepo;
     private final SesionCajaRepository sesionRepo;
@@ -38,10 +45,12 @@ public class CajaService {
     private final EmailService emailService;
     private final CotizacionService cotizacionService;
     private final ProductoRepository productoRepo;
+    private final TransactionTemplate transactionTemplate;
 
     public CajaService(VentaRepository ventaRepo, MovimientoCajaRepository movRepo, SesionCajaRepository sesionRepo,
             SolicitudRetiroRepository solicitudRetiroRepo, OtpService otpService, EmailService emailService,
-            CotizacionService cotizacionService, ProductoRepository productoRepo) {
+            CotizacionService cotizacionService, ProductoRepository productoRepo,
+            PlatformTransactionManager transactionManager) {
         this.ventaRepo = ventaRepo;
         this.movRepo = movRepo;
         this.sesionRepo = sesionRepo;
@@ -50,6 +59,7 @@ public class CajaService {
         this.emailService = emailService;
         this.cotizacionService = cotizacionService;
         this.productoRepo = productoRepo;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -58,9 +68,26 @@ public class CajaService {
      * {@link com.thiago.escenasFX.repository.SesionCajaRepository#findByEstado}). Si quedó una
      * sesión vieja sin cerrar, hay que cerrarla primero — no se auto-cierra sola para no perder de
      * vista la diferencia de caja de ese turno.
+     *
+     * Sin @Transactional a propósito: el chequeo "no hay sesión ABIERTA" + el insert de la sesión
+     * nueva corren dentro de {@code synchronized}, manejando la transacción a mano con
+     * TransactionTemplate para que el commit termine ANTES de soltar el lock. Con @Transactional
+     * declarativo el commit lo hace el proxy de Spring recién después de que este método retorna
+     * — es decir, después de salir del synchronized — así que un segundo hilo podía entrar a
+     * synchronized, repetir el chequeo, y todavía no ver la sesión que el primer hilo ya había
+     * "guardado" pero no confirmado en la base. Es exactamente el bug real que ya pasó una vez en
+     * producción: dos aperturas casi simultáneas pasaban juntas la validación y dejaban dos
+     * sesiones ABIERTA.
      */
-    @Transactional
     public SesionCaja abrirSesion(BigDecimal montoInicial, Empleado empleado, BigDecimal cotizacionManual) {
+        synchronized (LOCK_ABRIR_SESION) {
+            return transactionTemplate.execute(status ->
+                abrirSesionEnTransaccion(montoInicial, empleado, cotizacionManual));
+        }
+    }
+
+    private SesionCaja abrirSesionEnTransaccion(BigDecimal montoInicial, Empleado empleado,
+            BigDecimal cotizacionManual) {
         sesionRepo.findByEstado("ABIERTA").ifPresent(s -> {
             throw new IllegalStateException(
                 "Ya existe una sesión de caja abierta (del " + s.getFecha() + "); hay que cerrarla antes de abrir una nueva");
@@ -145,7 +172,15 @@ public class CajaService {
             solicitudRetiroRepo.save(solicitud);
             throw new IllegalStateException("El código OTP expiró, hay que generar una nueva solicitud de retiro");
         }
+        if (solicitud.getIntentosFallidos() >= OtpService.MAX_INTENTOS) {
+            solicitud.setEstado("EXPIRADA");
+            solicitudRetiroRepo.save(solicitud);
+            throw new IllegalStateException(
+                "Se superó el máximo de intentos; hay que generar una nueva solicitud de retiro");
+        }
         if (!otpService.coincide(codigoIngresado, solicitud.getOtpHash())) {
+            solicitud.setIntentosFallidos(solicitud.getIntentosFallidos() + 1);
+            solicitudRetiroRepo.save(solicitud);
             throw new AuthenticationFailedException("Código OTP inválido");
         }
 

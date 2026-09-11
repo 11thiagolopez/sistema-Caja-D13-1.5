@@ -6,6 +6,7 @@ import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
+import { useCarrito } from '../hooks/useCarrito'
 import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
 
 interface ItemCarrito extends DetalleVentaRequest {
@@ -15,7 +16,8 @@ interface ItemCarrito extends DetalleVentaRequest {
 export function RegistrarVenta() {
   const { sesion } = useAuth()
   const [productos, setProductos] = useState<Producto[]>([])
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([])
+  const { carrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
+    useCarrito<ItemCarrito>()
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
   const [descuento, setDescuento] = useState('')
   const [motivoDescuento, setMotivoDescuento] = useState('')
@@ -49,26 +51,12 @@ export function RegistrarVenta() {
       return false
     }
     setError(null)
-    setCarrito((actual) => {
-      const indiceExistente = actual.findIndex((item) => item.idProducto === producto.idProducto)
-      if (indiceExistente >= 0) {
-        const copia = [...actual]
-        copia[indiceExistente] = {
-          ...copia[indiceExistente],
-          cantidad: copia[indiceExistente].cantidad + cantidadAAgregar,
-        }
-        return copia
-      }
-      return [
-        ...actual,
-        {
-          idProducto: producto.idProducto,
-          descripcionProducto: producto.descripcion,
-          tipo: 'ARTICULO',
-          cantidad: cantidadAAgregar,
-          precioUnitario: precioVenta,
-        },
-      ]
+    agregarOFusionar({
+      idProducto: producto.idProducto,
+      descripcionProducto: producto.descripcion,
+      tipo: 'ARTICULO',
+      cantidad: cantidadAAgregar,
+      precioUnitario: precioVenta,
     })
     return true
   }
@@ -84,12 +72,6 @@ export function RegistrarVenta() {
       setErrorEscaneo(`Producto no encontrado para el código ${codigo}`)
     }
   }
-
-  function quitarDelCarrito(index: number) {
-    setCarrito((actual) => actual.filter((_, i) => i !== index))
-  }
-
-  const total = carrito.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0)
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -112,7 +94,7 @@ export function RegistrarVenta() {
       })
       setResultado(venta)
       setMostrarComprobante(false)
-      setCarrito([])
+      vaciarCarrito()
       setDescuento('')
       setMotivoDescuento('')
       setEmailComprobante('')
@@ -189,7 +171,7 @@ export function RegistrarVenta() {
         </thead>
         <tbody>
           {carrito.map((item, index) => (
-            <tr key={index}>
+            <tr key={item.clientId}>
               <td>{item.descripcionProducto}</td>
               <td>{item.cantidad}</td>
               <td>{item.precioUnitario.toFixed(2)}</td>

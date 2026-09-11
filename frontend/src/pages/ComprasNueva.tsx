@@ -6,14 +6,11 @@ import { getProveedores } from '../api/proveedores'
 import { registrarCompra } from '../api/compras'
 import { getCotizacionActual } from '../api/cotizacion'
 import { ApiRequestError } from '../api/client'
+import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
 import { hoyIso } from '../utils/date'
 import type { CompraItemRequest, MarcaResponse, MedioPago, Producto, ProveedorResponse } from '../types/api'
 
 type Moneda = 'ARS' | 'USD'
-
-function etiquetaProducto(producto: Producto): string {
-  return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
-}
 
 // El valor canónico de precioCompraUnitario/precioVentaUnitario siempre es pesos, igual que lo
 // que espera el backend (CompraItemRequest) — monedaCompra/monedaVenta son puramente de UI, para

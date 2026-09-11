@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.GastoRequest;
 import com.thiago.escenasFX.model.Empleado;
@@ -19,6 +20,7 @@ public class GastoService {
         this.gastoRepo = gastoRepo;
     }
 
+    @Transactional
     public Gasto crear(GastoRequest req, Empleado empleado) {
         if (req.getFecha().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha del gasto no puede ser futura");

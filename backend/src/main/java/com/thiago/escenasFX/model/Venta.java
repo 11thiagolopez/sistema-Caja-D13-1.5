@@ -65,6 +65,12 @@ public class Venta {
     @Column(name = "otp_expira_en")
     private LocalDateTime otpExpiraEn;
 
+    // Cuenta los códigos incorrectos ingresados al confirmar el descuento; al llegar a
+    // OtpService.MAX_INTENTOS ya no se acepta el código aunque siga vigente en el tiempo (ver
+    // VentaService.confirmarDescuento).
+    @Column(name = "otp_intentos_fallidos", nullable = false)
+    private int otpIntentosFallidos = 0;
+
     // Se completa recién al enviar el comprobante por email (no se pide al registrar la venta).
     @Column(name = "cliente_email")
     private String clienteEmail;

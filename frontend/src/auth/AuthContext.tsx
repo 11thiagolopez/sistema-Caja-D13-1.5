@@ -1,6 +1,6 @@
 import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
 import { login as loginRequest } from '../api/auth'
-import { setAuthToken } from '../api/client'
+import { setAuthToken, setUnauthorizedHandler } from '../api/client'
 import type { LoginResponse, Rol } from '../types/api'
 
 const STORAGE_KEY = 'd13.sesion'
@@ -61,6 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(STORAGE_KEY)
     setSesion(null)
   }
+
+  // Se registra una sola vez (deps []): captura el logout() del primer render, que sigue siendo
+  // válido para siempre porque solo llama a setSesion (estable entre renders) y a
+  // sessionStorage.removeItem — no depende de ningún estado que pueda quedar obsoleto.
+  useLayoutEffect(() => {
+    setUnauthorizedHandler(() => logout())
+    return () => setUnauthorizedHandler(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return <AuthContext.Provider value={{ sesion, login, logout }}>{children}</AuthContext.Provider>
 }

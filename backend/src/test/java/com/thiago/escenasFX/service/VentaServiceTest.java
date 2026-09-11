@@ -132,7 +132,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_sinDescuento_confirmaYDescuentaStock() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(detalle(producto, 3, new BigDecimal("100")));
 
@@ -149,7 +149,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_stockInsuficiente_lanzaExcepcionYNoGuardaNada() {
         Producto producto = producto(1, 2);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(detalle(producto, 5, new BigDecimal("100")));
 
@@ -164,7 +164,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_descuentoNegativo_lanzaExcepcion() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setDescuento(new BigDecimal("-10"));
@@ -177,7 +177,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_descuentoMayorAlTotal_lanzaExcepcion() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setDescuento(new BigDecimal("150"));
@@ -191,7 +191,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_descuentoSinMotivo_lanzaExcepcion() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setDescuento(new BigDecimal("10"));
@@ -204,7 +204,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_conDescuentoValido_quedaPendienteYEnviaOtp() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
         when(otpService.generarCodigo()).thenReturn("123456");
         when(otpService.hash("123456")).thenReturn("hash-otp");
         LocalDateTime expiracion = LocalDateTime.now().plusMinutes(10);
@@ -228,7 +228,7 @@ class VentaServiceTest {
     @Test
     void registrarVenta_vinculaLaSesionAbiertaSiExiste() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
         SesionCaja sesionAbierta = new SesionCaja();
         sesionAbierta.setIdSesion(7);
         when(sesionRepo.findByEstado(anyString()))
@@ -258,7 +258,7 @@ class VentaServiceTest {
     }
 
     @Test
-    void confirmarDescuento_codigoIncorrecto_lanzaAuthenticationFailedException() {
+    void confirmarDescuento_codigoIncorrecto_lanzaAuthenticationFailedExceptionYCuentaElIntento() {
         Venta venta = new Venta();
         venta.setEstado("PENDIENTE_AUTORIZACION");
         venta.setOtpHash("hash-otp");
@@ -269,6 +269,29 @@ class VentaServiceTest {
         assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "000000"))
             .isInstanceOf(AuthenticationFailedException.class);
 
+        assertThat(venta.getOtpIntentosFallidos()).isEqualTo(1);
+        verify(ventaRepo).save(venta);
+    }
+
+    /**
+     * Regresión: antes no había tope de intentos, así que cualquiera con sesión de VENDEDOR podía
+     * probar las 1.000.000 de combinaciones del código de 6 dígitos dentro de la ventana de
+     * vigencia y auto-aprobarse el descuento sin que el ADMIN lo autorice de verdad.
+     */
+    @Test
+    void confirmarDescuento_superaMaximoDeIntentos_yaNoAceptaElCodigoAunqueSeaCorrecto() {
+        Venta venta = new Venta();
+        venta.setEstado("PENDIENTE_AUTORIZACION");
+        venta.setOtpHash("hash-otp");
+        venta.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
+        venta.setOtpIntentosFallidos(OtpService.MAX_INTENTOS);
+        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
+
+        assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "123456"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("máximo de intentos");
+
+        verify(otpService, never()).coincide(any(), any());
         verify(ventaRepo, never()).save(any());
     }
 
@@ -307,14 +330,14 @@ class VentaServiceTest {
         assertThat(guardada.getEstado()).isEqualTo("CONFIRMADA");
         assertThat(guardada.getTotalVenta()).isEqualByComparingTo("5000");
         assertThat(guardada.getDetalles().get(0).getDescripcion()).isEqualTo("Apertura de cerradura");
-        verify(productoRepo, never()).findById(any());
+        verify(productoRepo, never()).buscarPorIdConLock(any());
         verify(productoRepo, never()).save(any());
     }
 
     @Test
     void registrarVenta_mezclaProductoYManual_sumaAmbosAlTotal() {
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
 
         Venta venta = ventaCon(
             detalle(producto, 2, new BigDecimal("100")),
@@ -377,7 +400,7 @@ class VentaServiceTest {
         Empleado empleado = empleado(1, "Recepcionista");
         Empleado tecnico = empleado(2, "Técnico");
         Producto producto = producto(1, 10);
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
         when(empleadoRepo.findById(2)).thenReturn(Optional.of(tecnico));
         when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -397,7 +420,7 @@ class VentaServiceTest {
     @Test
     void guardarTrabajoDomicilio_editarExistente_restauraYReaplicaStock() {
         Producto producto = producto(1, 8); // ya tiene 2 unidades "reservadas" por el trabajo existente
-        when(productoRepo.findById(1)).thenReturn(Optional.of(producto));
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
         when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Venta existente = new Venta();

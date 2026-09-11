@@ -3,21 +3,11 @@ import { useAuth } from '../auth/AuthContext'
 import { getProductos } from '../api/productos'
 import { crearPresupuesto, descargarPresupuestoPdf, enviarPresupuestoEmail, getPresupuestos } from '../api/presupuestos'
 import { ApiRequestError } from '../api/client'
+import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
+import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
+import { descargarBlob } from '../utils/descargarBlob'
 import type { DetallePresupuestoRequest, Producto, PresupuestoResponse } from '../types/api'
-
-function etiquetaProducto(producto: Producto): string {
-  return `${producto.descripcion} - ${producto.marca ?? 'sin marca'} (${producto.codigoInterno})`
-}
-
-function descargarBlob(blob: Blob, nombreArchivo: string) {
-  const url = URL.createObjectURL(blob)
-  const enlace = document.createElement('a')
-  enlace.href = url
-  enlace.download = nombreArchivo
-  enlace.click()
-  URL.revokeObjectURL(url)
-}
 
 interface ItemCarrito extends DetallePresupuestoRequest {
   descripcionProducto: string
@@ -56,7 +46,8 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
   const [productos, setProductos] = useState<Producto[]>([])
   const [productoTexto, setProductoTexto] = useState('')
   const [cantidad, setCantidad] = useState(1)
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([])
+  const { carrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
+    useCarrito<ItemCarrito>()
 
   const [manualDescripcion, setManualDescripcion] = useState('')
   const [manualCantidad, setManualCantidad] = useState(1)
@@ -92,23 +83,12 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
       setError(`"${productoSeleccionado.descripcion}" no tiene precio de venta cargado`)
       return
     }
-    setCarrito((actual) => {
-      const indiceExistente = actual.findIndex((item) => item.idProducto === productoSeleccionado.idProducto)
-      if (indiceExistente >= 0) {
-        const copia = [...actual]
-        copia[indiceExistente] = { ...copia[indiceExistente], cantidad: copia[indiceExistente].cantidad + cantidad }
-        return copia
-      }
-      return [
-        ...actual,
-        {
-          idProducto: productoSeleccionado.idProducto,
-          descripcionProducto: productoSeleccionado.descripcion,
-          cantidad,
-          precioUnitario: precioVenta,
-          stockActual: productoSeleccionado.stockActual,
-        },
-      ]
+    agregarOFusionar({
+      idProducto: productoSeleccionado.idProducto,
+      descripcionProducto: productoSeleccionado.descripcion,
+      cantidad,
+      precioUnitario: precioVenta,
+      stockActual: productoSeleccionado.stockActual,
     })
     setCantidad(1)
     setProductoTexto('')
@@ -116,26 +96,17 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
 
   function agregarItemManual() {
     if (!manualDescripcion.trim() || manualCantidad <= 0 || !manualPrecio) return
-    setCarrito((actual) => [
-      ...actual,
-      {
-        descripcion: manualDescripcion.trim(),
-        descripcionProducto: manualDescripcion.trim(),
-        cantidad: manualCantidad,
-        precioUnitario: Number(manualPrecio),
-        stockActual: null,
-      },
-    ])
+    agregarOFusionar({
+      descripcion: manualDescripcion.trim(),
+      descripcionProducto: manualDescripcion.trim(),
+      cantidad: manualCantidad,
+      precioUnitario: Number(manualPrecio),
+      stockActual: null,
+    })
     setManualDescripcion('')
     setManualCantidad(1)
     setManualPrecio('')
   }
-
-  function quitarDelCarrito(index: number) {
-    setCarrito((actual) => actual.filter((_, i) => i !== index))
-  }
-
-  const total = carrito.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0)
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -159,7 +130,7 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
       setMensajeEmail(null)
       setErrorEmail(null)
       setErrorPdf(null)
-      setCarrito([])
+      vaciarCarrito()
       setClienteNombre('')
       setClienteEmail('')
       setClienteTelefono('')
@@ -262,7 +233,7 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
         </thead>
         <tbody>
           {carrito.map((item, index) => (
-            <tr key={index}>
+            <tr key={item.clientId}>
               <td>{item.descripcionProducto}</td>
               <td>{item.cantidad}</td>
               <td>{item.precioUnitario.toFixed(2)}</td>

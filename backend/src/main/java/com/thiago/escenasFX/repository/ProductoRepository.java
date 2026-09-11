@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +16,15 @@ import com.thiago.escenasFX.model.Producto;
 public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByActivoTrueOrderByDescripcionAsc();
+
+    // Usado en el camino de "verificar stock y descontar" (VentaService) en vez de findById:
+    // PESSIMISTIC_WRITE hace un SELECT ... FOR UPDATE, así que si dos ventas del mismo producto
+    // llegan al mismo tiempo, la segunda espera a que la primera confirme su transacción antes de
+    // leer el stock — sin esto, las dos podían leer el mismo stockActual, pasar la validación
+    // juntas y dejarlo en negativo (dos ventas de la última unidad, ambas "exitosas").
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Producto p WHERE p.idProducto = :id")
+    Optional<Producto> buscarPorIdConLock(@Param("id") Integer id);
 
     List<Producto> findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc(String rubro, String familia, String numeroMarca);
 

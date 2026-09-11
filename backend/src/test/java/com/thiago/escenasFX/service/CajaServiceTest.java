@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
@@ -56,6 +57,12 @@ class CajaServiceTest {
     private CotizacionService cotizacionService;
     @Mock
     private ProductoRepository productoRepo;
+    // abrirSesion() maneja su propia transacción a mano (TransactionTemplate) para poder tenerla
+    // bajo el mismo "synchronized" que serializa aperturas concurrentes — ver CajaService. Un
+    // PlatformTransactionManager mockeado alcanza: sus getTransaction/commit/rollback son no-ops
+    // en un mock, así que TransactionTemplate.execute(...) simplemente corre el callback.
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private CajaService cajaService;
@@ -327,6 +334,28 @@ class CajaServiceTest {
         assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "000000"))
             .isInstanceOf(AuthenticationFailedException.class);
 
+        assertThat(solicitud.getIntentosFallidos()).isEqualTo(1);
+        verify(movRepo, never()).save(any());
+    }
+
+    /**
+     * Regresión: antes no había tope de intentos, así que cualquiera con sesión de VENDEDOR podía
+     * probar las 1.000.000 de combinaciones del código de 6 dígitos dentro de la ventana de
+     * vigencia y auto-aprobarse el retiro sin que el ADMIN lo autorice de verdad.
+     */
+    @Test
+    void confirmarRetiro_superaMaximoDeIntentos_expiraLaSolicitudYNoValidaElCodigo() {
+        SolicitudRetiro solicitud = solicitudPendiente();
+        solicitud.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
+        solicitud.setIntentosFallidos(OtpService.MAX_INTENTOS);
+        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
+
+        assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "654321"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("máximo de intentos");
+
+        assertThat(solicitud.getEstado()).isEqualTo("EXPIRADA");
+        verify(otpService, never()).coincide(any(), any());
         verify(movRepo, never()).save(any());
     }
 

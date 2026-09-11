@@ -7,6 +7,7 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.thiago.escenasFX.model.FacturaFiscal;
 import com.thiago.escenasFX.model.Venta;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -17,12 +18,16 @@ import java.util.stream.Collectors;
 @Service
 public class FacturaPdfService {
 
-    private static final String CUIT_EMISOR = "30123456789"; 
-
     private final PdfService pdfService; // Inyectamos tu servicio existente de logos
 
-    public FacturaPdfService(PdfService pdfService) {
+    // Mismo CUIT que usa AfipFacturacionService para autenticar y pedir el CAE (afip.cuit): antes
+    // este servicio tenía su propia constante hardcodeada con un CUIT distinto y equivocado, así
+    // que el QR de ARCA impreso en la factura no coincidía con el emisor real ante AFIP.
+    private final String cuitEmisor;
+
+    public FacturaPdfService(PdfService pdfService, @Value("${afip.cuit}") String cuitEmisor) {
         this.pdfService = pdfService;
+        this.cuitEmisor = cuitEmisor;
     }
 
     public byte[] generarPdf(FacturaFiscal factura) throws Exception {
@@ -60,8 +65,8 @@ public class FacturaPdfService {
 
         // 6. Construir el HTML pasándole el logo automático
         String html = FacturaFiscalHtmlBuilder.construir(
-            titulo, "C", infoCliente, items, factura.getImporte(), logoBase64, 
-            factura.getCae(), factura.getCaeVencimiento().toString(), qrImageBase64
+            titulo, "C", infoCliente, items, factura.getImporte(), logoBase64,
+            factura.getCae(), factura.getCaeVencimiento().toString(), qrImageBase64, formatearCuit(cuitEmisor)
         );
 
         // 7. Renderizar a PDF (podés usar el método de tu PdfService o dejar el PdfRendererBuilder directo)
@@ -71,7 +76,7 @@ public class FacturaPdfService {
     private String generarQrBase64(FacturaFiscal factura, String fechaStr, String docNroStr) throws Exception {
         String jsonQr = String.format(
             "{\"ver\":1,\"fecha\":\"%s\",\"cuit\":%s,\"ptoVta\":%d,\"tipoCmp\":%d,\"nroCmp\":%d,\"importe\":%s,\"moneda\":\"PES\",\"ctz\":1,\"tipoDocRec\":%d,\"nroDocRec\":%s,\"tipoCodAut\":\"E\",\"codAut\":%s}",
-            fechaStr, CUIT_EMISOR, factura.getPuntoVenta(), 
+            fechaStr, cuitEmisor, factura.getPuntoVenta(),
             factura.getTipoComprobante(), factura.getNumero(), factura.getImporte().toString(),
             factura.getClienteDocTipo(), docNroStr, factura.getCae()
         );
@@ -85,5 +90,15 @@ public class FacturaPdfService {
         MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOut);
         
         return "data:image/png;base64," + Base64.getEncoder().encodeToString(pngOut.toByteArray());
+    }
+
+    // "20300238379" -> "20-30023837-9", formato en el que se muestra el CUIT en el encabezado
+    // impreso de la factura. Si viene con una longitud inesperada, se devuelve tal cual en vez de
+    // romper la generación del PDF.
+    private String formatearCuit(String cuit) {
+        if (cuit == null || cuit.length() != 11) {
+            return cuit;
+        }
+        return cuit.substring(0, 2) + "-" + cuit.substring(2, 10) + "-" + cuit.substring(10);
     }
 }

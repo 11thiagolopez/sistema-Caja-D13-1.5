@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,5 +13,8 @@ public class FacturarVentaRequest {
     @NotNull
     private Integer clienteDocTipo;
 
+    // Solo dígitos: es justo lo que espera AFIP en DocNro, y evita mandar texto libre sin escapar
+    // dentro del sobre SOAP armado a mano en AfipFacturacionService.
+    @Pattern(regexp = "\\d*", message = "El número de documento debe contener solo dígitos")
     private String clienteDocNro;
 }

@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.FacturaFiscalResponse;
 import com.thiago.escenasFX.dto.FacturarVentaRequest;
 import com.thiago.escenasFX.model.FacturaFiscal;
@@ -46,25 +46,22 @@ public class FacturaFiscalController {
             .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
+    // Sin try/catch propio: "Factura no encontrada" es un IllegalArgumentException (400, como el
+    // resto de la API) y cualquier falla generando el PDF la atrapa el handler genérico de
+    // GlobalExceptionHandler — antes esto devolvía un 500 vacío sin loguear nada útil.
     @GetMapping("/pdf")
-    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer idVenta) {
-        try {
-            FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
-                .orElseThrow(() -> new RuntimeException("Factura no encontrada para la venta: " + idVenta));
+    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer idVenta) throws Exception {
+        FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
+            .orElseThrow(() -> new IllegalArgumentException("Factura no encontrada para la venta: " + idVenta));
 
-            // Generamos el PDF (el servicio ya carga el logo automático y usa pdfService.generarPdf)
-            byte[] pdfBytes = facturaPdfService.generarPdf(factura);
+        // Generamos el PDF (el servicio ya carga el logo automático y usa pdfService.generarPdf)
+        byte[] pdfBytes = facturaPdfService.generarPdf(factura);
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("inline", "factura_D13_" + factura.getNumero() + ".pdf");
-            
-            return ResponseEntity.ok().headers(headers).body(pdfBytes);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("inline", "factura_D13_" + factura.getNumero() + ".pdf");
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
-        }
+        return ResponseEntity.ok().headers(headers).body(pdfBytes);
     }
     
     private FacturaFiscalResponse toResponse(FacturaFiscal f) {
@@ -72,31 +69,24 @@ public class FacturaFiscalController {
             f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getCae(),
             f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
     }
+    // Antes tomaba el email como @RequestParam sin validar (a diferencia de
+    // VentaController.enviarComprobante, la operación equivalente para el comprobante interno,
+    // que ya usaba este mismo DTO con @Email) — una dirección mal formada llegaba directo a
+    // Resend. Mismo motivo que en descargarPdf para sacar el try/catch propio.
     @PostMapping("/enviar-email")
-    public ResponseEntity<?> enviarFacturaPorEmail(
-            @PathVariable Integer idVenta, 
-            @RequestParam String email) {
-        try {
-            FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
-                .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
+    public ResponseEntity<Void> enviarFacturaPorEmail(@PathVariable Integer idVenta,
+            @Valid @RequestBody EnviarComprobanteRequest request) throws Exception {
+        FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
+            .orElseThrow(() -> new IllegalArgumentException("Factura no encontrada para la venta: " + idVenta));
 
-            // 1. Generamos el PDF
-            byte[] pdfBytes = facturaPdfService.generarPdf(factura);
+        byte[] pdfBytes = facturaPdfService.generarPdf(factura);
 
-            // 2. Lo mandamos usando tu servicio de correos existente
-            String asunto = "Factura Electrónica Nro: " + factura.getPuntoVenta() + "-" + factura.getNumero();
-            String cuerpo = "Adjuntamos la factura electrónica correspondiente a su compra. Gracias por elegir Distribuidora D13.";
-            String nombreArchivo = "Factura_D13_" + factura.getNumero() + ".pdf";
+        String asunto = "Factura Electrónica Nro: " + factura.getPuntoVenta() + "-" + factura.getNumero();
+        String cuerpo = "Adjuntamos la factura electrónica correspondiente a su compra. Gracias por elegir Distribuidora D13.";
+        String nombreArchivo = "Factura_D13_" + factura.getNumero() + ".pdf";
 
-            emailService.enviarConAdjuntoPdf(email, asunto, cuerpo, nombreArchivo, pdfBytes);
+        emailService.enviarConAdjuntoPdf(request.getEmail(), asunto, cuerpo, nombreArchivo, pdfBytes);
 
-        return ResponseEntity.noContent().build(); 
-            
-        } catch (Exception e) {
-            e.printStackTrace();
-            // Y acá devolvemos el error real en formato JSON para que el frontend lo pueda leer
-            return ResponseEntity.status(500)
-                .body(java.util.Collections.singletonMap("message", "Error al enviar: " + e.getMessage()));
-        }
+        return ResponseEntity.noContent().build();
     }
 }

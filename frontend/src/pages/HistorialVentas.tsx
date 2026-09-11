@@ -5,6 +5,8 @@ import { getEmpleados } from '../api/empleados'
 import { facturarVenta, getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { ComprobanteInterno } from '../components/ComprobanteInterno'
+import { hoyIso } from '../utils/date'
+import { descargarBlob } from '../utils/descargarBlob'
 import type {
   ClienteDocTipo,
   EmpleadoResponse,
@@ -14,23 +16,13 @@ import type {
   VentaResponse,
 } from '../types/api'
 
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function descargarBlob(blob: Blob, nombreArchivo: string) {
-  const url = URL.createObjectURL(blob)
-  const enlace = document.createElement('a')
-  enlace.href = url
-  enlace.download = nombreArchivo
-  enlace.click()
-  URL.revokeObjectURL(url)
-}
-
 const ESTADOS_TRABAJO: EstadoTrabajo[] = ['AGENDADO', 'EN_CURSO', 'COMPLETADO', 'COBRADO']
 
 export function HistorialVentas() {
-  const [desde, setDesde] = useState(hoyIso())
+  // Desde el 1° del mes actual, igual que el resto de las pantallas de reportes/consulta
+  // (Gastos, Compras, Comisiones, Presupuestos, etc.) — antes esta pantalla arrancaba filtrando
+  // solo "hoy", inconsistente con todas las demás.
+  const [desde, setDesde] = useState(hoyIso().slice(0, 8) + '01')
   const [hasta, setHasta] = useState(hoyIso())
   const [ventas, setVentas] = useState<VentaResponse[]>([])
   const [empleados, setEmpleados] = useState<EmpleadoResponse[]>([])

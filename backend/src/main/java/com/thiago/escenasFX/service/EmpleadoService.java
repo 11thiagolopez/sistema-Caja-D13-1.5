@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.EmpleadoRequest;
 import com.thiago.escenasFX.dto.EmpleadoUpdateRequest;
@@ -26,6 +27,7 @@ public class EmpleadoService {
         return empleadoRepo.findByActivoTrueOrderByNombreAsc();
     }
 
+    @Transactional
     public Empleado crear(EmpleadoRequest req) {
         if (empleadoRepo.findByUsuario(req.getUsuario()).isPresent()) {
             throw new IllegalArgumentException("El usuario ya existe: " + req.getUsuario());
@@ -42,6 +44,7 @@ public class EmpleadoService {
         return empleadoRepo.save(empleado);
     }
 
+    @Transactional
     public Empleado actualizar(Integer id, EmpleadoUpdateRequest req) {
         Empleado empleado = obtenerPorId(id);
 
@@ -71,6 +74,7 @@ public class EmpleadoService {
         return "TECNICO".equals(rol) ? comision : null;
     }
 
+    @Transactional
     public void desactivar(Integer id) {
         Empleado empleado = obtenerPorId(id);
         empleado.setActivo(false);

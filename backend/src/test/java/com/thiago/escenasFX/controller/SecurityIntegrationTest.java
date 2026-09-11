@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
+import com.thiago.escenasFX.model.Empleado;
+
 /**
  * Verifica las reglas por rol de SecurityConfig contra el filtro JWT real (no @WithMockUser):
  * sin token debe ser 401, con token de un rol sin permiso debe ser 403.
@@ -175,6 +177,27 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"valorVenta\": 1300}"))
             .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Regresión de un bug real: un token emitido antes de dar de baja al empleado seguía siendo
+     * válido hasta que expirara solo (hasta 8hs) porque el filtro JWT confiaba ciegamente en el
+     * rol firmado en el token, sin revalidar "activo" contra la base en cada request. Ahora
+     * JwtAuthenticationFilter chequea Empleado.activo por cada request.
+     */
+    @Test
+    void tokenDeEmpleadoDadoDeBaja_dejaDeSerValido() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/productos").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk());
+
+        vendedor.setActivo(false);
+        empleadoRepo.save(vendedor);
+
+        mockMvc.perform(get("/api/productos").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -6,6 +6,7 @@ import { getEmpleados } from '../api/empleados'
 import { getVenta, guardarTrabajoDomicilio } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
+import { useCarrito } from '../hooks/useCarrito'
 import type {
   DetalleVentaRequest,
   EmpleadoResponse,
@@ -43,7 +44,8 @@ export function TrabajoDomicilio() {
   const [estadoTrabajo, setEstadoTrabajo] = useState<EstadoTrabajo>('AGENDADO')
   const [idEmpleadoTecnico, setIdEmpleadoTecnico] = useState('')
 
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([])
+  const { carrito, reemplazar: reemplazarCarrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
+    useCarrito<ItemCarrito>()
   const [manualDescripcion, setManualDescripcion] = useState('')
   const [manualPrecio, setManualPrecio] = useState('')
 
@@ -76,7 +78,7 @@ export function TrabajoDomicilio() {
     setDescripcionTrabajo(venta.descripcionTrabajo ?? '')
     setEstadoTrabajo(venta.estadoTrabajo ?? 'AGENDADO')
     setIdEmpleadoTecnico(venta.idEmpleadoTecnico != null ? String(venta.idEmpleadoTecnico) : '')
-    setCarrito(
+    reemplazarCarrito(
       venta.detalles.map((d) => ({
         idProducto: d.idProducto ?? undefined,
         descripcion: d.idProducto ? undefined : d.descripcionProducto,
@@ -114,7 +116,7 @@ export function TrabajoDomicilio() {
     setDescripcionTrabajo('')
     setEstadoTrabajo('AGENDADO')
     setIdEmpleadoTecnico('')
-    setCarrito([])
+    vaciarCarrito()
     setMensaje(null)
     setError(null)
   }
@@ -126,51 +128,29 @@ export function TrabajoDomicilio() {
       return false
     }
     setError(null)
-    setCarrito((actual) => {
-      const indiceExistente = actual.findIndex((item) => item.idProducto === producto.idProducto)
-      if (indiceExistente >= 0) {
-        const copia = [...actual]
-        copia[indiceExistente] = {
-          ...copia[indiceExistente],
-          cantidad: copia[indiceExistente].cantidad + cantidad,
-        }
-        return copia
-      }
-      return [
-        ...actual,
-        {
-          idProducto: producto.idProducto,
-          descripcionProducto: producto.descripcion,
-          tipo: 'ARTICULO',
-          cantidad,
-          precioUnitario: precioVenta,
-        },
-      ]
+    agregarOFusionar({
+      idProducto: producto.idProducto,
+      descripcionProducto: producto.descripcion,
+      tipo: 'ARTICULO',
+      cantidad,
+      precioUnitario: precioVenta,
     })
     return true
   }
 
   function agregarManoDeObra() {
     if (!manualDescripcion.trim() || !manualPrecio) return
-    setCarrito((actual) => [
-      ...actual,
-      {
-        descripcion: manualDescripcion.trim(),
-        descripcionProducto: manualDescripcion.trim(),
-        tipo: 'SERVICIO',
-        cantidad: 1,
-        precioUnitario: Number(manualPrecio),
-      },
-    ])
+    agregarOFusionar({
+      descripcion: manualDescripcion.trim(),
+      descripcionProducto: manualDescripcion.trim(),
+      tipo: 'SERVICIO',
+      cantidad: 1,
+      precioUnitario: Number(manualPrecio),
+    })
     setManualDescripcion('')
     setManualPrecio('')
   }
 
-  function quitarDelCarrito(index: number) {
-    setCarrito((actual) => actual.filter((_, i) => i !== index))
-  }
-
-  const total = carrito.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0)
   const manoDeObraTotal = carrito
     .filter((item) => item.tipo === 'SERVICIO')
     .reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0)
@@ -364,7 +344,7 @@ export function TrabajoDomicilio() {
         </thead>
         <tbody>
           {carrito.map((item, index) => (
-            <tr key={index}>
+            <tr key={item.clientId}>
               <td>{item.descripcionProducto}</td>
               <td>{item.tipo === 'SERVICIO' ? 'Mano de obra' : 'Artículo'}</td>
               <td>{item.cantidad}</td>

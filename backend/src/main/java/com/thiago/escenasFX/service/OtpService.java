@@ -11,6 +11,12 @@ public class OtpService {
 
     public static final int VIGENCIA_MINUTOS = 10;
 
+    // Tope de intentos fallidos antes de invalidar el código: sin esto, cualquiera con sesión de
+    // VENDEDOR podía probar las 1.000.000 de combinaciones del código de 6 dígitos dentro de la
+    // ventana de vigencia y auto-aprobarse un descuento o un retiro sin que el ADMIN lo autorice
+    // de verdad.
+    public static final int MAX_INTENTOS = 5;
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final PasswordEncoder passwordEncoder;

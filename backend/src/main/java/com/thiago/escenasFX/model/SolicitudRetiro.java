@@ -52,6 +52,11 @@ public class SolicitudRetiro {
     @Column(nullable = false)
     private String estado = "PENDIENTE"; // PENDIENTE | CONFIRMADA | EXPIRADA
 
+    // Cuenta los códigos incorrectos ingresados; al llegar a OtpService.MAX_INTENTOS la solicitud
+    // pasa a EXPIRADA aunque el código todavía esté vigente (ver CajaService.confirmarRetiro).
+    @Column(name = "intentos_fallidos", nullable = false)
+    private int intentosFallidos = 0;
+
     @Column(name = "creado_en", nullable = false)
     private LocalDateTime creadoEn = LocalDateTime.now();
 }

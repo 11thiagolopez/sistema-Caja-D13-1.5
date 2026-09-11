@@ -62,7 +62,7 @@ public class VentaService {
 
         for (DetalleVenta d : venta.getDetalles()) {
             if (d.getProducto() != null) {
-                Producto p = productoRepo.findById(d.getProducto().getIdProducto())
+                Producto p = productoRepo.buscarPorIdConLock(d.getProducto().getIdProducto())
                     .orElseThrow(() -> new IllegalArgumentException("Producto no existe"));
 
                 if (p.getStockActual() < d.getCantidad()) {
@@ -132,7 +132,13 @@ public class VentaService {
         if (venta.getOtpExpiraEn().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("El código OTP expiró; la venta sigue pendiente de autorización");
         }
+        if (venta.getOtpIntentosFallidos() >= OtpService.MAX_INTENTOS) {
+            throw new IllegalStateException(
+                "Se superó el máximo de intentos; el descuento ya no puede confirmarse con este código");
+        }
         if (!otpService.coincide(codigoIngresado, venta.getOtpHash())) {
+            venta.setOtpIntentosFallidos(venta.getOtpIntentosFallidos() + 1);
+            ventaRepo.save(venta);
             throw new AuthenticationFailedException("Código OTP inválido");
         }
 
@@ -262,7 +268,7 @@ public class VentaService {
             detalle.setTipo(itemReq.getTipo() != null ? itemReq.getTipo() : "ARTICULO");
 
             if (itemReq.getIdProducto() != null) {
-                Producto p = productoRepo.findById(itemReq.getIdProducto())
+                Producto p = productoRepo.buscarPorIdConLock(itemReq.getIdProducto())
                     .orElseThrow(() -> new IllegalArgumentException("Producto no existe: " + itemReq.getIdProducto()));
                 if (p.getStockActual() < itemReq.getCantidad()) {
                     throw new IllegalStateException("Stock insuficiente para " + p.getDescripcion());

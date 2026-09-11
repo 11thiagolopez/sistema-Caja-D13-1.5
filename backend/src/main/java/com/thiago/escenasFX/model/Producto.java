@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -45,7 +46,11 @@ public class Producto {
     // compatibilidad pero ya no se usa para mostrar/filtrar — ver proveedorRef.
     private String proveedor;
 
-    @ManyToOne
+    // LAZY a propósito: nada en el backend lee este campo hoy (solo se setea al crear el
+    // producto) y el frontend usa el campo de texto legado "proveedor", no este FK — con EAGER,
+    // Hibernate resolvía un SELECT extra por fila en cada listado de productos (~6900 filas) sin
+    // que nadie usara el resultado.
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_proveedor")
     private Proveedor proveedorRef;
 

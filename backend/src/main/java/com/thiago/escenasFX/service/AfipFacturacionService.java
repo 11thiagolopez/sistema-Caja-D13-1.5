@@ -95,7 +95,7 @@ public class AfipFacturacionService {
         StringBuilder detalle = new StringBuilder();
         detalle.append("<ar:Concepto>").append(datos.concepto()).append("</ar:Concepto>")
             .append("<ar:DocTipo>").append(datos.docTipo()).append("</ar:DocTipo>")
-            .append("<ar:DocNro>").append(datos.docNro()).append("</ar:DocNro>")
+            .append("<ar:DocNro>").append(XmlEscaper.escape(datos.docNro())).append("</ar:DocNro>")
             .append("<ar:CbteDesde>").append(numero).append("</ar:CbteDesde>")
             .append("<ar:CbteHasta>").append(numero).append("</ar:CbteHasta>")
             .append("<ar:CbteFch>").append(datos.fecha().format(FECHA_AFIP)).append("</ar:CbteFch>")

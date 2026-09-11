@@ -12,26 +12,29 @@ public class AuthService {
 
     private final EmpleadoRepository empleadoRepo;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptService loginAttemptService;
 
-    public AuthService(EmpleadoRepository empleadoRepo, PasswordEncoder passwordEncoder) {
+    public AuthService(EmpleadoRepository empleadoRepo, PasswordEncoder passwordEncoder,
+            LoginAttemptService loginAttemptService) {
         this.empleadoRepo = empleadoRepo;
         this.passwordEncoder = passwordEncoder;
+        this.loginAttemptService = loginAttemptService;
     }
 
     public Empleado login(String usuario, String passwordPlano) {
-        Empleado empleado = empleadoRepo.findByUsuario(usuario)
-            .orElseThrow(() -> new AuthenticationFailedException("Usuario o contraseña inválidos"));
+        loginAttemptService.verificarNoBloqueado(usuario);
 
-        if (!passwordEncoder.matches(passwordPlano, empleado.getPasswordHash())) {
+        Empleado empleado = empleadoRepo.findByUsuario(usuario).orElse(null);
+
+        // Mismo motivo en los tres casos para no distinguir el mensaje (usuario inexistente,
+        // contraseña incorrecta, usuario dado de baja): no dar pistas de qué usuarios existen.
+        if (empleado == null || !passwordEncoder.matches(passwordPlano, empleado.getPasswordHash())
+                || !empleado.isActivo()) {
+            loginAttemptService.registrarFallo(usuario);
             throw new AuthenticationFailedException("Usuario o contraseña inválidos");
         }
 
-        // No se distingue el mensaje de "usuario dado de baja" del de credenciales inválidas, por
-        // el mismo motivo que ya se documenta arriba: no dar pistas de qué usuarios existen.
-        if (!empleado.isActivo()) {
-            throw new AuthenticationFailedException("Usuario o contraseña inválidos");
-        }
-
+        loginAttemptService.registrarExito(usuario);
         return empleado;
     }
 }

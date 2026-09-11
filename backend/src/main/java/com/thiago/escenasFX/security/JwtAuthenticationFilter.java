@@ -19,13 +19,17 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import com.thiago.escenasFX.repository.EmpleadoRepository;
+
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final EmpleadoRepository empleadoRepo;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, EmpleadoRepository empleadoRepo) {
         this.jwtService = jwtService;
+        this.empleadoRepo = empleadoRepo;
     }
 
     @Override
@@ -41,8 +45,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String usuario = claims.getSubject();
                 String rol = claims.get("rol", String.class);
 
-                if (usuario != null && rol != null
-                        && SecurityContextHolder.getContext().getAuthentication() == null) {
+                // Revalida "activo" contra la base en cada request en vez de confiar ciegamente en
+                // el rol firmado en el token: un empleado dado de baja (o cuyo token se filtró)
+                // seguía teniendo acceso completo con su JWT viejo hasta que expirara solo (hasta
+                // 8hs) — el login ya bloqueaba altas nuevas, pero un token ya emitido no se
+                // revocaba. Costo de una consulta extra por request, aceptable a esta escala.
+                boolean activo = usuario != null
+                    && empleadoRepo.findByUsuario(usuario).map(e -> e.isActivo()).orElse(false);
+
+                if (activo && rol != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + rol));
                     var authToken = new UsernamePasswordAuthenticationToken(usuario, null, authorities);
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

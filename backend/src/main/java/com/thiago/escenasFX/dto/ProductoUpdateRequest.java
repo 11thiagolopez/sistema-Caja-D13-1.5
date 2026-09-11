@@ -2,6 +2,7 @@ package com.thiago.escenasFX.dto;
 
 import java.math.BigDecimal;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import lombok.Getter;
 import lombok.Setter;
@@ -20,6 +21,7 @@ public class ProductoUpdateRequest {
 
     private String marca;
 
+    @DecimalMin(value = "0.01")
     private BigDecimal precioVenta;
 
     @Min(0)
