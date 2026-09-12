@@ -38,6 +38,10 @@ export interface Producto {
   codigoInterno: string
   proveedor: string
   codigoFabrica: string | null
+  // codigoFabrica si el producto lo tiene, o codigoInterno si no (productos sueltos/cortados a
+  // medida) — es el valor que se escanea/imprime en la etiqueta física. Lo asigna el backend, no
+  // se envía en el alta/edición.
+  codigoBarras: string | null
   descripcion: string
   precioVenta: number | null
   precioCompra: number | null
@@ -57,6 +61,9 @@ export interface ProductoUpdateRequest {
   marca?: string
   precioVenta?: number
   stockActual?: number
+  // A diferencia de los demás campos, "" (string vacío) es un valor válido: limpia el código de
+  // fábrica y el producto vuelve a usar codigoInterno como codigoBarras.
+  codigoFabrica?: string
 }
 
 export interface ProductoRequest {
@@ -164,6 +171,9 @@ export type ClienteDocTipo = 80 | 96 | 99
 export interface FacturarVentaRequest {
   clienteDocTipo: ClienteDocTipo
   clienteDocNro?: string
+  // Nombre/razón social del cliente: WSFEv1 no lo pide, pero toda factura real de ARCA lo
+  // imprime — el backend lo exige junto con clienteDocNro cuando clienteDocTipo no es 99.
+  clienteNombre?: string
 }
 
 // estado: PENDIENTE (creada, todavía sin CAE) | EMITIDA | ERROR.
@@ -175,6 +185,7 @@ export interface FacturaFiscalResponse {
   numero: number | null
   clienteDocTipo: number
   clienteDocNro: string | null
+  clienteNombre: string | null
   cae: string | null
   caeVencimiento: string | null
   importe: number

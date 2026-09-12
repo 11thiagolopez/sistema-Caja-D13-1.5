@@ -38,7 +38,7 @@ public class FacturaFiscalService {
     }
 
     @Transactional
-    public FacturaFiscal facturar(Integer idVenta, Integer clienteDocTipo, String clienteDocNro) {
+    public FacturaFiscal facturar(Integer idVenta, Integer clienteDocTipo, String clienteDocNro, String clienteNombre) {
         Venta venta = ventaRepo.findById(idVenta)
             .orElseThrow(() -> new IllegalArgumentException("Venta no existe: " + idVenta));
 
@@ -53,6 +53,11 @@ public class FacturaFiscalService {
         if (clienteDocTipo != 99 && (clienteDocNro == null || clienteDocNro.isBlank())) {
             throw new IllegalArgumentException("Falta el número de documento del cliente");
         }
+        // El nombre no lo pide ARCA (WSFEv1 no lo tiene), pero toda factura real lo imprime — se
+        // exige acá igual que el número de documento, mismo criterio.
+        if (clienteDocTipo != 99 && (clienteNombre == null || clienteNombre.isBlank())) {
+            throw new IllegalArgumentException("Falta el nombre o razón social del cliente");
+        }
 
         FacturaFiscal factura = facturaRepo.findByVentaIdVenta(idVenta).orElseGet(FacturaFiscal::new);
         factura.setVenta(venta);
@@ -60,6 +65,7 @@ public class FacturaFiscalService {
         factura.setTipoComprobante(TIPO_FACTURA_C);
         factura.setClienteDocTipo(clienteDocTipo);
         factura.setClienteDocNro(clienteDocTipo == 99 ? null : clienteDocNro);
+        factura.setClienteNombre(clienteDocTipo == 99 ? null : clienteNombre);
         factura.setImporte(venta.getTotalVenta());
         factura.setEstado("PENDIENTE");
         factura.setErrorDetalle(null);

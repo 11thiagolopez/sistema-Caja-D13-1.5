@@ -26,6 +26,7 @@ final class ProductoMapper {
             p.getCodigoInterno(),
             p.getProveedor(),
             p.getCodigoFabrica(),
+            p.getCodigoBarras(),
             p.getDescripcion(),
             p.getPrecioVenta(),
             p.getPrecioCompra(),

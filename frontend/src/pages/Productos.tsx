@@ -11,6 +11,7 @@ import { getMarcas } from '../api/marcas'
 import { getProveedores } from '../api/proveedores'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
+import { EtiquetaImprimible } from '../components/EtiquetaImprimible'
 import type {
   MarcaResponse,
   Producto,
@@ -19,7 +20,7 @@ import type {
   ProveedorResponse,
 } from '../types/api'
 
-type CampoEditable = 'descripcion' | 'marca' | 'precioVenta' | 'stockActual'
+type CampoEditable = 'descripcion' | 'marca' | 'precioVenta' | 'stockActual' | 'codigoFabrica'
 
 const PRODUCTO_VACIO: ProductoRequest = {
   rubro: '',
@@ -48,6 +49,8 @@ export function Productos() {
   const [nuevoProducto, setNuevoProducto] = useState<ProductoRequest>(PRODUCTO_VACIO)
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
   const [ultimoCodigoGenerado, setUltimoCodigoGenerado] = useState<string | null>(null)
+  const [ultimoProductoCreado, setUltimoProductoCreado] = useState<Producto | null>(null)
+  const [etiquetaProducto, setEtiquetaProducto] = useState<Producto | null>(null)
   const [marcaInfoAlta, setMarcaInfoAlta] = useState<{ nombre: string; codigo: string; esNueva: boolean } | null>(
     null,
   )
@@ -92,6 +95,7 @@ export function Productos() {
     event.preventDefault()
     setErrorAlta(null)
     setUltimoCodigoGenerado(null)
+    setUltimoProductoCreado(null)
     setMarcaInfoAlta(null)
     setAgregando(true)
     try {
@@ -101,6 +105,7 @@ export function Productos() {
       const creado = await crearProducto(nuevoProducto)
       setProductos((actual) => [...actual, creado])
       setUltimoCodigoGenerado(creado.codigoInterno)
+      setUltimoProductoCreado(creado)
       if (creado.marca && creado.numeroMarca) {
         setMarcaInfoAlta({ nombre: creado.marca, codigo: creado.numeroMarca, esNueva: !marcaYaExistia })
       }
@@ -161,6 +166,8 @@ export function Productos() {
         return producto.precioVenta != null ? String(producto.precioVenta) : ''
       case 'stockActual':
         return String(producto.stockActual)
+      case 'codigoFabrica':
+        return producto.codigoFabrica ?? ''
     }
   }
 
@@ -186,7 +193,9 @@ export function Productos() {
         setErrorEdicion('Ingresá un número válido')
         return
       }
-    } else if (valor === '') {
+    } else if (campo !== 'codigoFabrica' && valor === '') {
+      // codigoFabrica es el único campo donde "" es válido: limpia el código de fábrica y el
+      // producto vuelve a usar codigoInterno como codigoBarras (ver ProductoService.actualizar).
       setErrorEdicion('No puede quedar vacío')
       return
     }
@@ -198,7 +207,9 @@ export function Productos() {
           ? { stockActual: Number(valor) }
           : campo === 'marca'
             ? { marca: valor }
-            : { descripcion: valor }
+            : campo === 'codigoFabrica'
+              ? { codigoFabrica: valor }
+              : { descripcion: valor }
 
     // Se sale del modo edición antes de esperar la respuesta: si el valor no cambió, evita
     // reintentar el guardado por el blur que dispara el propio input al desmontarse.
@@ -302,7 +313,11 @@ export function Productos() {
         </section>
       )}
 
-      {esAdmin && <p className="ayuda-edicion">Tocá una celda de descripción, marca, precio o stock para editarla.</p>}
+      {esAdmin && (
+        <p className="ayuda-edicion">
+          Tocá una celda de descripción, marca, precio, stock o código de fábrica para editarla.
+        </p>
+      )}
 
       <table>
         <thead>
@@ -316,6 +331,7 @@ export function Productos() {
             <th>USD venta</th>
             <th>USD compra</th>
             <th>Stock</th>
+            <th />
             {esAdmin && <th />}
           </tr>
         </thead>
@@ -326,7 +342,7 @@ export function Productos() {
               {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
               <td>{producto.rubro}</td>
               <td>{producto.codigoInterno}</td>
-              <td>{producto.codigoFabrica ?? '—'}</td>
+              {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text')}
               {celdaEditable(
                 producto,
                 'precioVenta',
@@ -337,6 +353,11 @@ export function Productos() {
               <td>{producto.precioVentaUsd != null ? `USD ${producto.precioVentaUsd.toFixed(2)}` : '—'}</td>
               <td>{producto.precioCompraUsd != null ? `USD ${producto.precioCompraUsd.toFixed(2)}` : '—'}</td>
               {celdaEditable(producto, 'stockActual', String(producto.stockActual), 'number', '1')}
+              <td>
+                <button type="button" onClick={() => setEtiquetaProducto(producto)}>
+                  Imprimir etiqueta
+                </button>
+              </td>
               {esAdmin && (
                 <td>
                   <button
@@ -420,6 +441,12 @@ export function Productos() {
                 onScan={(codigo) => setNuevoProducto({ ...nuevoProducto, codigoFabrica: codigo })}
                 placeholder="Código de fábrica"
               />
+              {!nuevoProducto.codigoFabrica && (
+                <small>
+                  Sin código de fábrica: se va a usar el código interno (se genera al guardar) como
+                  código de barras.
+                </small>
+              )}
             </label>
             <label>
               Precio de venta
@@ -466,6 +493,17 @@ export function Productos() {
           {ultimoCodigoGenerado && (
             <p className="resultado">Producto creado con código interno: {ultimoCodigoGenerado}</p>
           )}
+          {ultimoProductoCreado && !ultimoProductoCreado.codigoFabrica && (
+            <p className="resultado">
+              Sin código de fábrica: se usará el código interno {ultimoProductoCreado.codigoInterno}{' '}
+              como código de barras.
+            </p>
+          )}
+          {ultimoProductoCreado && (
+            <button type="button" onClick={() => setEtiquetaProducto(ultimoProductoCreado)}>
+              Imprimir etiqueta
+            </button>
+          )}
           {marcaInfoAlta && (
             <p className="resultado">
               {marcaInfoAlta.esNueva
@@ -474,6 +512,15 @@ export function Productos() {
             </p>
           )}
         </section>
+      )}
+
+      {etiquetaProducto && (
+        <EtiquetaImprimible
+          codigoBarras={etiquetaProducto.codigoBarras ?? etiquetaProducto.codigoInterno}
+          descripcion={etiquetaProducto.descripcion}
+          precioVenta={etiquetaProducto.precioVenta}
+          onCerrar={() => setEtiquetaProducto(null)}
+        />
       )}
     </div>
   )

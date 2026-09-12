@@ -17,6 +17,10 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByActivoTrueOrderByDescripcionAsc();
 
+    // Usado por ProductoService para validar unicidad antes de asignar codigo_barras (alta y
+    // edición) — no se usa para el escaneo en Ventas, que sigue con buscarActivoPorCodigo.
+    Optional<Producto> findByCodigoBarras(String codigoBarras);
+
     // Usado en el camino de "verificar stock y descontar" (VentaService) en vez de findById:
     // PESSIMISTIC_WRITE hace un SELECT ... FOR UPDATE, así que si dos ventas del mismo producto
     // llegan al mismo tiempo, la segunda espera a que la primera confirme su transacción antes de
@@ -44,10 +48,17 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
         + "GROUP BY p.numeroMarca, p.marca ORDER BY cnt DESC")
     List<Object[]> buscarUsoHistoricoDeMarca(@Param("nombre") String nombre);
 
-    // Explícito con @Query (en vez de un nombre derivado tipo
-    // findByCodigoFabricaOrCodigoInternoAndActivoTrue) porque Spring Data resolvería
+    // Usado por el escaneo de Cobros y por "Cargar stock": busca por codigoBarras (el valor
+    // vigente, ya sea el código de fábrica real o el interno de fallback — ver
+    // ProductoService.asignarCodigoBarras) con codigoInterno como red de contención por si algún
+    // producto quedó sin codigoBarras (alta hecha fuera de la app, directo en Supabase). Ya NO
+    // busca por codigoFabrica crudo: antes de que existiera codigoBarras esa era la única forma de
+    // resolver el código de fábrica, pero varios productos migrados históricos comparten el mismo
+    // codigoFabrica entre sí (dato heredado, ver backfill de codigo_barras) — buscar por
+    // codigoFabrica ahí era ambiguo y `Optional<Producto>` podía tirar NonUniqueResultException.
+    // Explícito con @Query (en vez de un nombre derivado) porque Spring Data resolvería
     // "X Or Y And Z" como "X Or (Y And Z)", no "(X Or Y) And Z".
-    @Query("SELECT p FROM Producto p WHERE p.activo = true AND (p.codigoFabrica = :codigo OR p.codigoInterno = :codigo)")
+    @Query("SELECT p FROM Producto p WHERE p.activo = true AND (p.codigoBarras = :codigo OR p.codigoInterno = :codigo)")
     Optional<Producto> buscarActivoPorCodigo(@Param("codigo") String codigo);
 
     // Dolarización: recálculo masivo al abrir caja. Solo toca productos que ya tienen ancla en

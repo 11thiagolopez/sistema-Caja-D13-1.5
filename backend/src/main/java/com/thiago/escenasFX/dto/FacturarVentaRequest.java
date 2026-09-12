@@ -17,4 +17,9 @@ public class FacturarVentaRequest {
     // dentro del sobre SOAP armado a mano en AfipFacturacionService.
     @Pattern(regexp = "\\d*", message = "El número de documento debe contener solo dígitos")
     private String clienteDocNro;
+
+    // Nombre/razón social del cliente: WSFEv1 no lo pide (FECAESolicitar solo lleva
+    // DocTipo/DocNro), pero toda factura real de ARCA lo muestra impreso — FacturaFiscalService
+    // exige este dato igual que clienteDocNro cuando clienteDocTipo no es Consumidor Final (99).
+    private String clienteNombre;
 }

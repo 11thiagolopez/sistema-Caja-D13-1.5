@@ -53,6 +53,8 @@ class VentaServiceTest {
     private SesionCajaRepository sesionRepo;
     @Mock
     private PdfService pdfService;
+    @Mock
+    private NotificacionService notificacionService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -144,6 +146,35 @@ class VentaServiceTest {
         assertThat(guardada.getDetalles().get(0).getSubtotal()).isEqualByComparingTo("300");
         verify(productoRepo).save(producto);
         verify(emailService, never()).enviarOtpAAdmins(anyString(), anyString());
+        verify(notificacionService).evaluarYNotificarStockBajo(producto, 10, 7);
+    }
+
+    @Test
+    void registrarVenta_cruzaElUmbralDe5_evaluaLaAlertaConStockAntesYDespues() {
+        Producto producto = producto(1, 6);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+
+        Venta venta = ventaCon(detalle(producto, 3, new BigDecimal("100")));
+
+        ventaService.registrarVenta(venta);
+
+        assertThat(producto.getStockActual()).isEqualTo(3);
+        verify(notificacionService).evaluarYNotificarStockBajo(producto, 6, 3);
+    }
+
+    @Test
+    void registrarVenta_siempreInformaElStockAntesYDespuesAUnQueNoHayaCruceDeUmbral() {
+        // VentaService siempre delega la evaluación del umbral a NotificacionService (que decide
+        // si corresponde mandar un email o no) — acá solo se verifica que recibe los valores
+        // correctos, no la lógica de umbral en sí (ver NotificacionServiceTest).
+        Producto producto = producto(1, 4);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+
+        ventaService.registrarVenta(venta);
+
+        verify(notificacionService).evaluarYNotificarStockBajo(producto, 4, 3);
     }
 
     @Test
@@ -415,6 +446,7 @@ class VentaServiceTest {
         assertThat(guardado.getTotalVenta()).isEqualByComparingTo("3200");
         assertThat(guardado.getEmpleadoTecnico()).isEqualTo(tecnico);
         assertThat(producto.getStockActual()).isEqualTo(8);
+        verify(notificacionService).evaluarYNotificarStockBajo(producto, 10, 8);
     }
 
     @Test

@@ -42,18 +42,35 @@ public class EmailService {
     }
 
     public void enviarOtpAAdmins(String asunto, String cuerpo) {
-        List<String> emails = empleadoRepo.findByRol("ADMIN").stream()
-            .map(Empleado::getEmail)
-            .filter(Objects::nonNull)
-            .filter(email -> !email.isBlank())
-            .toList();
-
+        List<String> emails = emailsDeAdmins();
         if (emails.isEmpty()) {
             throw new IllegalStateException(
                 "No hay ningún ADMIN con email configurado para recibir el código OTP");
         }
 
         enviar(emails, asunto, cuerpo, null, null);
+    }
+
+    /**
+     * Usado por NotificacionService (alertas de stock bajo): mismo destinatario que el OTP (todos
+     * los ADMIN con email configurado), pero sin acoplar el nombre del método a ese único caso de
+     * uso.
+     */
+    public void enviarAAdmins(String asunto, String cuerpo) {
+        List<String> emails = emailsDeAdmins();
+        if (emails.isEmpty()) {
+            throw new IllegalStateException("No hay ningún ADMIN con email configurado");
+        }
+
+        enviar(emails, asunto, cuerpo, null, null);
+    }
+
+    private List<String> emailsDeAdmins() {
+        return empleadoRepo.findByRol("ADMIN").stream()
+            .map(Empleado::getEmail)
+            .filter(Objects::nonNull)
+            .filter(email -> !email.isBlank())
+            .toList();
     }
 
     /**

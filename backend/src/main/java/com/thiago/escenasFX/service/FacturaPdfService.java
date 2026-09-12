@@ -46,13 +46,20 @@ public class FacturaPdfService {
                 d.getSubtotal()
             )).collect(Collectors.toList());
 
-        // 2. Preparar los datos del cliente
-        String docTipoStr = factura.getClienteDocTipo() == 99 ? "Consumidor Final" : "DNI/CUIT";
+        // 2. Preparar los datos del cliente: con CUIT/DNI se imprime el nombre/razón social tal
+        // como cualquier factura real de ARCA (WSFEv1 no lo pide ni lo devuelve, lo carga el ADMIN
+        // al facturar — ver FacturaFiscalService). Consumidor Final no tiene nombre asociado.
         String docNroStr = factura.getClienteDocNro() != null ? factura.getClienteDocNro() : "0";
-        List<String> infoCliente = List.of(
-            "Cliente: " + docTipoStr,
-            "Documento: " + (docNroStr.equals("0") ? "No especifica" : docNroStr)
-        );
+        List<String> infoCliente;
+        if (factura.getClienteDocTipo() == 99) {
+            infoCliente = List.of("Cliente: Consumidor Final");
+        } else {
+            String etiquetaDoc = factura.getClienteDocTipo() == 80 ? "CUIT" : "DNI";
+            infoCliente = List.of(
+                "Apellido y Nombre / Razón Social: " + factura.getClienteNombre(),
+                etiquetaDoc + ": " + docNroStr
+            );
+        }
 
         // 3. Generar la imagen del Código QR de ARCA
         String qrImageBase64 = generarQrBase64(factura, venta.getFecha().toLocalDate().toString(), docNroStr);

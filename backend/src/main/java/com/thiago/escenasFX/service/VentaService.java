@@ -32,10 +32,11 @@ public class VentaService {
     private final EmailService emailService;
     private final SesionCajaRepository sesionRepo;
     private final PdfService pdfService;
+    private final NotificacionService notificacionService;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
             EmpleadoRepository empleadoRepo, OtpService otpService, EmailService emailService,
-            SesionCajaRepository sesionRepo, PdfService pdfService) {
+            SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService) {
         this.ventaRepo = ventaRepo;
         this.productoRepo = productoRepo;
         this.empleadoRepo = empleadoRepo;
@@ -43,6 +44,7 @@ public class VentaService {
         this.emailService = emailService;
         this.sesionRepo = sesionRepo;
         this.pdfService = pdfService;
+        this.notificacionService = notificacionService;
     }
 
     /**
@@ -69,8 +71,10 @@ public class VentaService {
                     throw new IllegalStateException("Stock insuficiente para " + p.getDescripcion());
                 }
 
+                int stockAntes = p.getStockActual();
                 p.setStockActual(p.getStockActual() - d.getCantidad());
                 productoRepo.save(p);
+                notificacionService.evaluarYNotificarStockBajo(p, stockAntes, p.getStockActual());
                 d.setProducto(p);
                 d.setDescripcion(p.getDescripcion());
             }
@@ -273,8 +277,10 @@ public class VentaService {
                 if (p.getStockActual() < itemReq.getCantidad()) {
                     throw new IllegalStateException("Stock insuficiente para " + p.getDescripcion());
                 }
+                int stockAntes = p.getStockActual();
                 p.setStockActual(p.getStockActual() - itemReq.getCantidad());
                 productoRepo.save(p);
+                notificacionService.evaluarYNotificarStockBajo(p, stockAntes, p.getStockActual());
                 detalle.setProducto(p);
                 detalle.setDescripcion(p.getDescripcion());
             } else {

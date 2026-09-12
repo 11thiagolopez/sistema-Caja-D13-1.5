@@ -67,8 +67,31 @@ public class ProductoService {
         producto.setStockActual(req.getStockActual());
         producto.setActivo(true);
 
+        asignarCodigoBarras(producto, null);
         sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);
+    }
+
+    /**
+     * codigoBarras = codigoFabrica si el producto tiene código de fábrica cargado, o codigoInterno
+     * si no (productos sueltos/cortados a medida, sin envoltorio con EAN) — nunca se genera un
+     * código nuevo, es sólo un espejo de uno de esos dos valores ya existentes. Valida que ningún
+     * otro producto ya lo esté usando (idAExcluir es el propio producto en una edición, o null en
+     * el alta) antes de asignarlo — el conflicto se resuelve acá, no dejando que la constraint
+     * UNIQUE de la base lo rechace con un 500 genérico.
+     */
+    private void asignarCodigoBarras(Producto producto, Integer idAExcluir) {
+        String candidato = (producto.getCodigoFabrica() != null && !producto.getCodigoFabrica().isBlank())
+            ? producto.getCodigoFabrica()
+            : producto.getCodigoInterno();
+
+        productoRepo.findByCodigoBarras(candidato).ifPresent(existente -> {
+            if (idAExcluir == null || !existente.getIdProducto().equals(idAExcluir)) {
+                throw new IllegalStateException(
+                    "Ya existe otro producto con el código de barras/fábrica \"" + candidato + "\"");
+            }
+        });
+        producto.setCodigoBarras(candidato);
     }
 
     /**
@@ -88,6 +111,10 @@ public class ProductoService {
         }
         if (req.getStockActual() != null) {
             producto.setStockActual(req.getStockActual());
+        }
+        if (req.getCodigoFabrica() != null) {
+            producto.setCodigoFabrica(req.getCodigoFabrica().isBlank() ? null : req.getCodigoFabrica());
+            asignarCodigoBarras(producto, id);
         }
         sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);

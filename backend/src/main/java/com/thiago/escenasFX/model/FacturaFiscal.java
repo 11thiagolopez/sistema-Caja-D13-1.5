@@ -55,6 +55,12 @@ public class FacturaFiscal {
     @Column(name = "cliente_doc_nro")
     private String clienteDocNro;
 
+    // Nombre/razón social del cliente para imprimir en el PDF, como cualquier factura de ARCA con
+    // CUIT/DNI (WSFEv1 no lo pide ni lo devuelve — FECAESolicitar solo lleva DocTipo/DocNro; el
+    // nombre lo tipea el ADMIN al facturar). Null para Consumidor Final (99).
+    @Column(name = "cliente_nombre")
+    private String clienteNombre;
+
     private String cae;
 
     @Column(name = "cae_vencimiento")

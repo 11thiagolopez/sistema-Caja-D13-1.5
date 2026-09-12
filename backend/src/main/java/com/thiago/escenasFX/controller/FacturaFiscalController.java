@@ -35,7 +35,8 @@ public class FacturaFiscalController {
 
     @PostMapping
     public FacturaFiscalResponse facturar(@PathVariable Integer idVenta, @Valid @RequestBody FacturarVentaRequest request) {
-        FacturaFiscal factura = facturaFiscalService.facturar(idVenta, request.getClienteDocTipo(), request.getClienteDocNro());
+        FacturaFiscal factura = facturaFiscalService.facturar(idVenta, request.getClienteDocTipo(),
+            request.getClienteDocNro(), request.getClienteNombre());
         return toResponse(factura);
     }
 
@@ -66,8 +67,8 @@ public class FacturaFiscalController {
     
     private FacturaFiscalResponse toResponse(FacturaFiscal f) {
         return new FacturaFiscalResponse(f.getIdFactura(), f.getVenta().getIdVenta(), f.getPuntoVenta(),
-            f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getCae(),
-            f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
+            f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getClienteNombre(),
+            f.getCae(), f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
     }
     // Antes tomaba el email como @RequestParam sin validar (a diferencia de
     // VentaController.enviarComprobante, la operación equivalente para el comprobante interno,

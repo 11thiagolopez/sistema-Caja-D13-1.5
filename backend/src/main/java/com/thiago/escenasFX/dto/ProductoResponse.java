@@ -17,6 +17,7 @@ public class ProductoResponse {
     private String codigoInterno;
     private String proveedor;
     private String codigoFabrica;
+    private String codigoBarras;
     private String descripcion;
     private BigDecimal precioVenta;
     private BigDecimal precioCompra;

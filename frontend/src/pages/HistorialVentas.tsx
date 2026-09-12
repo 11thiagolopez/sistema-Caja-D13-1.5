@@ -43,6 +43,7 @@ export function HistorialVentas() {
   const [facturas, setFacturas] = useState<Record<number, FacturaFiscalResponse | null>>({})
   const [docTipos, setDocTipos] = useState<Record<number, ClienteDocTipo>>({})
   const [docNumeros, setDocNumeros] = useState<Record<number, string>>({})
+  const [docNombres, setDocNombres] = useState<Record<number, string>>({})
   const [facturandoId, setFacturandoId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -71,10 +72,15 @@ export function HistorialVentas() {
   async function facturar(idVenta: number) {
     const docTipo = docTipos[idVenta] ?? 99
     const docNro = docNumeros[idVenta]
+    const docNombre = docNombres[idVenta]
     setError(null)
     setFacturandoId(idVenta)
     try {
-      const factura = await facturarVenta(idVenta, { clienteDocTipo: docTipo, clienteDocNro: docNro })
+      const factura = await facturarVenta(idVenta, {
+        clienteDocTipo: docTipo,
+        clienteDocNro: docNro,
+        clienteNombre: docNombre,
+      })
       setFacturas((actual) => ({ ...actual, [idVenta]: factura }))
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo facturar la venta')
@@ -292,12 +298,16 @@ export function HistorialVentas() {
                     factura={facturas[venta.idVenta]}
                     docTipo={docTipos[venta.idVenta] ?? 99}
                     docNro={docNumeros[venta.idVenta] ?? ''}
+                    docNombre={docNombres[venta.idVenta] ?? ''}
                     facturando={facturandoId === venta.idVenta}
                     onCambiarDocTipo={(docTipo) =>
                       setDocTipos((actual) => ({ ...actual, [venta.idVenta]: docTipo }))
                     }
                     onCambiarDocNro={(docNro) =>
                       setDocNumeros((actual) => ({ ...actual, [venta.idVenta]: docNro }))
+                    }
+                    onCambiarDocNombre={(docNombre) =>
+                      setDocNombres((actual) => ({ ...actual, [venta.idVenta]: docNombre }))
                     }
                     onFacturar={() => facturar(venta.idVenta)}
                   />
@@ -319,9 +329,11 @@ interface FacturaFiscalCeldaProps {
   factura: FacturaFiscalResponse | null | undefined
   docTipo: ClienteDocTipo
   docNro: string
+  docNombre: string
   facturando: boolean
   onCambiarDocTipo: (docTipo: ClienteDocTipo) => void
   onCambiarDocNro: (docNro: string) => void
+  onCambiarDocNombre: (docNombre: string) => void
   onFacturar: () => void
 }
 
@@ -330,9 +342,11 @@ function FacturaFiscalCelda({
   factura,
   docTipo,
   docNro,
+  docNombre,
   facturando,
   onCambiarDocTipo,
   onCambiarDocNro,
+  onCambiarDocNombre,
   onFacturar,
 }: FacturaFiscalCeldaProps) {
   // Estados locales para la descarga y envío de esta factura puntual
@@ -377,6 +391,12 @@ function FacturaFiscalCelda({
         <span>
           Nº {String(factura.puntoVenta).padStart(4, '0')}-{String(factura.numero).padStart(8, '0')}
           <br />
+          {factura.clienteNombre && (
+            <>
+              {factura.clienteNombre}
+              <br />
+            </>
+          )}
           CAE {factura.cae}
         </span>
         
@@ -418,13 +438,24 @@ function FacturaFiscalCelda({
         <option value={96}>DNI</option>
       </select>
       {docTipo !== 99 && (
-        <input
-          placeholder={docTipo === 80 ? 'CUIT' : 'DNI'}
-          value={docNro}
-          onChange={(e) => onCambiarDocNro(e.target.value)}
-        />
+        <>
+          <input
+            placeholder={docTipo === 80 ? 'CUIT' : 'DNI'}
+            value={docNro}
+            onChange={(e) => onCambiarDocNro(e.target.value)}
+          />
+          <input
+            placeholder="Nombre / Razón social"
+            value={docNombre}
+            onChange={(e) => onCambiarDocNombre(e.target.value)}
+          />
+        </>
       )}
-      <button type="button" onClick={onFacturar} disabled={facturando || (docTipo !== 99 && !docNro)}>
+      <button
+        type="button"
+        onClick={onFacturar}
+        disabled={facturando || (docTipo !== 99 && (!docNro || !docNombre))}
+      >
         {facturando && <span className="spinner" />}
         {facturando ? 'Facturando...' : factura?.estado === 'ERROR' ? 'Reintentar' : 'Facturar'}
       </button>

@@ -57,6 +57,15 @@ public class Producto {
     @Column(name = "codigo_fabrica")
     private String codigoFabrica;
 
+    // Valor único usado para el escaneo/impresión de etiqueta: codigoFabrica si el producto viene
+    // con código de fábrica, o codigoInterno si no lo tiene (productos sueltos/cortados a medida,
+    // sin envoltorio con EAN) — asignado en ProductoService, nunca se genera un código nuevo.
+    // No reemplaza la búsqueda por barcode en Ventas (sigue resolviendo por codigoFabrica/
+    // codigoInterno vía buscarActivoPorCodigo), solo sirve para imprimir la etiqueta física y
+    // garantizar unicidad.
+    @Column(name = "codigo_barras")
+    private String codigoBarras;
+
     private String descripcion;
 
     @Column(name = "precio_venta", precision = 12, scale = 2)

@@ -44,12 +44,116 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
             .andExpect(jsonPath("$.codigoInterno").value("0105410001"))
             .andExpect(jsonPath("$.activo").value(true));
 
+        // Segundo producto con un código de fábrica distinto: el mismo código dos veces chocaría
+        // con la unicidad de codigo_barras (ver crear_codigoDeFabricaDuplicado_devuelve409).
+        String segundoBody = """
+            {"rubro": "01", "familia": "05", "marca": "02", "proveedor": "Proveedor SA",
+             "descripcion": "Destornillador Stanley", "precioVenta": 500, "precioCompra": 300,
+             "stockActual": 20, "codigoFabrica": "7790000000001"}""";
+
+        mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(segundoBody))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.codigoInterno").value("0105410002"));
+    }
+
+    @Test
+    void crear_conCodigoDeFabrica_usaEseCodigoComoCodigoBarras() throws Exception {
+        String token = tokenAdmin();
+
         mockMvc.perform(post("/api/productos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(PRODUCTO_BODY))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoInterno").value("0105410002"));
+            .andExpect(jsonPath("$.codigoBarras").value("7791234567890"));
+    }
+
+    @Test
+    void crear_sinCodigoDeFabrica_usaElCodigoInternoComoCodigoBarras() throws Exception {
+        String token = tokenAdmin();
+        String bodySinCodigoFabrica = """
+            {"rubro": "01", "familia": "05", "marca": "02", "proveedor": "Proveedor SA",
+             "descripcion": "Cable suelto", "precioVenta": 500, "stockActual": 20}""";
+
+        mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(bodySinCodigoFabrica))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.codigoBarras").value("0105410001"))
+            .andExpect(jsonPath("$.codigoInterno").value("0105410001"));
+    }
+
+    @Test
+    void crear_codigoDeFabricaDuplicado_devuelve409() throws Exception {
+        String token = tokenAdmin();
+
+        mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(PRODUCTO_BODY))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(PRODUCTO_BODY))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void actualizar_asignaCodigoDeFabrica_recalculaCodigoBarras() throws Exception {
+        String token = tokenAdmin();
+        String bodySinCodigoFabrica = """
+            {"rubro": "01", "familia": "05", "marca": "02", "proveedor": "Proveedor SA",
+             "descripcion": "Cable suelto", "precioVenta": 500, "stockActual": 20}""";
+
+        String respuesta = mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(bodySinCodigoFabrica))
+            .andReturn().getResponse().getContentAsString();
+        Integer idProducto = objectMapper.readTree(respuesta).get("idProducto").asInt();
+
+        mockMvc.perform(patch("/api/productos/" + idProducto)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"codigoFabrica": "7799998887776"}"""))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.codigoFabrica").value("7799998887776"))
+            .andExpect(jsonPath("$.codigoBarras").value("7799998887776"));
+    }
+
+    @Test
+    void actualizar_codigoDeFabricaYaUsadoPorOtroProducto_devuelve409() throws Exception {
+        String token = tokenAdmin();
+
+        mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(PRODUCTO_BODY))
+            .andExpect(status().isCreated());
+
+        String bodySinCodigoFabrica = """
+            {"rubro": "01", "familia": "05", "marca": "02", "proveedor": "Proveedor SA",
+             "descripcion": "Cable suelto", "precioVenta": 500, "stockActual": 20}""";
+        String respuesta = mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(bodySinCodigoFabrica))
+            .andReturn().getResponse().getContentAsString();
+        Integer idProducto = objectMapper.readTree(respuesta).get("idProducto").asInt();
+
+        mockMvc.perform(patch("/api/productos/" + idProducto)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"codigoFabrica": "7791234567890"}"""))
+            .andExpect(status().isConflict());
     }
 
     @Test

@@ -82,6 +82,49 @@ class ProductoServiceTest {
     }
 
     @Test
+    void crear_conCodigoDeFabrica_usaEseCodigoComoCodigoBarras() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of());
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoRequest req = request("01", "05", "02");
+        req.setCodigoFabrica("7791234567890");
+
+        Producto creado = productoService.crear(req);
+
+        assertThat(creado.getCodigoBarras()).isEqualTo("7791234567890");
+    }
+
+    @Test
+    void crear_sinCodigoDeFabrica_usaElCodigoInternoComoCodigoBarras() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of());
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Producto creado = productoService.crear(request("01", "05", "02"));
+
+        assertThat(creado.getCodigoBarras()).isEqualTo(creado.getCodigoInterno());
+    }
+
+    @Test
+    void crear_codigoBarrasYaUsadoPorOtroProducto_lanzaIllegalStateException() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of());
+        Producto otro = new Producto();
+        otro.setIdProducto(99);
+        when(productoRepo.findByCodigoBarras("7791234567890")).thenReturn(Optional.of(otro));
+
+        ProductoRequest req = request("01", "05", "02");
+        req.setCodigoFabrica("7791234567890");
+
+        assertThatThrownBy(() -> productoService.crear(req))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void crear_combinacionYaExistente_siguienteCorrelativo() {
         when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
         when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
@@ -169,6 +212,78 @@ class ProductoServiceTest {
         assertThat(actualizado.getRubro()).isEqualTo("01");
         assertThat(actualizado.getNumeroMarca()).isEqualTo("02");
         assertThat(actualizado.getCodigoInterno()).isEqualTo("0105020001");
+    }
+
+    @Test
+    void actualizar_asignaCodigoDeFabrica_recalculaCodigoBarras() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setCodigoInterno("0105020001");
+        producto.setCodigoBarras("0105020001"); // no tenía código de fábrica al darse de alta
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setCodigoFabrica("7791234567890");
+        Producto actualizado = productoService.actualizar(7, req);
+
+        assertThat(actualizado.getCodigoFabrica()).isEqualTo("7791234567890");
+        assertThat(actualizado.getCodigoBarras()).isEqualTo("7791234567890");
+    }
+
+    @Test
+    void actualizar_borraCodigoDeFabrica_vuelveAUsarElCodigoInterno() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setCodigoInterno("0105020001");
+        producto.setCodigoFabrica("7791234567890");
+        producto.setCodigoBarras("7791234567890");
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setCodigoFabrica("");
+        Producto actualizado = productoService.actualizar(7, req);
+
+        assertThat(actualizado.getCodigoFabrica()).isNull();
+        assertThat(actualizado.getCodigoBarras()).isEqualTo("0105020001");
+    }
+
+    @Test
+    void actualizar_codigoDeFabricaYaUsadoPorOtroProducto_lanzaIllegalStateException() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setCodigoInterno("0105020001");
+        producto.setCodigoBarras("0105020001");
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+
+        Producto otro = new Producto();
+        otro.setIdProducto(99);
+        when(productoRepo.findByCodigoBarras("7791234567890")).thenReturn(Optional.of(otro));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setCodigoFabrica("7791234567890");
+
+        assertThatThrownBy(() -> productoService.actualizar(7, req))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void actualizar_noTocaCodigoFabrica_siNoVieneEnElRequest() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setCodigoInterno("0105020001");
+        producto.setCodigoFabrica("7791234567890");
+        producto.setCodigoBarras("7791234567890");
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setStockActual(5);
+        Producto actualizado = productoService.actualizar(7, req);
+
+        assertThat(actualizado.getCodigoFabrica()).isEqualTo("7791234567890");
+        assertThat(actualizado.getCodigoBarras()).isEqualTo("7791234567890");
     }
 
     @Test

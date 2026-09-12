@@ -16,6 +16,7 @@ public class FacturaFiscalResponse {
     private Integer numero;
     private Integer clienteDocTipo;
     private String clienteDocNro;
+    private String clienteNombre;
     private String cae;
     private LocalDate caeVencimiento;
     private BigDecimal importe;

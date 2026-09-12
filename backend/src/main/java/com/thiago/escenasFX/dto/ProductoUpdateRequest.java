@@ -26,4 +26,10 @@ public class ProductoUpdateRequest {
 
     @Min(0)
     private Integer stockActual;
+
+    // A diferencia de rubro/marca-código, el código de fábrica sí se puede cargar o corregir
+    // después del alta: muchos productos se dan de alta sin haber escaneado todavía el envoltorio,
+    // o el dato se tipeó mal. String vacío ("") limpia el código de fábrica (el producto vuelve a
+    // usar codigoInterno como codigoBarras) — ver ProductoService.actualizar.
+    private String codigoFabrica;
 }

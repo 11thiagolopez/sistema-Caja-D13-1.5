@@ -132,8 +132,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
                 // Facturación fiscal (ARCA/WSFE): vive únicamente en Consulta de ventas, pantalla
                 // ya exclusiva de ADMIN — se mantiene ADMIN-only acá también, es una acción
-                // irreversible (emite un comprobante fiscal real).
-                .requestMatchers("/api/ventas/*/factura").hasRole("ADMIN")
+                // irreversible (emite un comprobante fiscal real). El "/**" es necesario: "*" solo
+                // matchea un segmento, así que sin él "/factura/pdf" y "/factura/enviar-email"
+                // quedaban sin matcher propio y cualquier rol autenticado los alcanzaba por el
+                // "anyRequest().authenticated()" genérico de abajo (bug real, encontrado escribiendo
+                // los tests de FacturaFiscalController).
+                .requestMatchers("/api/ventas/*/factura", "/api/ventas/*/factura/**").hasRole("ADMIN")
                 // Presupuestos: herramienta de venta del día a día (como Cobros), no un reporte
                 // administrativo — no afecta stock ni caja, así que no sigue la regla de abajo
                 // de que todo "/api/reportes/**" es exclusivo de ADMIN.

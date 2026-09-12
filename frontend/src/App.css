@@ -393,4 +393,44 @@ section {
   .comprobante-acciones {
     display: none;
   }
+  .etiqueta-imprimir,
+  .etiqueta-imprimir * {
+    visibility: visible;
+  }
+  .etiqueta-imprimir {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 58mm;
+    /* Página con nombre (no el @page sin nombre de abajo, que rompería el tamaño carta del
+       comprobante interno): solo esta impresión usa el ancho real del rollo térmico 58mm. */
+    page: etiqueta-58mm;
+  }
+}
+
+/* Impresora térmica Xprinter 58mm: @page con nombre, aplicado solo vía "page: etiqueta-58mm"
+   arriba — un @page sin nombre afectaría TODAS las impresiones de la app (incluido el
+   comprobante interno tamaño carta), no solo la etiqueta. */
+@page etiqueta-58mm {
+  size: 58mm auto;
+  margin: 0;
+}
+
+.etiqueta-descripcion {
+  margin: 4px 0 0;
+  font-size: 11px;
+  text-align: center;
+}
+
+.etiqueta-precio {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.etiqueta-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
 }
