@@ -289,6 +289,26 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void actualizar_comoAdmin_editaPrecioCompra() throws Exception {
+        String token = tokenAdmin();
+
+        String respuesta = mockMvc.perform(post("/api/productos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(PRODUCTO_BODY))
+            .andReturn().getResponse().getContentAsString();
+        Integer idProducto = objectMapper.readTree(respuesta).get("idProducto").asInt();
+
+        mockMvc.perform(patch("/api/productos/" + idProducto)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"precioCompra": 350}"""))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.precioCompra").value(350));
+    }
+
+    @Test
     void actualizar_comoVendedor_devuelve403() throws Exception {
         String tokenAdmin = tokenAdmin();
         String respuesta = mockMvc.perform(post("/api/productos")

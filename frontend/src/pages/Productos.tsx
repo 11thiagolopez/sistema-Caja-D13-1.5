@@ -20,7 +20,7 @@ import type {
   ProveedorResponse,
 } from '../types/api'
 
-type CampoEditable = 'descripcion' | 'marca' | 'precioVenta' | 'stockActual' | 'codigoFabrica'
+type CampoEditable = 'descripcion' | 'marca' | 'precioVenta' | 'precioCompra' | 'stockActual' | 'codigoFabrica'
 
 const PRODUCTO_VACIO: ProductoRequest = {
   rubro: '',
@@ -164,6 +164,8 @@ export function Productos() {
         return producto.marca ?? ''
       case 'precioVenta':
         return producto.precioVenta != null ? String(producto.precioVenta) : ''
+      case 'precioCompra':
+        return producto.precioCompra != null ? String(producto.precioCompra) : ''
       case 'stockActual':
         return String(producto.stockActual)
       case 'codigoFabrica':
@@ -188,7 +190,7 @@ export function Productos() {
     const { id, campo } = celdaEditando
     const valor = valorEdicion.trim()
 
-    if (campo === 'precioVenta' || campo === 'stockActual') {
+    if (campo === 'precioVenta' || campo === 'precioCompra' || campo === 'stockActual') {
       if (valor === '' || Number.isNaN(Number(valor))) {
         setErrorEdicion('Ingresá un número válido')
         return
@@ -203,13 +205,15 @@ export function Productos() {
     const cambios: ProductoUpdateRequest =
       campo === 'precioVenta'
         ? { precioVenta: Number(valor) }
-        : campo === 'stockActual'
-          ? { stockActual: Number(valor) }
-          : campo === 'marca'
-            ? { marca: valor }
-            : campo === 'codigoFabrica'
-              ? { codigoFabrica: valor }
-              : { descripcion: valor }
+        : campo === 'precioCompra'
+          ? { precioCompra: Number(valor) }
+          : campo === 'stockActual'
+            ? { stockActual: Number(valor) }
+            : campo === 'marca'
+              ? { marca: valor }
+              : campo === 'codigoFabrica'
+                ? { codigoFabrica: valor }
+                : { descripcion: valor }
 
     // Se sale del modo edición antes de esperar la respuesta: si el valor no cambió, evita
     // reintentar el guardado por el blur que dispara el propio input al desmontarse.
@@ -315,7 +319,8 @@ export function Productos() {
 
       {esAdmin && (
         <p className="ayuda-edicion">
-          Tocá una celda de descripción, marca, precio, stock o código de fábrica para editarla.
+          Tocá una celda de descripción, marca, precio de venta, precio de compra, stock o código
+          de fábrica para editarla.
         </p>
       )}
 
@@ -328,6 +333,7 @@ export function Productos() {
             <th>Código interno</th>
             <th>Código de fábrica</th>
             <th>Precio venta</th>
+            <th>Precio compra</th>
             <th>USD venta</th>
             <th>USD compra</th>
             <th>Stock</th>
@@ -347,6 +353,13 @@ export function Productos() {
                 producto,
                 'precioVenta',
                 producto.precioVenta != null ? producto.precioVenta.toFixed(2) : '—',
+                'number',
+                '0.01',
+              )}
+              {celdaEditable(
+                producto,
+                'precioCompra',
+                producto.precioCompra != null ? producto.precioCompra.toFixed(2) : '—',
                 'number',
                 '0.01',
               )}
@@ -437,8 +450,18 @@ export function Productos() {
             </label>
             <label>
               Código de fábrica (opcional, escanear o tipear)
-              <BarcodeInput
-                onScan={(codigo) => setNuevoProducto({ ...nuevoProducto, codigoFabrica: codigo })}
+              <input
+                value={nuevoProducto.codigoFabrica ?? ''}
+                onChange={(e) => setNuevoProducto({ ...nuevoProducto, codigoFabrica: e.target.value })}
+                onKeyDown={(e) => {
+                  // El lector físico manda un Enter solo apenas termina de escanear — sin este
+                  // preventDefault, ese Enter dispara el submit del formulario entero (todavía
+                  // incompleto: faltan descripción, precio, etc.), no solo confirma este campo.
+                  // A diferencia de BarcodeInput (pensado para "escanear y accionar ya", como en
+                  // Cobros o Cargar stock), acá el código tiene que quedar visible y cargado en el
+                  // campo hasta que se manden todos los datos juntos con "Agregar producto".
+                  if (e.key === 'Enter') e.preventDefault()
+                }}
                 placeholder="Código de fábrica"
               />
               {!nuevoProducto.codigoFabrica && (

@@ -60,6 +60,7 @@ export interface ProductoUpdateRequest {
   descripcion?: string
   marca?: string
   precioVenta?: number
+  precioCompra?: number
   stockActual?: number
   // A diferencia de los demás campos, "" (string vacío) es un valor válido: limpia el código de
   // fábrica y el producto vuelve a usar codigoInterno como codigoBarras.

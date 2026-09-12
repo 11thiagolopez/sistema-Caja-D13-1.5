@@ -109,6 +109,9 @@ public class ProductoService {
         if (req.getPrecioVenta() != null) {
             producto.setPrecioVenta(req.getPrecioVenta());
         }
+        if (req.getPrecioCompra() != null) {
+            producto.setPrecioCompra(req.getPrecioCompra());
+        }
         if (req.getStockActual() != null) {
             producto.setStockActual(req.getStockActual());
         }

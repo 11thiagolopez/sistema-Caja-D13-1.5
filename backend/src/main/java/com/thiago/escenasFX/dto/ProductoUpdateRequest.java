@@ -24,6 +24,9 @@ public class ProductoUpdateRequest {
     @DecimalMin(value = "0.01")
     private BigDecimal precioVenta;
 
+    @DecimalMin(value = "0.01")
+    private BigDecimal precioCompra;
+
     @Min(0)
     private Integer stockActual;
 

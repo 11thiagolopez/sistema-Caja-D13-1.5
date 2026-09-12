@@ -215,6 +215,22 @@ class ProductoServiceTest {
     }
 
     @Test
+    void actualizar_cambiaPrecioCompra() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setPrecioVenta(new BigDecimal("100"));
+        producto.setPrecioCompra(new BigDecimal("50"));
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setPrecioCompra(new BigDecimal("65"));
+        Producto actualizado = productoService.actualizar(7, req);
+
+        assertThat(actualizado.getPrecioCompra()).isEqualByComparingTo("65");
+    }
+
+    @Test
     void actualizar_asignaCodigoDeFabrica_recalculaCodigoBarras() {
         Producto producto = new Producto();
         producto.setIdProducto(7);
