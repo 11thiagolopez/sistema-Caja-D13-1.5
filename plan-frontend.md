@@ -316,7 +316,27 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-09-16, fix de impresión en la Xprinter térmica de 58mm)
+## Estado actual (Actualizado al 2026-09-16, fix de impresión — medida real del papel: 58×210mm fijo, no auto)
+
+Primer intento de fix (ver "Estado anterior" debajo) asumía sin poder confirmarlo que la Xprinter
+era un rollo continuo de alto variable. El dueño probó en la impresora física real y corrigió el
+dato: **58mm de ancho, 48mm imprimible, 210mm de largo FIJO** — el driver de Windows tiene un
+tamaño de página fijo configurado, no un rollo de alto automático. Con `size: 58mm auto` (el
+intento anterior) el driver ignoraba el alto pedido y ajustaba todo a su propio tamaño configurado
+— de ahí el "cuadrado chico" que seguía saliendo mal. Detalle técnico completo en
+`plan-migracion.md`, sección 22. Resumen del lado frontend:
+
+- **`App.css`**: `@page comprobante-58mm` y `@page etiqueta-58mm` pasaron de `size: 58mm auto` a
+  `size: 58mm 210mm` fijo, margen de 5mm (ancho de contenido real: 48mm, no 54mm).
+- **Fuentes agrandadas** en todo `.comprobante` durante impresión (14-20px, antes 11-13px) — con
+  el alto ahora fijo en 210mm sobra espacio de sobra para agrandar sin miedo a que no entre.
+
+Sigue sin cambiar ningún contrato de API ni regla de rol. `tsc -b` limpio. **Sigue sin probarse
+contra la impresora física** (no hay Xprinter conectada a esta máquina de desarrollo) — este fix
+está basado directamente en la medida real que dio el dueño, pero falta la confirmación visual
+final de que ahora imprime legible.
+
+## Estado anterior (Actualizado al 2026-09-16, primer intento de fix de impresión en la Xprinter térmica de 58mm — alto estimado, corregido en la sesión siguiente)
 
 Ni el ticket (`ComprobanteInterno.tsx`, impreso con `window.print()` al cerrar una venta) ni la
 factura fiscal ni el remito (PDFs generados en el backend) tenían el ancho de página declarado —
@@ -333,10 +353,9 @@ frontend:
   nombre afectaría cualquier otra impresión de la app), más las clases nuevas
   `.comprobante-items`/`.comprobante-item`/`.comprobante-item-fila` para el layout de dos líneas.
 
-No cambia ningún contrato de API ni regla de rol — es un fix puramente de presentación de
-impresión. `tsc -b` limpio. **No probado en la impresora física** (no hay Xprinter conectada a
-esta máquina de desarrollo) — pendiente que el dueño confirme legibilidad real la próxima vez que
-tenga el hardware a mano.
+**Corregido en la sesión siguiente (ver "Estado actual" arriba)**: este intento asumía rollo
+continuo de alto variable — la impresora real tiene tamaño de página fijo, así que `size: 58mm
+auto` no funcionaba como se esperaba.
 
 ## Estado anterior (Actualizado al 2026-09-16, sincronización de un equipo nuevo — sin cambios de código de esta sesión)
 

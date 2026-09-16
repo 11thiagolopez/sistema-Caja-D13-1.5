@@ -14,11 +14,12 @@ interface ComprobanteInternoProps {
  *
  * Cada ítem se muestra en dos líneas (descripción arriba, cantidad×precio = subtotal abajo) en
  * vez de una tabla de columnas lado a lado: es el mismo formato angosto que imprime la Xprinter
- * térmica de 58mm del mostrador (ver @media print en App.css, `.comprobante`) — una tabla con 4
- * columnas no entra legible en los ~54mm de ancho imprimible del rollo. Antes de este cambio
- * `.comprobante` no tenía ningún @page propio, así que al imprimir en esa impresora la hoja
- * salía con el tamaño de página por defecto (carta): todo el contenido escalado a un cuadrado
- * minúsculo, o una impresión larguísima si el driver imprimía a tamaño real sobre el rollo.
+ * térmica del mostrador (ver @media print en App.css, `.comprobante`) — una tabla con 4 columnas
+ * no entra legible en los ~48mm de ancho imprimible real del papel (58mm de rollo, 210mm de largo
+ * fijo — medida confirmada por el dueño en la impresora física). El `@page comprobante-58mm`
+ * declara ese tamaño fijo (no `auto`): pedirle al navegador un alto automático cuando la
+ * impresora ya tiene un tamaño de página fijo configurado en Windows es lo que hacía que todo
+ * saliera escalado a un cuadrado diminuto e ilegible.
  */
 export function ComprobanteInterno({ venta, onCerrar }: ComprobanteInternoProps) {
   const numero = String(venta.idVenta).padStart(4, '0')

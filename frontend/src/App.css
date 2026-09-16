@@ -357,7 +357,7 @@ section {
 .comprobante-item-fila {
   display: flex;
   justify-content: space-between;
-  font-size: 0.9em;
+  font-size: 0.95em;
   color: var(--text-muted, #555);
 }
 
@@ -400,14 +400,19 @@ section {
 }
 
 /*
- * Impresión en la Xprinter térmica de 58mm del mostrador. Bug real que este bloque arregla: antes
- * `.comprobante` (el ticket que se imprime con window.print() al cerrar una venta) no tenía
- * ningún @page propio, así que heredaba el tamaño de página por defecto del navegador/impresora
- * (carta/A4) — en la Xprinter eso salía como un cuadrado minúsculo ilegible (si el driver
- * escalaba la hoja entera al ancho de 58mm) o como una impresión larguísima mayormente en blanco
- * (si la imprimía a tamaño real sobre el rollo continuo). Cada impresión usa su propio @page con
- * nombre (`page: comprobante-58mm` / `page: etiqueta-58mm`) en vez de un @page sin nombre, que
- * afectaría CUALQUIER otra impresión futura de la app que no esté pensada para este rollo.
+ * Impresión en la Xprinter térmica del mostrador. Medida real del papel, confirmada por el dueño
+ * probando en la impresora física: 58mm de ancho de rollo, 48mm de ancho imprimible real, 210mm
+ * de largo FIJO — la impresora no está configurada en Windows como rollo continuo de alto
+ * variable, tiene un tamaño de página fijo. Por eso el @page de acá declara `size: 58mm 210mm`
+ * fijo, no `auto`: pedirle al navegador un alto "automático" cuando el driver de la impresora ya
+ * tiene un tamaño fijo configurado es lo que causaba que todo saliera escalado a un cuadrado
+ * diminuto e ilegible (el driver ajusta el contenido a SU página configurada, sea cual sea la que
+ * pida el CSS). Con el tamaño fijo ya no hay ese conflicto, y de paso quedó espacio de sobra para
+ * agrandar las fuentes (antes 11-13px, ilegibles en la impresora real).
+ *
+ * Cada impresión usa su propio @page con nombre (`page: comprobante-58mm` / `page:
+ * etiqueta-58mm`) en vez de un @page sin nombre, que afectaría CUALQUIER otra impresión futura de
+ * la app que no esté pensada para este rollo.
  */
 @media print {
   body * {
@@ -421,14 +426,32 @@ section {
     position: absolute;
     top: 0;
     left: 0;
-    width: 58mm;
+    width: 48mm;
     max-height: none;
     border: none;
-    font-size: 11px;
+    font-size: 16px;
+    line-height: 1.35;
     page: comprobante-58mm;
   }
   .comprobante-titulo h3 {
+    font-size: 18px;
+  }
+  .comprobante-x {
+    width: 22px;
+    height: 22px;
+    font-size: 14px;
+  }
+  .comprobante-aviso {
     font-size: 13px;
+  }
+  .comprobante-item-desc {
+    font-size: 15px;
+  }
+  .comprobante-item-fila {
+    font-size: 14px;
+  }
+  .comprobante-total {
+    font-size: 20px;
   }
   .comprobante-acciones {
     display: none;
@@ -441,19 +464,19 @@ section {
     position: absolute;
     top: 0;
     left: 0;
-    width: 58mm;
+    width: 48mm;
     page: etiqueta-58mm;
   }
 }
 
 @page comprobante-58mm {
-  size: 58mm auto;
-  margin: 2mm;
+  size: 58mm 210mm;
+  margin: 5mm;
 }
 
 @page etiqueta-58mm {
-  size: 58mm auto;
-  margin: 0;
+  size: 58mm 210mm;
+  margin: 5mm;
 }
 
 .etiqueta-descripcion {

@@ -1810,3 +1810,65 @@ pruebe una impresión real la próxima vez que tenga la Xprinter a mano y confir
 letra/QR es legible — los tamaños de fuente (9-14px) y del QR (32mm) son una estimación razonable
 sin poder medir contra el rollo físico, así que puede hacer falta un ajuste fino de tamaños
 después de verlo impreso de verdad.
+
+## 22. Sesión 2026-09-16 (misma sesión que la 21): corrección con la medida real del papel — la estimación de alto variable no era el problema, el driver tiene un tamaño de página FIJO
+
+El dueño probó la sección 21 en la impresora física real y reportó dos problemas: (1) el ticket
+que se imprime con el botón "Imprimir" desde "Ver" en Consulta de ventas seguía saliendo igual de
+mal que antes; (2) el PDF que se descarga ("Descargar") se veía bien compuesto pero con las letras
+demasiado chicas para leer, "como un cuadrado chico en todo el ticket". Dato clave que dio para
+diagnosticarlo: **el papel es 58mm de ancho (48mm imprimible real) x 210mm de largo — la Xprinter
+está configurada en Windows con un tamaño de página FIJO, no como rollo continuo de alto
+variable.**
+
+### 22.1 Diagnóstico revisado
+
+La sección 21 asumía (sin poder verificarlo sin el hardware) que la impresora era un rollo
+continuo de alto variable, y por eso `TicketHtmlBuilder`/`FacturaFiscalHtmlBuilder` **estimaban**
+un alto de página según la cantidad de renglones (65-130mm) en vez de usar un valor fijo. Ese
+supuesto era incorrecto: el driver de la Xprinter tiene configurado en Windows un tamaño de
+página **fijo** de 58×210mm. Cuando el PDF declara un alto de página más chico que el que el
+driver tiene configurado (nuestros 65-130mm estimados contra los 210mm reales), el driver ajusta
+el contenido a SU página configurada, no a la del PDF — de ahí el "cuadrado chico": el contenido
+quedaba escalado/reducido para encajar en la relación de aspecto que el driver esperaba. Además,
+las fuentes (9-14px) ya eran chicas de por sí incluso sin ese problema de escala.
+
+El botón "Imprimir" del "Ver" en Consulta de ventas usa el mismo componente `ComprobanteInterno`
+que Cobros (confirmado revisando `HistorialVentas.tsx` — no es un flujo distinto), así que el
+`@page comprobante-58mm { size: 58mm auto; }` de la sección 21 tenía el mismo problema de fondo:
+`auto` le pide al motor de impresión del navegador que decida el alto — pero eso solo tiene efecto
+real cuando el destino de impresión soporta alto variable (el propio "Guardar como PDF" de Chrome,
+o una impresora de rollo continuo de verdad). Contra un driver con tamaño de página fijo, `auto`
+no tiene ningún efecto útil y el navegador termina usando el tamaño que el driver reporta como
+activo.
+
+### 22.2 Fix
+
+Se sacó por completo la lógica de estimación de alto (`estimarAltoMm`, en ambas clases) y se
+reemplazó por un tamaño de página fijo en los tres lugares:
+- **`TicketHtmlBuilder`/`FacturaFiscalHtmlBuilder`** (backend): `@page { size: 58mm 210mm; margin:
+  5mm; }` fijo (antes `size: 58mm <alto estimado>mm`). El margen de 5mm por lado deja un área de
+  contenido de 48mm de ancho, la medida real imprimible que dio el dueño (no los 54mm que se
+  habían asumido en la sección 21 sin poder confirmarlo).
+- **`App.css`, `.comprobante`/`.etiqueta-imprimir`**: los `@page comprobante-58mm` y
+  `@page etiqueta-58mm` pasaron de `size: 58mm auto` a `size: 58mm 210mm` fijo, mismo margen de
+  5mm y ancho de contenido de 48mm.
+
+**Fuentes agrandadas en los tres** — con el alto ahora fijo en 210mm sobra espacio de sobra, así
+que no hay riesgo de que no entre el contenido si se agranda todo: el cuerpo del ticket pasó de
+9-10px a 14px, el total de 12px a 20px, el nombre del local a 16px, etc. (ver
+`TicketHtmlBuilder.estilos()` para el detalle completo de cada clase). Mismo criterio aplicado al
+CSS de impresión de `.comprobante` en `App.css`.
+
+**Consecuencia aceptada, no un bug**: si el ticket tiene pocos ítems, sobra papel en blanco al
+final de los 210mm — es preferible a que el contenido salga escalado/ilegible, y es como
+efectivamente está configurada la impresora (no hay forma de pedirle un alto distinto sin
+reconfigurar el driver de Windows, algo fuera del alcance del código).
+
+### 22.3 Verificación
+
+Backend: **198 tests verdes** (`mvn -q -o test`) — sin cambios de comportamiento más allá del
+tamaño/fuente del HTML, que ningún test verifica byte a byte (mismo motivo que en la sección
+21.3). `tsc -b` limpio. Seguimos sin poder probar contra la Xprinter física desde esta máquina de
+desarrollo — este fix está basado directamente en la medida real que dio el dueño probando en su
+impresora, pero falta la confirmación visual final de que ahora imprime legible.

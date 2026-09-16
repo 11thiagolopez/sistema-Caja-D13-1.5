@@ -5,15 +5,15 @@ import java.util.List;
 
 /**
  * Arma el XHTML válido para las Facturas Fiscales electrónicas de ARCA, en el mismo formato
- * angosto de 58mm que {@link TicketHtmlBuilder} — pensado para imprimirse en la Xprinter térmica
- * del mostrador, como una factura de cualquier facturadora fiscal de toda la vida (encabezado,
- * ítems, total, CAE y QR en una sola columna vertical), no como una hoja A4 formal. Incluye los
- * campos obligatorios: Letra del comprobante, CAE, Vencimiento y Código QR.
+ * angosto que {@link TicketHtmlBuilder} — pensado para imprimirse en la Xprinter térmica del
+ * mostrador, como una factura de cualquier facturadora fiscal de toda la vida (encabezado, ítems,
+ * total, CAE y QR en una sola columna vertical), no como una hoja A4 formal. Incluye los campos
+ * obligatorios: Letra del comprobante, CAE, Vencimiento y Código QR.
  *
  * <p>Antes de este cambio esta clase armaba una hoja A4 de dos columnas (logo a la izquierda,
  * recuadro de letra al medio, CUIT a la derecha) sin ningún {@code @page} — exactamente el mismo
- * bug que {@link TicketHtmlBuilder} explica en detalle: en la Xprinter 58mm salía todo en un
- * cuadrado ilegible o en una impresión larguísima.
+ * bug que {@link TicketHtmlBuilder} explica en detalle (tamaño de página fijo real: 58mm de
+ * ancho, 48mm imprimible, 210mm de largo — confirmado por el dueño en la impresora física).
  */
 public final class FacturaFiscalHtmlBuilder {
 
@@ -32,10 +32,8 @@ public final class FacturaFiscalHtmlBuilder {
     }
 
     /**
-     * Construye el HTML de la Factura Fiscal, en el mismo ancho de ticket (58mm) que
-     * {@link TicketHtmlBuilder}. El alto de página se estima según la cantidad real de ítems y
-     * líneas de cliente — igual criterio que TicketHtmlBuilder, más el espacio fijo que ocupan acá
-     * el bloque de CUIT/condición de IVA y el QR de ARCA al pie.
+     * Construye el HTML de la Factura Fiscal, en el mismo ancho de ticket que
+     * {@link TicketHtmlBuilder} y con su mismo {@code @page} fijo de 58×210mm.
      *
      * @param letraCmp Ej: "A", "B", "C"
      * @param qrBase64 Imagen del QR ya codificada en base64 (data:image/png;base64,...)
@@ -45,8 +43,6 @@ public final class FacturaFiscalHtmlBuilder {
      */
     public static String construir(String titulo, String letraCmp, List<String> infoCliente, List<Linea> items,
             BigDecimal total, String logoSrc, String cae, String vtoCae, String qrBase64, String cuitFormateado) {
-        int altoMm = estimarAltoMm(items.size(), infoCliente.size());
-
         StringBuilder filas = new StringBuilder();
         for (Linea l : items) {
             filas.append("<div class='item'>")
@@ -65,7 +61,7 @@ public final class FacturaFiscalHtmlBuilder {
         }
 
         return "<html xmlns='http://www.w3.org/1999/xhtml'><head><meta charset='UTF-8'/>"
-            + "<style>" + TicketHtmlBuilder.estilos(altoMm) + estilosPropios() + "</style></head>"
+            + "<style>" + TicketHtmlBuilder.estilos() + estilosPropios() + "</style></head>"
             + "<body><div class='ticket'>"
             + "<div class='centro'><img src='" + logoSrc + "' class='logo'/></div>"
             + "<p class='centro negrita'>" + XmlEscaper.escape(NOMBRE_LOCAL) + "</p>"
@@ -92,18 +88,9 @@ public final class FacturaFiscalHtmlBuilder {
             + "</div></body></html>";
     }
 
-    /** Igual criterio que {@link TicketHtmlBuilder#estimarAltoMm} (mismas constantes por
-     * ítem/línea de info, ya ajustadas a mano con contenido real — ver el comentario ahí), más
-     * ~55mm fijos extra acá para el bloque de CUIT/condición de IVA, la letra del comprobante y
-     * el QR (32mm) al pie, que solo ocurren en la factura. */
-    private static int estimarAltoMm(int cantidadItems, int cantidadInfo) {
-        int alto = 105 + cantidadInfo * 6 + cantidadItems * 11;
-        return Math.max(alto, 130);
-    }
-
     private static String estilosPropios() {
-        return ".letra { display:inline-block; border:2px solid #000; width:8mm; height:8mm; "
-            + "line-height:8mm; font-size:14px; font-weight:bold; text-align:center; }"
-            + ".qr { width:32mm; height:32mm; margin-top:2px; }";
+        return ".letra { display:inline-block; border:2px solid #000; width:10mm; height:10mm; "
+            + "line-height:10mm; font-size:18px; font-weight:bold; text-align:center; }"
+            + ".qr { width:38mm; height:38mm; margin-top:4px; }";
     }
 }

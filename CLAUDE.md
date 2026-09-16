@@ -9,25 +9,31 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-16, fix de impresión en la Xprinter térmica de 58mm del
-mostrador — tickets y facturas salían ilegibles):
+Estado Actual (Actualizado al 2026-09-16, fix de impresión — corregido con la medida REAL del
+papel tras probar en la impresora física: 58mm×210mm fijo, no rollo de alto automático):
 
-**Bug real reportado por el dueño**: nada en el sistema estaba pensado para imprimir en la
-Xprinter de 58mm del mostrador — ni el ticket (comprobante interno al cerrar una venta) ni la
-factura fiscal ni el remito tenían el ancho de página declarado, así que salían con el tamaño de
-página por defecto (carta/A4): un cuadrado minúsculo ilegible o una impresión larguísima mayormente
-en blanco, según cómo lo escalara el driver de la impresora. Fix: `TicketHtmlBuilder` (nuevo,
-usado por `VentaService` para ticket/remito) y `FacturaFiscalHtmlBuilder` (reescrito) ahora arman
-un layout angosto de una sola columna (cada ítem en dos líneas, no una tabla de 4 columnas) con un
-`@page` de 58mm de ancho y un alto estimado según la cantidad de renglones — como cualquier
-facturadora fiscal de mostrador de toda la vida. El ticket impreso directo desde el navegador
-(`ComprobanteInterno.tsx`/`App.css`) recibió el mismo tratamiento con `@page comprobante-58mm`.
-Presupuestos (cotización que se manda por mail a un cliente) se dejó sin tocar a propósito, en su
-formato ancho original — no es algo que se imprima en el mostrador. Backend: 198 tests verdes,
-`tsc -b` limpio. **No probado contra la impresora física** (no hay Xprinter conectada a esta
-máquina de desarrollo) — pendiente que el dueño confirme legibilidad real y ajuste de tamaños de
-fuente/QR la próxima vez que tenga el hardware a mano. Detalle técnico completo en
-`plan-migracion.md` sección 21 y `plan-frontend.md` "Estado actual".
+**Bug real reportado por el dueño, en dos rondas.** Primera ronda: nada en el sistema tenía el
+ancho de página declarado para la Xprinter del mostrador — ticket, remito y factura fiscal salían
+con el tamaño por defecto (carta/A4), ilegibles. Fix (sin poder probar contra hardware real):
+`TicketHtmlBuilder` (nuevo, usado por `VentaService` para ticket/remito) y
+`FacturaFiscalHtmlBuilder` (reescrito) armaron un layout angosto de una columna con `@page` de
+58mm de ancho y un **alto estimado** según la cantidad de renglones; el ticket del navegador
+(`ComprobanteInterno.tsx`/`App.css`) usó `@page comprobante-58mm { size: 58mm auto; }`.
+
+**Segunda ronda, tras probar en la impresora real**: el dueño reportó que seguía saliendo mal
+("como un cuadrado chico") y dio el dato que faltaba — **el papel es 58mm de ancho (48mm
+imprimible), 210mm de largo FIJO**: la Xprinter tiene un tamaño de página fijo configurado en
+Windows, no es un rollo continuo de alto variable. Tanto el alto estimado (65-130mm) como el
+`auto` del navegador quedaban por debajo/en conflicto con ese tamaño fijo real, así que el driver
+reescalaba el contenido a SU página configurada. Fix definitivo: se sacó toda la lógica de
+estimación y los tres lugares pasaron a `@page { size: 58mm 210mm; margin: 5mm; }` fijo (ancho de
+contenido real: 48mm), con las fuentes bien agrandadas (14-20px, antes 9-13px) ya que con el alto
+fijo sobra espacio de sobra. Presupuestos (cotización que se manda por mail a un cliente) se dejó
+sin tocar a propósito — no es algo que se imprima en el mostrador. Backend: 198 tests verdes,
+`tsc -b` limpio. **Sigue sin probarse contra la impresora física** (no hay Xprinter conectada a
+esta máquina de desarrollo) — este segundo fix está basado directamente en la medida real que dio
+el dueño, pero falta la confirmación visual final de que ahora imprime legible. Detalle técnico
+completo en `plan-migracion.md` secciones 21 y 22, y `plan-frontend.md` "Estado actual".
 
 Estado Anterior (Actualizado al 2026-09-16, sincronización de un equipo de desarrollo nuevo con
 GitHub + primera puesta a punto de su entorno — sin cambios de código):
