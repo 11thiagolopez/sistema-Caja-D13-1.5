@@ -86,7 +86,10 @@ final class TicketHtmlBuilder {
             + ".negrita { font-weight:bold; }"
             + ".nombre { font-size: 16px; }"
             + ".titulo { font-size: 15px; }"
-            + ".chico { font-size: 11px; color:#333; }"
+            // Antes 11px: el dueño la probó impresa (dirección/teléfono en el ticket, CUIT/
+            // Monotributo/"Comprobante autorizado por ARCA"/Vto. CAE en la factura fiscal — todos
+            // comparten esta clase) y pidió agrandarla, seguía chica para leer.
+            + ".chico { font-size: 13px; color:#333; }"
             + ".logo { max-width: 40mm; max-height: 18mm; }"
             + ".separador { border-top: 2px dashed #000; margin: 6px 0; }"
             + ".info { margin: 3px 0; font-size: 12px; }"
