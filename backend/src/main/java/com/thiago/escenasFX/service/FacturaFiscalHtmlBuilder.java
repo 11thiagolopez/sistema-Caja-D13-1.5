@@ -4,8 +4,16 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Arma el XHTML válido para las Facturas Fiscales electrónicas de ARCA.
- * Incluye los campos obligatorios: Letra del comprobante, CAE, Vencimiento y Código QR.
+ * Arma el XHTML válido para las Facturas Fiscales electrónicas de ARCA, en el mismo formato
+ * angosto de 58mm que {@link TicketHtmlBuilder} — pensado para imprimirse en la Xprinter térmica
+ * del mostrador, como una factura de cualquier facturadora fiscal de toda la vida (encabezado,
+ * ítems, total, CAE y QR en una sola columna vertical), no como una hoja A4 formal. Incluye los
+ * campos obligatorios: Letra del comprobante, CAE, Vencimiento y Código QR.
+ *
+ * <p>Antes de este cambio esta clase armaba una hoja A4 de dos columnas (logo a la izquierda,
+ * recuadro de letra al medio, CUIT a la derecha) sin ningún {@code @page} — exactamente el mismo
+ * bug que {@link TicketHtmlBuilder} explica en detalle: en la Xprinter 58mm salía todo en un
+ * cuadrado ilegible o en una impresión larguísima.
  */
 public final class FacturaFiscalHtmlBuilder {
 
@@ -24,7 +32,11 @@ public final class FacturaFiscalHtmlBuilder {
     }
 
     /**
-     * Construye el HTML de la Factura Fiscal.
+     * Construye el HTML de la Factura Fiscal, en el mismo ancho de ticket (58mm) que
+     * {@link TicketHtmlBuilder}. El alto de página se estima según la cantidad real de ítems y
+     * líneas de cliente — igual criterio que TicketHtmlBuilder, más el espacio fijo que ocupan acá
+     * el bloque de CUIT/condición de IVA y el QR de ARCA al pie.
+     *
      * @param letraCmp Ej: "A", "B", "C"
      * @param qrBase64 Imagen del QR ya codificada en base64 (data:image/png;base64,...)
      * @param cuitFormateado CUIT del emisor con guiones (ej. "20-30023837-9"), el mismo que se usa
@@ -32,93 +44,66 @@ public final class FacturaFiscalHtmlBuilder {
      *                       que no pueda quedar desincronizado del CUIT real (ver FacturaPdfService).
      */
     public static String construir(String titulo, String letraCmp, List<String> infoCliente, List<Linea> items,
-                                   BigDecimal total, String logoSrc, String cae, String vtoCae, String qrBase64,
-                                   String cuitFormateado) {
-        
+            BigDecimal total, String logoSrc, String cae, String vtoCae, String qrBase64, String cuitFormateado) {
+        int altoMm = estimarAltoMm(items.size(), infoCliente.size());
+
         StringBuilder filas = new StringBuilder();
         for (Linea l : items) {
-            filas.append("<tr>")
-                .append("<td style='padding:6px;border:1px solid #ccc;text-align:center;'>").append(l.cantidad()).append("</td>")
-                .append("<td style='padding:6px;border:1px solid #ccc;'>").append(XmlEscaper.escape(l.descripcion())).append("</td>")
-                .append("<td style='padding:6px;border:1px solid #ccc;text-align:right;'>$").append(l.precioUnitario()).append("</td>")
-                .append("<td style='padding:6px;border:1px solid #ccc;text-align:right;'>$").append(l.subtotal()).append("</td>")
-                .append("</tr>");
+            filas.append("<div class='item'>")
+                .append("<div class='item-desc'>").append(l.cantidad()).append("x ")
+                .append(XmlEscaper.escape(l.descripcion())).append("</div>")
+                .append("<table class='fila'><tr>")
+                .append("<td>$").append(l.precioUnitario()).append(" c/u</td>")
+                .append("<td class='derecha'>$").append(l.subtotal()).append("</td>")
+                .append("</tr></table>")
+                .append("</div>");
         }
 
         StringBuilder info = new StringBuilder();
         for (String linea : infoCliente) {
-            info.append("<p style='margin:2px 0;font-size:13px;'>").append(XmlEscaper.escape(linea)).append("</p>");
+            info.append("<p class='info'>").append(XmlEscaper.escape(linea)).append("</p>");
         }
 
-        return "<html xmlns='http://www.w3.org/1999/xhtml'><head><meta charset='UTF-8'/></head>"
-            + "<body style='font-family:Arial,sans-serif;font-size:12px;'>"
-            + "<div style='max-width:700px; margin:0 auto; border:1px solid #000; padding:20px;'>"
-            
-            // CABECERA (Logo, Datos Empresa y Recuadro de Letra)
-            + "<table style='width:100%; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:10px;'>"
-            + "<tr>"
-            + "<td style='width:45%; vertical-align:top;'>"
-            + "<img src='" + logoSrc + "' alt='" + XmlEscaper.escape(NOMBRE_LOCAL) + "' style='height:70px;' />"
-            + "<p style='margin:4px 0;font-weight:bold;font-size:14px;'>" + XmlEscaper.escape(NOMBRE_LOCAL) + "</p>"
-            + "<p style='margin:2px 0;'>" + XmlEscaper.escape(DIRECCION_LOCAL) + "</p>"
-            + "<p style='margin:2px 0;'>Tel: " + XmlEscaper.escape(TELEFONO_LOCAL) + "</p>"
-            + "<p style='margin:2px 0;'>Condición frente al IVA: <strong>" + XmlEscaper.escape(CONDICION_IVA) + "</strong></p>"
-            + "</td>"
-            
-            // RECUADRO CENTRAL CON LA LETRA
-            + "<td style='width:10%; text-align:center; vertical-align:top;'>"
-            + "<div style='border:2px solid #000; width:45px; height:45px; margin:0 auto; font-size:30px; font-weight:bold; line-height:45px;'>" 
-            + XmlEscaper.escape(letraCmp) 
+        return "<html xmlns='http://www.w3.org/1999/xhtml'><head><meta charset='UTF-8'/>"
+            + "<style>" + TicketHtmlBuilder.estilos(altoMm) + estilosPropios() + "</style></head>"
+            + "<body><div class='ticket'>"
+            + "<div class='centro'><img src='" + logoSrc + "' class='logo'/></div>"
+            + "<p class='centro negrita'>" + XmlEscaper.escape(NOMBRE_LOCAL) + "</p>"
+            + "<p class='centro chico'>" + XmlEscaper.escape(DIRECCION_LOCAL) + " — Tel: "
+            + XmlEscaper.escape(TELEFONO_LOCAL) + "</p>"
+            + "<p class='centro chico'>CUIT: " + XmlEscaper.escape(cuitFormateado) + " — "
+            + XmlEscaper.escape(CONDICION_IVA) + "</p>"
+            + "<div class='separador'></div>"
+            + "<div class='centro'>"
+            + "<span class='letra'>" + XmlEscaper.escape(letraCmp) + "</span>"
             + "</div>"
-            + "</td>"
-            
-            // DATOS DEL COMPROBANTE Y CUIT
-            + "<td style='width:45%; vertical-align:top; text-align:right;'>"
-            + "<h2 style='margin:0 0 10px 0;font-size:22px;'>" + XmlEscaper.escape(titulo) + "</h2>"
-            + "<p style='margin:2px 0;'><strong>CUIT:</strong> " + XmlEscaper.escape(cuitFormateado) + "</p>"
-            + "<p style='margin:2px 0;'><strong>Ingresos Brutos:</strong> " + XmlEscaper.escape(cuitFormateado) + "</p>"
-            + "<p style='margin:2px 0;'><strong>Inicio de Actividades:</strong> 01/08/2023</p>"
-            + "</td>"
-            + "</tr>"
-            + "</table>"
-            
-            // DATOS DEL CLIENTE
-            + "<div style='background-color:#f9f9f9; padding:10px; border:1px solid #ccc; margin-bottom:15px;'>"
+            + "<p class='centro negrita'>" + XmlEscaper.escape(titulo) + "</p>"
+            + "<div class='separador'></div>"
             + info
-            + "</div>"
-            
-            // TABLA DE PRODUCTOS
-            + "<table style='width:100%; border-collapse:collapse;'>"
-            + "<thead style='background-color:#eee;'>"
-            + "<tr>"
-            + "<th style='padding:8px;border:1px solid #ccc;width:10%;'>Cant.</th>"
-            + "<th style='padding:8px;border:1px solid #ccc;text-align:left;'>Descripción</th>"
-            + "<th style='padding:8px;border:1px solid #ccc;width:20%;text-align:right;'>Precio Unit.</th>"
-            + "<th style='padding:8px;border:1px solid #ccc;width:20%;text-align:right;'>Subtotal</th>"
-            + "</tr>"
-            + "</thead>"
-            + "<tbody>" + filas + "</tbody>"
-            + "</table>"
-            
-            // TOTAL
-            + "<div style='text-align:right; margin-top:15px; padding:10px; background-color:#eee; border:1px solid #ccc;'>"
-            + "<span style='font-size:18px;'><strong>TOTAL: $" + total + "</strong></span>"
-            + "</div>"
-            
-            // PIE FISCAL (ARCA - CAE y QR)
-            + "<table style='width:100%; margin-top:20px; border-top:2px solid #000; padding-top:15px;'>"
-            + "<tr>"
-            + "<td style='width:20%;'>"
-            + "<img src='" + qrBase64 + "' alt='QR ARCA' style='width:130px; height:130px;' />"
-            + "</td>"
-            + "<td style='vertical-align:middle; text-align:right;'>"
-            + "<h3 style='margin:0 0 5px 0; color:#333;'>Comprobante Autorizado por ARCA</h3>"
-            + "<p style='margin:5px 0; font-size:16px;'><strong>CAE:</strong> " + XmlEscaper.escape(cae) + "</p>"
-            + "<p style='margin:5px 0; font-size:14px;'><strong>Fecha Vto. CAE:</strong> " + XmlEscaper.escape(vtoCae) + "</p>"
-            + "</td>"
-            + "</tr>"
-            + "</table>"
-            
+            + "<div class='separador'></div>"
+            + filas
+            + "<div class='separador'></div>"
+            + "<table class='fila total'><tr><td>TOTAL</td><td class='derecha'>$" + total + "</td></tr></table>"
+            + "<div class='separador'></div>"
+            + "<p class='chico centro'>Comprobante autorizado por ARCA</p>"
+            + "<p class='chico centro'>CAE: " + XmlEscaper.escape(cae) + "</p>"
+            + "<p class='chico centro'>Vto. CAE: " + XmlEscaper.escape(vtoCae) + "</p>"
+            + "<div class='centro'><img src='" + qrBase64 + "' class='qr'/></div>"
             + "</div></body></html>";
+    }
+
+    /** Igual criterio que {@link TicketHtmlBuilder#estimarAltoMm} (mismas constantes por
+     * ítem/línea de info, ya ajustadas a mano con contenido real — ver el comentario ahí), más
+     * ~55mm fijos extra acá para el bloque de CUIT/condición de IVA, la letra del comprobante y
+     * el QR (32mm) al pie, que solo ocurren en la factura. */
+    private static int estimarAltoMm(int cantidadItems, int cantidadInfo) {
+        int alto = 105 + cantidadInfo * 6 + cantidadItems * 11;
+        return Math.max(alto, 130);
+    }
+
+    private static String estilosPropios() {
+        return ".letra { display:inline-block; border:2px solid #000; width:8mm; height:8mm; "
+            + "line-height:8mm; font-size:14px; font-weight:bold; text-align:center; }"
+            + ".qr { width:32mm; height:32mm; margin-top:2px; }";
     }
 }

@@ -1618,3 +1618,195 @@ hacía con `CotizacionApiClient`) para que ningún test de integración le pegue
 mostrador real chica, Consumidor Final, CAE obtenido y verificado con el verificador público de
 CAE. Migración de esquema corrida a mano por el dueño (Supabase MCP no disponible esa sesión),
 verificada por `ddl-auto=validate` al arrancar el backend contra Supabase real.
+
+## 19. Sesión 2026-09-12: nombre del cliente en factura fiscal, códigos de barras mixtos, alertas de stock bajo, fix de escaneo en alta y edición de precio de compra
+
+Dos commits (`25735f5` y `5c5b781`), trabajados en otra máquina de desarrollo y traídos a este
+equipo por `git pull` en la sesión de hoy (2026-09-16) — ver sección 20 para el detalle de esa
+sincronización. Documentados acá porque no habían quedado registrados en su momento.
+
+### 19.1 Nombre del cliente en la factura fiscal (`25735f5`)
+
+`FacturaFiscal` ganó `clienteNombre` (razón social/nombre, solo cuando el cliente está
+identificado por CUIT/DNI) — WSFEv1 no lo exige, pero toda factura real de ARCA lo lleva impreso,
+así que se carga a mano en el request y se imprime en el PDF igual que cualquier otro dato del
+comprobante.
+
+**Bug real encontrado escribiendo los tests de `FacturaFiscalController`**: el matcher de
+`SecurityConfig` para la facturación fiscal era `"/api/ventas/*/factura"` — `*` solo matchea un
+segmento de path, así que no alcanzaba a `/factura/pdf` ni a `/factura/enviar-email` (ambos con un
+segmento extra), y esos dos endpoints quedaban cubiertos únicamente por el
+`anyRequest().authenticated()` genérico del final: cualquier rol autenticado (no solo ADMIN) podía
+descargar o mandar por mail el PDF de una factura fiscal. Fix: matcher ampliado a
+`"/api/ventas/*/factura", "/api/ventas/*/factura/**"`.
+
+### 19.2 Códigos de barras mixtos (`25735f5`)
+
+Columna nueva `productos.codigo_barras` (única), pensada para el escaneo físico y la impresión de
+etiqueta — asignada automáticamente por `ProductoService` al alta/edición: usa `codigoFabrica` si
+el producto lo tiene, o `codigoInterno` como fallback si no (productos sueltos/cortados a medida,
+sin envoltorio con EAN). Nunca genera un código nuevo, y es editable a mano desde la tabla de
+Productos si hace falta.
+
+**Motivo real, no solo prolijidad**: varios productos del catálogo migrado comparten el mismo
+`codigoFabrica` entre sí (dato heredado del sistema viejo). Antes de esta columna, el escaneo en
+Cobros/Cargar stock (`ProductoRepository.buscarActivoPorCodigo`) resolvía por `codigoFabrica` OR
+`codigoInterno`, así que un código de fábrica duplicado podía tirar
+`NonUniqueResultException`/devolver el producto equivocado. Ahora esa misma query resuelve por
+`codigoBarras` (el valor único, ya backfileado sobre los ~6900 productos reales) OR
+`codigoInterno` como red de contención — ya no consulta `codigoFabrica` crudo.
+
+Frontend: botón "Imprimir etiqueta" nuevo en Productos (`EtiquetaImprimible.tsx`), genera el
+código de barras Code128 con la librería `JsBarcode` pensado para impresora térmica 58mm.
+
+### 19.3 Alertas de stock bajo (`25735f5`)
+
+`NotificacionService`, nuevo — evalúa dos umbrales de forma independiente (no excluyente: una
+venta grande que baja el stock de 6 a 1 de un salto dispara los dos avisos juntos) comparando
+`stockAntes`/`stockDespues` en el mismo momento en que `VentaService` descuenta stock, sin ningún
+flag `alertaEnviadaX` nuevo en `Producto` — así el aviso de "cruzó 5 unidades" sale una sola vez
+por cruce real, no se repite en cada venta siguiente que lo siga bajando:
+- **Aviso** al cruzar **5** unidades.
+- **URGENTE** al cruzar **2** unidades.
+
+Reusa el `EmailService` existente (Resend) para mandar el mail a los ADMIN — no se sumó SMTP ni
+ningún proveedor nuevo. **Nunca propaga la excepción** si el envío falla (Resend caído, o ningún
+ADMIN con email configurado): la venta que disparó el descuento de stock tiene que completarse
+igual, la alerta es best-effort. Verificado con test (`NotificacionServiceTest`,
+`siFallaElEnvioDeEmail_noPropagaLaExcepcion`).
+
+### 19.4 Fix de escaneo en alta de producto + edición de precio de compra (`5c5b781`)
+
+**Bug real**: el input de código de fábrica en "Agregar producto" usaba `BarcodeInput`, el mismo
+componente pensado para el flujo de "escanear y accionar ya" de Cobros/Cargar stock — ese
+componente borra su valor apenas el lector manda el Enter automático que emite al final del
+escaneo. En el alta el código tiene que quedar cargado en el formulario hasta que se envíe todo
+junto, así que ese comportamiento rompía la carga. Fix: pasó a ser un input controlado normal que
+retiene el valor y bloquea que ese Enter dispare un submit prematuro del formulario todavía
+incompleto.
+
+`precioCompra` ganó edición en línea desde la tabla de Productos, mismo mecanismo de
+click-to-edit que ya tenían descripción/marca/precioVenta/stockActual/codigoFabrica (sección 15.1).
+
+### 19.5 Verificación (según los mensajes de commit de esa sesión)
+
+`25735f5`: 196 tests de backend verdes, `tsc -b` y build de frontend limpios.
+`5c5b781`: 198 tests de backend verdes, `tsc -b` y build de frontend limpios.
+
+## 20. Sesión 2026-09-16: sincronización de este equipo con GitHub + primera puesta a punto del entorno
+
+Este equipo (usuario de Windows `PC-DESKTOP/User`) no tenía el repo actualizado — quedó 2 commits
+atrás de `origin/migracion-web` (los de la sección 19, trabajados en otra máquina). Se hizo
+`git pull --ff-only` sin conflictos (los commits nuevos no tocan `.project`/`backend/.classpath`,
+que seguían con cambios locales sin commitear de configuración de Eclipse/JDT — no se tocaron).
+
+**Primera puesta a punto de este equipo para desarrollo** — nada de esto había hecho falta antes
+en la máquina de desarrollo habitual del dueño, documentado acá para la próxima vez que haga falta
+en un equipo nuevo:
+
+1. **Git no estaba instalado.** Se instaló Git for Windows 2.55.0.3 vía `winget install --id
+   Git.Git`. Maven (`C:\herramientas\apache-maven-3.9.16`) y Node (`C:\nodejs`) sí estaban
+   instalados pero ninguno de los tres (`git`, `mvn`, `node`) está en el PATH del sistema —
+   hace falta anteponerlos a mano en cada sesión de terminal nueva, o agregarlos al PATH de
+   Windows de forma permanente (pendiente, decisión del dueño).
+2. **"Dubious ownership" de Git**: el repo pertenece al perfil de Windows `User` pero el proceso
+   que corre Claude Code en este equipo lo hace como el usuario `aleja` — Git 2.55 rechaza operar
+   sobre un repo de un dueño distinto por seguridad. Se agregó una excepción puntual con
+   `git config --global --add safe.directory` para esta carpeta específica (no un `*` global).
+3. **Maven en modo offline (`-o`) no podía resolver `bcprov-jdk18on` `[1.81,1.82)`** (la
+   dependencia de BouncyCastle para AFIP, sección 18.2) — nunca se había descargado en el `.m2`
+   de este equipo. Hubo que correr `mvn test` sin `-o` una primera vez para que la trajera de
+   Maven Central; de ahí en más `-o` vuelve a funcionar con normalidad.
+4. **Avast Antivirus intercepta el tráfico HTTPS de este equipo** (SSL/TLS Web/Mail Shield, un
+   root CA generado localmente que reemplaza el certificado real de cualquier sitio en tránsito).
+   Windows confía en ese root CA (Avast lo instala en el almacén de certificados del SO), pero el
+   truststore propio del JDK (`cacerts`) no lo conocía — así que la primera corrida de Maven en
+   modo online falló al bajar `maven-surefire-plugin` con
+   `PKIX path building failed: unable to find valid certification path to requested target`,
+   aunque `Invoke-WebRequest` de PowerShell (que sí usa el almacén de Windows) conectaba sin
+   problema al mismo host. Fix: se exportó el certificado root de Avast desde
+   `Cert:\LocalMachine\Root` y se importó al `cacerts` del JDK 24
+   (`keytool -importcert -trustcacerts -alias avast-root -keystore
+   "C:\Program Files\Java\jdk-24\lib\security\cacerts" -storepass changeit`). Si el día de mañana
+   Avast rota ese certificado root, hay que repetir el import.
+
+**Verificación con el repo ya actualizado**: `mvn test` (backend, ya con red normalizada): **198
+tests verdes, 0 fallas, 0 errores** — coincide con lo que reportaba el commit `5c5b781` (sección
+19.5). `npm install` (primera vez en este equipo, `node_modules` no existía) + `npx tsc -b`:
+limpio, sin errores de tipos. No se probó nada en el navegador en esta sesión — fue solo
+sincronización y verificación de que el código bajado compila y pasa sus tests en este equipo
+nuevo, no una sesión de desarrollo de funcionalidad.
+
+## 21. Sesión 2026-09-16 (misma sesión que la 20): impresión en la Xprinter térmica de 58mm — tickets y facturas salían en un cuadrado ilegible o en una impresión larguísima
+
+Pedido del dueño: nada en el sistema estaba pensado para la impresora de tickets Xprinter de
+58mm del mostrador — al imprimir (tanto el comprobante interno al cerrar una venta como la
+factura fiscal desde Consulta de ventas) salía todo en un cuadrado minúsculo imposible de leer, o
+en una impresión larguísima. Pidió que imprima como una facturadora fiscal tradicional.
+
+### 21.1 Diagnóstico
+
+Ninguno de los tres documentos que puede terminar impreso en esa máquina tenía el ancho de página
+declarado en ningún lado — heredaban el tamaño de página por defecto (carta/A4):
+- **`ComprobanteInterno.tsx`** (el ticket que se imprime con `window.print()` al cerrar una venta
+  en Cobros): `.comprobante` en `App.css` no tenía ningún `@page` propio — solo existía el
+  `@page etiqueta-58mm` con nombre que ya se usaba para "Imprimir etiqueta" (sección 19.2), que no
+  se aplicaba acá.
+- **`ComprobanteHtmlBuilder`** (el PDF de ticket/remito que se descarga o manda por mail desde
+  Consulta de ventas, generado con `PdfService`/openhtmltopdf — `VentaService.generarPdf`): sin
+  ningún CSS `@page`, PDF de tamaño por defecto (carta).
+- **`FacturaFiscalHtmlBuilder`** (el PDF de la factura fiscal real, con CAE y QR de ARCA —
+  `FacturaPdfService`): mismo problema, además con un layout de dos columnas lado a lado (logo,
+  recuadro de letra, bloque de CUIT) pensado para hoja A4, imposible de acomodar en 58mm aunque
+  se le hubiera puesto el ancho correcto.
+
+Con la Xprinter configurada en Windows como rollo continuo de 58mm de ancho, mandarle una página
+de tamaño carta (~216×279mm) produce exactamente los dos síntomas reportados: el driver escala la
+hoja entera al ancho de 58mm (todo el contenido, texto incluido, en un cuadrado diminuto), o la
+imprime a tamaño real sobre el rollo continuo (una impresión larguísima, mayormente en blanco,
+porque una hoja carta mide ~279mm de alto). Aunque el ancho hubiera estado bien declarado, además
+ninguno de los tres tenía un layout angosto de una sola columna — el ticket/remito y la factura
+usaban tablas con 3-4 columnas lado a lado (Cantidad/Descripción/Precio/Subtotal), que no entran
+legibles en los ~54mm de ancho imprimible real del rollo.
+
+### 21.2 Fix
+
+**`TicketHtmlBuilder`, nuevo** (`backend/.../service/TicketHtmlBuilder.java`) — reemplaza a
+`ComprobanteHtmlBuilder` específicamente para el ticket/remito de `VentaService` (Presupuestos
+sigue usando `ComprobanteHtmlBuilder` sin cambios: es una cotización que se manda por mail a un
+cliente potencial, no algo que se imprima en el mostrador, así que se dejó en su formato ancho
+tipo hoja original a propósito). Layout de una sola columna: cada ítem en dos líneas
+(`2x Producto`, y debajo `$150.00 c/u` / `$300.00` a la derecha) en vez de una tabla de columnas.
+El `@page` se arma con `size: 58mm <alto>mm` — a diferencia de la impresión desde el navegador
+(que puede usar `size: 58mm auto` porque el motor de impresión del navegador soporta hojas de
+alto variable para rollo continuo), un PDF no tiene esa noción: el alto se **estima según la
+cantidad real de renglones** (`estimarAltoMm`, ~8mm por ítem + ~4mm por línea de info + ~38mm
+fijos de encabezado/pie) para no dejar metros de papel en blanco ni cortar contenido.
+
+**`FacturaFiscalHtmlBuilder`, reescrito** con el mismo criterio (comparte el método
+`TicketHtmlBuilder.estilos(altoMm)` para el CSS/`@page` base) — encabezado vertical (logo,
+nombre, dirección, CUIT y condición de IVA), letra del comprobante centrada, ítems en el mismo
+formato de dos líneas, y al pie CAE/vencimiento/QR — como una factura de cualquier facturadora
+fiscal de mostrador de toda la vida, ya no la hoja A4 de dos columnas que tenía antes.
+
+**`ComprobanteInterno.tsx`/`App.css`**: mismo criterio de dos líneas por ítem (ya no una `<table>`
+de 4 columnas) y `.comprobante` ganó su propio `@page comprobante-58mm { size: 58mm auto; }` (con
+nombre, aplicado solo vía `page: comprobante-58mm` dentro de `@media print` — un `@page` sin
+nombre afectaría cualquier otra impresión futura de la app, mismo criterio que ya se usaba para
+`etiqueta-58mm`).
+
+### 21.3 Verificación
+
+Backend: **198 tests verdes** (`mvn -q -o test`, sin tests nuevos — ninguno de los tests
+existentes depende del HTML exacto de estos builders, `PdfService` se mockea con `anyString()` en
+los tests unitarios, y el test de integración `FacturaFiscalControllerIntegrationTest` solo
+valida que la respuesta sea un PDF válido — que efectivamente se generó bien con el layout
+nuevo, sin excepciones de parseo de openhtmltopdf). `tsc -b` limpio.
+
+**No probado en la impresora física** (no hay una Xprinter conectada a esta máquina de
+desarrollo) — el fix está verificado hasta donde se puede sin el hardware real: el PDF se genera
+sin errores con el ancho/alto de página correcto y el HTML es válido. Pendiente que el dueño
+pruebe una impresión real la próxima vez que tenga la Xprinter a mano y confirme que el tamaño de
+letra/QR es legible — los tamaños de fuente (9-14px) y del QR (32mm) son una estimación razonable
+sin poder medir contra el rollo físico, así que puede hacer falta un ajuste fino de tamaños
+después de verlo impreso de verdad.

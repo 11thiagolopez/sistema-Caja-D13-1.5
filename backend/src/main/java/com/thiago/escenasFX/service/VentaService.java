@@ -186,7 +186,11 @@ public class VentaService {
 
     /**
      * Un mismo comprobante branded para venta de mostrador (ticket) y trabajo a domicilio
-     * (remito, más completo: cliente, dirección, descripción del trabajo, técnico).
+     * (remito, más completo: cliente, dirección, descripción del trabajo, técnico). Usa
+     * {@link TicketHtmlBuilder} (formato angosto 58mm) en vez de {@link ComprobanteHtmlBuilder}
+     * (que sigue usando Presupuestos) porque este comprobante es justamente lo que se imprime en
+     * la Xprinter térmica del mostrador — ver TicketHtmlBuilder para el detalle del bug que
+     * arregla.
      */
     private String construirHtmlComprobante(Venta venta) {
         List<ComprobanteHtmlBuilder.Linea> lineas = venta.getDetalles().stream()
@@ -217,7 +221,7 @@ public class VentaService {
                 : List.of("Medio de pago: " + venta.getMedioPago());
         }
 
-        return ComprobanteHtmlBuilder.construir(titulo, info, lineas, venta.getTotalVenta(),
+        return TicketHtmlBuilder.construir(titulo, info, lineas, venta.getTotalVenta(),
             "Comprobante interno, no válido como factura fiscal.", pdfService.logoDataUri());
     }
 

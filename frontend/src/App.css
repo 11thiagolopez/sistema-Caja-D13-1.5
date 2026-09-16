@@ -341,6 +341,31 @@ section {
   max-width: 100%;
 }
 
+.comprobante-items {
+  margin-top: 8px;
+}
+
+.comprobante-item {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border, #ccc);
+}
+
+.comprobante-item-desc {
+  font-weight: 600;
+}
+
+.comprobante-item-fila {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9em;
+  color: var(--text-muted, #555);
+}
+
+.comprobante-total {
+  margin-top: 8px;
+  font-size: 1.1em;
+}
+
 .comprobante-titulo {
   display: flex;
   align-items: center;
@@ -374,6 +399,16 @@ section {
   margin-top: 16px;
 }
 
+/*
+ * Impresión en la Xprinter térmica de 58mm del mostrador. Bug real que este bloque arregla: antes
+ * `.comprobante` (el ticket que se imprime con window.print() al cerrar una venta) no tenía
+ * ningún @page propio, así que heredaba el tamaño de página por defecto del navegador/impresora
+ * (carta/A4) — en la Xprinter eso salía como un cuadrado minúsculo ilegible (si el driver
+ * escalaba la hoja entera al ancho de 58mm) o como una impresión larguísima mayormente en blanco
+ * (si la imprimía a tamaño real sobre el rollo continuo). Cada impresión usa su propio @page con
+ * nombre (`page: comprobante-58mm` / `page: etiqueta-58mm`) en vez de un @page sin nombre, que
+ * afectaría CUALQUIER otra impresión futura de la app que no esté pensada para este rollo.
+ */
 @media print {
   body * {
     visibility: hidden;
@@ -386,9 +421,14 @@ section {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 58mm;
     max-height: none;
     border: none;
+    font-size: 11px;
+    page: comprobante-58mm;
+  }
+  .comprobante-titulo h3 {
+    font-size: 13px;
   }
   .comprobante-acciones {
     display: none;
@@ -402,15 +442,15 @@ section {
     top: 0;
     left: 0;
     width: 58mm;
-    /* Página con nombre (no el @page sin nombre de abajo, que rompería el tamaño carta del
-       comprobante interno): solo esta impresión usa el ancho real del rollo térmico 58mm. */
     page: etiqueta-58mm;
   }
 }
 
-/* Impresora térmica Xprinter 58mm: @page con nombre, aplicado solo vía "page: etiqueta-58mm"
-   arriba — un @page sin nombre afectaría TODAS las impresiones de la app (incluido el
-   comprobante interno tamaño carta), no solo la etiqueta. */
+@page comprobante-58mm {
+  size: 58mm auto;
+  margin: 2mm;
+}
+
 @page etiqueta-58mm {
   size: 58mm auto;
   margin: 0;

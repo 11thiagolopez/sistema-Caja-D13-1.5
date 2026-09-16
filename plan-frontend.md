@@ -316,7 +316,59 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-08-19)
+## Estado actual (Actualizado al 2026-09-16, fix de impresión en la Xprinter térmica de 58mm)
+
+Ni el ticket (`ComprobanteInterno.tsx`, impreso con `window.print()` al cerrar una venta) ni la
+factura fiscal ni el remito (PDFs generados en el backend) tenían el ancho de página declarado —
+en la Xprinter 58mm del mostrador salía todo en un cuadrado ilegible o en una impresión
+larguísima. Detalle técnico completo (diagnóstico, el layout de dos columnas que no entraba en
+58mm, la estimación de alto para el PDF) en `plan-migracion.md`, sección 21. Resumen del lado
+frontend:
+
+- **`ComprobanteInterno.tsx`**: cada ítem pasó de una fila de tabla (4 columnas lado a lado) a dos
+  líneas (`2x Producto`, y debajo precio unitario / subtotal) — formato angosto de una sola
+  columna, legible en los ~54mm imprimibles del rollo.
+- **`App.css`**: `.comprobante` ganó su propio `@page comprobante-58mm { size: 58mm auto; margin:
+  2mm; }` (con nombre, mismo patrón que `@page etiqueta-58mm` de la sección 19.2 — un `@page` sin
+  nombre afectaría cualquier otra impresión de la app), más las clases nuevas
+  `.comprobante-items`/`.comprobante-item`/`.comprobante-item-fila` para el layout de dos líneas.
+
+No cambia ningún contrato de API ni regla de rol — es un fix puramente de presentación de
+impresión. `tsc -b` limpio. **No probado en la impresora física** (no hay Xprinter conectada a
+esta máquina de desarrollo) — pendiente que el dueño confirme legibilidad real la próxima vez que
+tenga el hardware a mano.
+
+## Estado anterior (Actualizado al 2026-09-16, sincronización de un equipo nuevo — sin cambios de código de esta sesión)
+
+Sesión de solo `git pull` + verificación de entorno en un equipo de desarrollo que estaba 2
+commits atrás — no se tocó código. Detalle completo (qué se trajo, puesta a punto del entorno,
+resultados de test) en `plan-migracion.md`, secciones 19 y 20. Nada de esto cambia el contrato de
+API ni las reglas de rol descritas más abajo en este documento — es documentación al día, no una
+sesión de desarrollo. `tsc -b` limpio sobre el código ya existente.
+
+## Estado anterior (Actualizado al 2026-09-12)
+
+**Nombre del cliente en factura fiscal, códigos de barras mixtos, alertas de stock bajo, fix de
+escaneo en alta de producto y edición de precio de compra** — detalle técnico completo (backend,
+el bug de seguridad encontrado, el bug de escaneo) en `plan-migracion.md`, sección 19. Resumen del
+lado frontend:
+
+- **Productos.tsx**: botón nuevo "Imprimir etiqueta" por fila (`components/EtiquetaImprimible.tsx`,
+  nuevo, usa la librería `jsbarcode` para generar el Code128 pensado para impresora térmica 58mm).
+  `precioCompra` se suma a la edición en línea (mismo mecanismo click-to-edit que ya tenían
+  descripción/marca/precioVenta/stockActual/codigoFabrica). El input de código de fábrica en
+  "Agregar producto" dejó de usar `BarcodeInput` (pensado para escanear-y-accionar-ya como en
+  Cobros/Cargar stock, que borraba el valor con el Enter automático del lector) — ahora es un
+  input controlado que retiene el valor hasta que se envía todo el formulario.
+- **Alertas de stock bajo**: no tienen pantalla propia — es un email automático al ADMIN
+  (`NotificacionService` en el backend) disparado al cruzar 5 u 2 unidades en cualquier venta,
+  sin ninguna acción del lado del frontend.
+
+`tsc -b` y build de frontend limpios (198 tests de backend verdes en la sesión original). Probado
+en Chrome contra Supabase real en esa sesión (dato tomado del mensaje de commit; sin detalle
+adicional documentado en su momento).
+
+## Estado anterior (Actualizado al 2026-08-19)
 
 **Facturación fiscal ARCA/AFIP (Factura C, D13 Monotributo)** — detalle técnico completo
 (backend, decisiones, qué se verificó, el bug del punto de venta) en `plan-migracion.md`, sección

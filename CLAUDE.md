@@ -9,7 +9,66 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-08-19, facturación fiscal ARCA/AFIP funcionando de punta a
+Estado Actual (Actualizado al 2026-09-16, fix de impresión en la Xprinter térmica de 58mm del
+mostrador — tickets y facturas salían ilegibles):
+
+**Bug real reportado por el dueño**: nada en el sistema estaba pensado para imprimir en la
+Xprinter de 58mm del mostrador — ni el ticket (comprobante interno al cerrar una venta) ni la
+factura fiscal ni el remito tenían el ancho de página declarado, así que salían con el tamaño de
+página por defecto (carta/A4): un cuadrado minúsculo ilegible o una impresión larguísima mayormente
+en blanco, según cómo lo escalara el driver de la impresora. Fix: `TicketHtmlBuilder` (nuevo,
+usado por `VentaService` para ticket/remito) y `FacturaFiscalHtmlBuilder` (reescrito) ahora arman
+un layout angosto de una sola columna (cada ítem en dos líneas, no una tabla de 4 columnas) con un
+`@page` de 58mm de ancho y un alto estimado según la cantidad de renglones — como cualquier
+facturadora fiscal de mostrador de toda la vida. El ticket impreso directo desde el navegador
+(`ComprobanteInterno.tsx`/`App.css`) recibió el mismo tratamiento con `@page comprobante-58mm`.
+Presupuestos (cotización que se manda por mail a un cliente) se dejó sin tocar a propósito, en su
+formato ancho original — no es algo que se imprima en el mostrador. Backend: 198 tests verdes,
+`tsc -b` limpio. **No probado contra la impresora física** (no hay Xprinter conectada a esta
+máquina de desarrollo) — pendiente que el dueño confirme legibilidad real y ajuste de tamaños de
+fuente/QR la próxima vez que tenga el hardware a mano. Detalle técnico completo en
+`plan-migracion.md` sección 21 y `plan-frontend.md` "Estado actual".
+
+Estado Anterior (Actualizado al 2026-09-16, sincronización de un equipo de desarrollo nuevo con
+GitHub + primera puesta a punto de su entorno — sin cambios de código):
+
+Este equipo (usuario de Windows `PC-DESKTOP/User`) estaba 2 commits atrás de
+`origin/migracion-web`. Se hizo `git pull --ff-only` (sin conflictos) y se corrieron los tests
+para confirmar que el código bajado compila y pasa en este equipo — no fue una sesión de
+desarrollo de funcionalidad nueva.
+
+**Se trajeron 2 commits del 2026-09-12** (trabajados en otra máquina, sin documentar en su
+momento — documentados retroactivamente hoy en `plan-migracion.md` sección 19): nombre del
+cliente en la factura fiscal + fix de un bug de seguridad real (el matcher de `SecurityConfig`
+para `/api/ventas/*/factura` no alcanzaba a `/factura/pdf` ni `/factura/enviar-email`, quedaban
+accesibles a cualquier rol autenticado, no solo ADMIN); columna `codigo_barras` nueva en
+`Producto` para resolver un bug real de códigos de fábrica duplicados en el escaneo de
+Cobros/Cargar stock, más botón "Imprimir etiqueta" (Code128 vía `jsbarcode`, impresora térmica
+58mm); alertas de stock bajo por email al ADMIN (`NotificacionService`, nuevo, umbrales de 5 y 2
+unidades); fix de un bug de UX en el alta de producto (el input de código de fábrica perdía su
+valor con el Enter automático del lector de código de barras) y edición en línea de
+`precioCompra` en la tabla de Productos.
+
+**Puesta a punto del entorno de este equipo, primera vez** (detalle completo en
+`plan-migracion.md` sección 20 — dejar como referencia para la próxima vez que haga falta en un
+equipo nuevo): Git no estaba instalado (se instaló Git for Windows 2.55.0.3 vía winget); ni
+`git`/`mvn`/`node` están en el PATH del sistema (hay que anteponerlos a mano por sesión); Git
+rechazaba el repo por "dubious ownership" (el dueño del repo en disco es un usuario de Windows
+distinto al que corre el proceso — se agregó una excepción puntual con
+`git config --global --add safe.directory`, no un `*` global); Maven en modo offline no podía
+resolver `bcprov-jdk18on` (la dependencia de BouncyCastle para AFIP) por no estar cacheada
+todavía en este `.m2` — hubo que correr `mvn test` sin `-o` una vez; **Avast Antivirus intercepta
+el tráfico HTTPS de este equipo** con un certificado root propio que Windows confía pero el
+truststore del JDK no — rompía la descarga de plugins de Maven Central
+(`PKIX path building failed`) hasta importar el root de Avast al `cacerts` del JDK 24 con
+`keytool`.
+
+Backend: **198 tests** verdes (`mvn test`, iniciado en modo online por la resolución de
+`bcprov-jdk18on` pendiente — en corridas siguientes `mvn -q -o test` ya vuelve a funcionar
+offline con normalidad). Frontend: `npm install` (primera vez en este equipo) + `npx tsc -b`
+limpio. No se probó nada en el navegador esta sesión.
+
+Estado Anterior (Actualizado al 2026-08-19, facturación fiscal ARCA/AFIP funcionando de punta a
 punta contra producción):
 
 **Facturación fiscal, primera versión completa y verificada con una factura real.** D13 es
