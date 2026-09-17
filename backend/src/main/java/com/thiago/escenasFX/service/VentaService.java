@@ -199,7 +199,6 @@ public class VentaService {
             .toList();
 
         boolean esDomicilio = "DOMICILIO".equals(venta.getTipoVenta());
-        String titulo = (esDomicilio ? "Remito de trabajo #" : "Comprobante de venta #") + venta.getIdVenta();
 
         List<String> info;
         if (esDomicilio) {
@@ -221,7 +220,7 @@ public class VentaService {
                 : List.of("Medio de pago: " + venta.getMedioPago());
         }
 
-        return TicketHtmlBuilder.construir(titulo, info, lineas, venta.getTotalVenta(),
+        return TicketHtmlBuilder.construir(info, lineas, venta.getTotalVenta(),
             "Comprobante interno, no válido como factura fiscal.", pdfService.logoDataUri());
     }
 

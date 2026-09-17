@@ -9,7 +9,20 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-16, tercera ronda del fix de impresión — negrita/negro
+Estado Actual (Actualizado al 2026-09-17, comprobante no fiscal: título numerado → "X" grande en
+recuadro, igual que la letra de la Factura):
+
+Pedido puntual del dueño: al comprobante que no es factura (ticket/remito, `TicketHtmlBuilder`)
+se le sacó el título "Comprobante de venta #4"/"Remito de trabajo #4" y se le puso en su lugar una
+"X" grande en un recuadro — mismo lugar y mismo estilo (`.letra`, ahora compartida entre
+`TicketHtmlBuilder` y `FacturaFiscalHtmlBuilder`) que usa la Factura fiscal para su letra (A/B/C),
+para que se note de un vistazo que no es un comprobante fiscal. El número de venta ya no se
+imprime (sigue en el nombre del PDF descargado y en el asunto del email). La Factura fiscal no se
+tocó — el pedido era solo para "el comprobante que no es factura". Cambio 100% backend, sin
+impacto en el frontend. Backend: 198 tests verdes, verificado con un PDF de muestra real. Detalle
+técnico completo en `plan-migracion.md` sección 24.
+
+Estado Anterior (Actualizado al 2026-09-16, tercera ronda del fix de impresión — negrita/negro
 puro + eliminado `ComprobanteInterno.tsx`, "Ver" y "Descargar" son ahora el mismo PDF):
 
 **Tercera ronda de feedback del dueño probando en la impresora real** (después de las dos rondas

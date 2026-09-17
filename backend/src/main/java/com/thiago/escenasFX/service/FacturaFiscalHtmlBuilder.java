@@ -88,9 +88,9 @@ public final class FacturaFiscalHtmlBuilder {
             + "</div></body></html>";
     }
 
+    // ".letra" (letra A/B/C en recuadro) ahora vive en TicketHtmlBuilder.estilos() — compartida
+    // con el "X" que usa TicketHtmlBuilder para marcar el comprobante no fiscal, mismo recuadro.
     private static String estilosPropios() {
-        return ".letra { display:inline-block; border:2px solid #000; width:10mm; height:10mm; "
-            + "line-height:10mm; font-size:18px; font-weight:bold; text-align:center; }"
-            + ".qr { width:38mm; height:38mm; margin-top:4px; }";
+        return ".qr { width:38mm; height:38mm; margin-top:4px; }";
     }
 }

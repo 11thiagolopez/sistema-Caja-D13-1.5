@@ -12,7 +12,11 @@ import java.util.List;
  * ancho imprimible real, así que una tabla con columnas Cantidad/Descripción/Precio/Subtotal lado
  * a lado no entra legible. Cada renglón se parte en dos líneas (descripción arriba,
  * cantidad×precio = subtotal abajo), como cualquier ticket de una facturadora fiscal de
- * mostrador.
+ * mostrador. En vez de un título con el número de venta ("Comprobante de venta #4"/"Remito de
+ * trabajo #4"), lleva una "X" grande en un recuadro — mismo lugar y mismo estilo que la letra
+ * (A/B/C) de una Factura real, para marcar de un vistazo que este comprobante NO es fiscal, sin
+ * necesidad de leer ningún texto (pedido del dueño, mismo criterio que ya tenía
+ * `ComprobanteInterno.tsx`, eliminado — ver plan-migracion.md sección 23).
  *
  * <p><b>Medida real del papel, confirmada por el dueño probando en la impresora física</b>: 58mm
  * de ancho de rollo, 48mm de ancho imprimible real, <b>210mm de largo fijo</b> — la Xprinter NO
@@ -29,7 +33,7 @@ final class TicketHtmlBuilder {
     private TicketHtmlBuilder() {
     }
 
-    static String construir(String titulo, List<String> infoLineas, List<ComprobanteHtmlBuilder.Linea> items,
+    static String construir(List<String> infoLineas, List<ComprobanteHtmlBuilder.Linea> items,
             BigDecimal total, String notaFinal, String logoSrc) {
         StringBuilder filas = new StringBuilder();
         for (ComprobanteHtmlBuilder.Linea l : items) {
@@ -55,7 +59,7 @@ final class TicketHtmlBuilder {
             + "<p class='centro negrita nombre'>D13 Distribuidora</p>"
             + "<p class='centro chico'>Arce 790, CABA — Tel: 1123752626</p>"
             + "<div class='separador'></div>"
-            + "<p class='negrita titulo'>" + XmlEscaper.escape(titulo) + "</p>"
+            + "<div class='centro'><span class='letra'>X</span></div>"
             + info
             + "<div class='separador'></div>"
             + filas
@@ -93,7 +97,12 @@ final class TicketHtmlBuilder {
             + ".centro { text-align:center; }"
             + ".negrita { font-weight:bold; }"
             + ".nombre { font-size: 16px; }"
-            + ".titulo { font-size: 15px; }"
+            // Compartida con FacturaFiscalHtmlBuilder, que la usa para la letra del comprobante
+            // (A/B/C) — acá va siempre "X", el mismo criterio que ya tenía ComprobanteInterno.tsx
+            // (eliminado) para marcar visualmente que esto NO es una factura fiscal, igual que una
+            // Factura real muestra su letra en un recuadro así.
+            + ".letra { display:inline-block; border:2px solid #000; width:10mm; height:10mm; "
+            + "line-height:10mm; font-size:18px; text-align:center; }"
             + ".chico { font-size: 13px; color:#000; }"
             + ".logo { max-width: 40mm; max-height: 18mm; }"
             + ".separador { border-top: 2px dashed #000; margin: 6px 0; }"

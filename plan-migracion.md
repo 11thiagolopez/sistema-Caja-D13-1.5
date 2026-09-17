@@ -1940,3 +1940,44 @@ limpio (125 módulos, uno menos que antes por sacar `ComprobanteInterno.tsx` —
 producción es el mismo comando que corre Vercel, corrido a propósito para no repetir el susto de
 la ronda anterior). No probado en la impresora física — sigue sin haber una Xprinter conectada a
 esta máquina de desarrollo.
+
+## 24. Sesión 2026-09-17: el comprobante no fiscal (ticket/remito) pierde el título numerado y gana una "X" grande, igual recuadro que la letra de la Factura
+
+Pedido del dueño: sacarle al comprobante que no es factura (ticket de mostrador/remito de
+`TicketHtmlBuilder`) la línea de título ("Comprobante de venta #4" / "Remito de trabajo #4") y
+poner en su lugar una "X" grande en un recuadro — el mismo lugar y el mismo estilo que usa la
+Factura fiscal para su letra (A/B/C), para que de un vistazo (sin leer nada) se note que no es un
+comprobante fiscal. Es el mismo criterio de diseño que ya tenía `ComprobanteInterno.tsx` (el
+componente eliminado en la sección 23) antes de sacarlo.
+
+### 24.1 Fix
+
+- **`TicketHtmlBuilder.construir(...)`**: perdió el parámetro `titulo` — ya no lo usa para nada.
+  En su lugar, entre el encabezado (logo/nombre/dirección) y las líneas de info, va
+  `<div class='centro'><span class='letra'>X</span></div>`.
+- **`.letra`** (el recuadro con borde, antes definido solo dentro de
+  `FacturaFiscalHtmlBuilder.estilosPropios()`) se subió al `estilos()` compartido de
+  `TicketHtmlBuilder`, así los dos comparten exactamente el mismo recuadro — la Factura sigue
+  poniendo su letra real (`letraCmp`, siempre "C" para D13 Monotributo) y el comprobante interno
+  siempre pone "X". Se sacó la definición duplicada de `FacturaFiscalHtmlBuilder`.
+- **`VentaService.construirHtmlComprobante`**: se sacó la variable local `titulo` (quedaba sin
+  uso). `esDomicilio` se mantiene, sigue decidiendo qué líneas de `info` mostrar (cliente/
+  dirección/técnico para trabajo a domicilio, medio de pago/descuento para mostrador) — la
+  distinción entre venta de mostrador y trabajo a domicilio ya no se ve en un título, pero sigue
+  presente en esas líneas.
+- El número de venta (`idVenta`) ya no aparece impreso en el ticket — sigue disponible en el
+  nombre del archivo descargado (`comprobante-{id}.pdf`) y en el asunto del email
+  (`enviarComprobantePorEmail`, que arma su propio asunto aparte, sin tocar).
+- La Factura fiscal (`FacturaFiscalHtmlBuilder`) no se tocó en su contenido — sigue mostrando
+  "Factura Nro: 0001-00000001" como título, el dueño pidió el cambio solo para "el comprobante que
+  no es factura".
+
+### 24.2 Verificación
+
+Generado un PDF de muestra real (mismo mecanismo que las secciones 21/22: test temporal que
+ejercita el flujo HTTP completo, `mvn -q -o test -Dtest=...`, borrado después) — confirmado a
+mano que el recuadro con la "X" se ve en el lugar correcto, sin el título viejo. Backend: **198
+tests verdes** (`mvn -q -o test`, corrida limpia — una corrida anterior en simultáneo con la
+generación de la muestra falló con un error de conexión a Postgres real por la carpeta `target`
+compartida entre los dos procesos de Maven corriendo a la vez, no por este cambio; confirmado
+corriendo la suite sola después). No probado en la impresora física.

@@ -316,7 +316,16 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-09-16, negrita/negro puro + eliminación de `ComprobanteInterno.tsx`: "Ver" y "Descargar" son ahora el mismo PDF)
+## Estado actual (Actualizado al 2026-09-17, cambio solo de backend — sin impacto en el frontend)
+
+El comprobante no fiscal (ticket/remito) perdió su título numerado y ganó una "X" grande en un
+recuadro, igual que la letra de la Factura — cambio puntual en `TicketHtmlBuilder`/
+`FacturaFiscalHtmlBuilder` (backend). No toca ningún componente, contrato de API ni regla de rol
+del frontend — el PDF sigue viniendo del mismo `GET /api/ventas/{id}/pdf` de siempre, "Ver"/
+"Descargar" (sección anterior) no cambian. Detalle técnico completo en `plan-migracion.md`,
+sección 24.
+
+## Estado anterior (Actualizado al 2026-09-16, negrita/negro puro + eliminación de `ComprobanteInterno.tsx`: "Ver" y "Descargar" son ahora el mismo PDF)
 
 Dos pedidos del dueño tras probar el intento anterior (ver "Estado anterior" debajo) en la
 impresora real: (1) el tamaño de letra ya estaba bien, pero salía gris/punteada, pidió negrita y
