@@ -316,7 +316,32 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-09-16, fix de impresión — medida real del papel: 58×210mm fijo, no auto)
+## Estado actual (Actualizado al 2026-09-16, negrita/negro puro + eliminación de `ComprobanteInterno.tsx`: "Ver" y "Descargar" son ahora el mismo PDF)
+
+Dos pedidos del dueño tras probar el intento anterior (ver "Estado anterior" debajo) en la
+impresora real: (1) el tamaño de letra ya estaba bien, pero salía gris/punteada, pidió negrita y
+negro puro; (2) sospechó que el botón "Imprimir"/"Ver" de Comprobantes seguía sacando "otra cosa"
+distinta de lo ya arreglado, pidió unificar todo. Tenía razón: `ComprobanteInterno.tsx` era un
+segundo generador de ticket propio (HTML/CSS + `window.print()`), completamente separado del PDF
+real que arma el backend — arreglar uno no arreglaba el otro. Detalle técnico completo (por qué
+divergían, qué mostraba cada uno) en `plan-migracion.md`, sección 23. Resumen del lado frontend:
+
+- **`ComprobanteInterno.tsx`, eliminado.** "Ver" (`HistorialVentas.tsx`) y "Ver comprobante"
+  (`RegistrarVenta.tsx`, antes "Generar comprobante") ahora piden el mismo `GET
+  /api/ventas/{id}/pdf` que ya usaba "Descargar", y lo abren en una pestaña nueva con el visor de
+  PDF del navegador (`verBlob`, nuevo en `utils/descargarBlob.ts`) en vez de renderizar su propia
+  vista — imprime respetando el tamaño de página embebido en el PDF, no un `@page` de CSS sujeto a
+  cómo cada driver lo interprete.
+- **`App.css`**: se sacaron las clases `.comprobante*` y `@page comprobante-58mm` (muertas sin
+  `ComprobanteInterno`), salvo `.comprobante-acciones` (reusada en Trabajo a domicilio para una
+  fila de botones, sin relación con impresión). `EtiquetaImprimible.tsx` queda como la única
+  pantalla que sigue imprimiendo HTML/CSS en vivo (etiqueta de código de barras, no es un PDF del
+  backend).
+
+`tsc -b` **y** `npm run build` limpios (corrido el build de producción real, el mismo comando que
+usa Vercel, a propósito). No probado contra la impresora física.
+
+## Estado anterior (Actualizado al 2026-09-16, fix de impresión — medida real del papel: 58×210mm fijo, no auto)
 
 Primer intento de fix (ver "Estado anterior" debajo) asumía sin poder confirmarlo que la Xprinter
 era un rollo continuo de alto variable. El dueño probó en la impresora física real y corrigió el

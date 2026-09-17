@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
-import { confirmarDescuento, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
+import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
-import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import { useCarrito } from '../hooks/useCarrito'
+import { verBlob } from '../utils/descargarBlob'
 import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
 
 interface ItemCarrito extends DetalleVentaRequest {
@@ -24,7 +24,8 @@ export function RegistrarVenta() {
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
-  const [mostrarComprobante, setMostrarComprobante] = useState(false)
+  const [viendoComprobante, setViendoComprobante] = useState(false)
+  const [errorComprobanteVer, setErrorComprobanteVer] = useState<string | null>(null)
 
   const [idVentaConfirmar, setIdVentaConfirmar] = useState('')
   const [codigoConfirmar, setCodigoConfirmar] = useState('')
@@ -93,7 +94,6 @@ export function RegistrarVenta() {
         motivoDescuento: descuentoNumero ? motivoDescuento : undefined,
       })
       setResultado(venta)
-      setMostrarComprobante(false)
       vaciarCarrito()
       setDescuento('')
       setMotivoDescuento('')
@@ -126,6 +126,23 @@ export function RegistrarVenta() {
       setErrorConfirmacion(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el descuento')
     } finally {
       setConfirmando(false)
+    }
+  }
+
+  // Mismo PDF que "Ver"/"Descargar" en Historial de ventas — un solo generador del lado del
+  // backend (TicketHtmlBuilder), abierto acá en una pestaña nueva en vez de una vista propia en
+  // HTML/CSS (ver utils/descargarBlob.ts, verBlob).
+  async function verComprobante() {
+    if (!resultado) return
+    setErrorComprobanteVer(null)
+    setViendoComprobante(true)
+    try {
+      const blob = await descargarVentaPdf(resultado.idVenta)
+      verBlob(blob)
+    } catch (err) {
+      setErrorComprobanteVer(err instanceof ApiRequestError ? err.message : 'No se pudo abrir el comprobante')
+    } finally {
+      setViendoComprobante(false)
     }
   }
 
@@ -233,10 +250,12 @@ export function RegistrarVenta() {
               : `Venta #${resultado.idVenta} confirmada.`}
           </p>
           {resultado.estado === 'CONFIRMADA' && (
-            <button type="button" onClick={() => setMostrarComprobante(true)}>
-              Generar comprobante
+            <button type="button" onClick={verComprobante} disabled={viendoComprobante}>
+              {viendoComprobante && <span className="spinner" />}
+              {viendoComprobante ? 'Abriendo...' : 'Ver comprobante'}
             </button>
           )}
+          {errorComprobanteVer && <p className="error">{errorComprobanteVer}</p>}
           {resultado.estado === 'CONFIRMADA' && (
             <div>
               <h4>Enviar comprobante por email</h4>
@@ -265,10 +284,6 @@ export function RegistrarVenta() {
             </div>
           )}
         </div>
-      )}
-
-      {resultado && mostrarComprobante && (
-        <ComprobanteInterno venta={resultado} onCerrar={() => setMostrarComprobante(false)} />
       )}
 
       <section>

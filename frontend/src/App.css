@@ -336,63 +336,8 @@ section {
   padding: 0 4px;
 }
 
-.comprobante {
-  width: 420px;
-  max-width: 100%;
-}
-
-.comprobante-items {
-  margin-top: 8px;
-}
-
-.comprobante-item {
-  padding: 4px 0;
-  border-bottom: 1px dashed var(--border, #ccc);
-}
-
-.comprobante-item-desc {
-  font-weight: 600;
-}
-
-.comprobante-item-fila {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.95em;
-  color: var(--text-muted, #555);
-}
-
-.comprobante-total {
-  margin-top: 8px;
-  font-size: 1.1em;
-}
-
-.comprobante-titulo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.comprobante-titulo h3 {
-  margin: 0;
-}
-
-.comprobante-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 2px solid currentColor;
-  font-size: 20px;
-  font-weight: bold;
-  flex-shrink: 0;
-}
-
-.comprobante-aviso {
-  font-style: italic;
-  color: var(--error);
-}
-
+/* Fila de botones genérica (acá y en Trabajo a domicilio — antes también en ComprobanteInterno,
+   que dejó de existir: ver el comentario de EtiquetaImprimible.tsx). */
 .comprobante-acciones {
   display: flex;
   gap: 8px;
@@ -400,61 +345,22 @@ section {
 }
 
 /*
- * Impresión en la Xprinter térmica del mostrador. Medida real del papel, confirmada por el dueño
- * probando en la impresora física: 58mm de ancho de rollo, 48mm de ancho imprimible real, 210mm
- * de largo FIJO — la impresora no está configurada en Windows como rollo continuo de alto
- * variable, tiene un tamaño de página fijo. Por eso el @page de acá declara `size: 58mm 210mm`
- * fijo, no `auto`: pedirle al navegador un alto "automático" cuando el driver de la impresora ya
- * tiene un tamaño fijo configurado es lo que causaba que todo saliera escalado a un cuadrado
- * diminuto e ilegible (el driver ajusta el contenido a SU página configurada, sea cual sea la que
- * pida el CSS). Con el tamaño fijo ya no hay ese conflicto, y de paso quedó espacio de sobra para
- * agrandar las fuentes (antes 11-13px, ilegibles en la impresora real).
+ * Impresión de la etiqueta de producto en la Xprinter térmica del mostrador — la única pantalla
+ * que sigue imprimiendo HTML/CSS en vivo (ver el comentario en EtiquetaImprimible.tsx). Medida
+ * real del papel, confirmada por el dueño probando en la impresora física: 58mm de ancho de
+ * rollo, 48mm de ancho imprimible real, 210mm de largo FIJO — la impresora no está configurada en
+ * Windows como rollo continuo de alto variable, tiene un tamaño de página fijo. Por eso el @page
+ * de acá declara `size: 58mm 210mm` fijo, no `auto`: pedirle al navegador un alto "automático"
+ * cuando el driver de la impresora ya tiene un tamaño fijo configurado es lo que hacía que todo
+ * saliera escalado a un cuadrado diminuto e ilegible (el driver ajusta el contenido a SU página
+ * configurada, sea cual sea la que pida el CSS).
  *
- * Cada impresión usa su propio @page con nombre (`page: comprobante-58mm` / `page:
- * etiqueta-58mm`) en vez de un @page sin nombre, que afectaría CUALQUIER otra impresión futura de
- * la app que no esté pensada para este rollo.
+ * @page con nombre (`page: etiqueta-58mm`) en vez de uno sin nombre, que afectaría CUALQUIER otra
+ * impresión futura de la app que no esté pensada para este rollo.
  */
 @media print {
   body * {
     visibility: hidden;
-  }
-  .comprobante,
-  .comprobante * {
-    visibility: visible;
-  }
-  .comprobante {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 48mm;
-    max-height: none;
-    border: none;
-    font-size: 16px;
-    line-height: 1.35;
-    page: comprobante-58mm;
-  }
-  .comprobante-titulo h3 {
-    font-size: 18px;
-  }
-  .comprobante-x {
-    width: 22px;
-    height: 22px;
-    font-size: 14px;
-  }
-  .comprobante-aviso {
-    font-size: 13px;
-  }
-  .comprobante-item-desc {
-    font-size: 15px;
-  }
-  .comprobante-item-fila {
-    font-size: 14px;
-  }
-  .comprobante-total {
-    font-size: 20px;
-  }
-  .comprobante-acciones {
-    display: none;
   }
   .etiqueta-imprimir,
   .etiqueta-imprimir * {
@@ -467,11 +373,6 @@ section {
     width: 48mm;
     page: etiqueta-58mm;
   }
-}
-
-@page comprobante-58mm {
-  size: 58mm 210mm;
-  margin: 5mm;
 }
 
 @page etiqueta-58mm {

@@ -12,8 +12,13 @@ interface EtiquetaImprimibleProps {
 /**
  * Etiqueta para impresora térmica de recibos 58mm (no autoadhesiva — se pega con cinta). El botón
  * "Imprimir etiqueta" dispara window.print() acotado a `.etiqueta-imprimir` vía la regla de
- * @media print de App.css (mismo patrón que ComprobanteInterno/.comprobante, pero con su propio
- * @page de 58mm en vez de tamaño carta).
+ * @media print de App.css, con su propio @page etiqueta-58mm.
+ *
+ * Es la única pantalla que sigue imprimiendo así (HTML/CSS renderizado en vivo, no un PDF del
+ * backend) — el comprobante de venta/remito y la factura fiscal dejaron de tener su propia vista
+ * @media print (ver HistorialVentas.tsx/RegistrarVenta.tsx, sección "Ver"/"Ver comprobante") y
+ * ahora abren directamente el PDF real que genera el backend, para que no puedan divergir en
+ * formato ni en cómo imprimen.
  */
 export function EtiquetaImprimible({ codigoBarras, descripcion, precioVenta, onCerrar }: EtiquetaImprimibleProps) {
   const svgRef = useRef<SVGSVGElement>(null)

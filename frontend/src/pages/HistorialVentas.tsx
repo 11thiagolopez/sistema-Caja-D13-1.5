@@ -4,9 +4,8 @@ import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, getVenta
 import { getEmpleados } from '../api/empleados'
 import { facturarVenta, getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
-import { ComprobanteInterno } from '../components/ComprobanteInterno'
 import { hoyIso } from '../utils/date'
-import { descargarBlob } from '../utils/descargarBlob'
+import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import type {
   ClienteDocTipo,
   EmpleadoResponse,
@@ -29,7 +28,6 @@ export function HistorialVentas() {
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [codigos, setCodigos] = useState<Record<number, string>>({})
-  const [comprobanteVenta, setComprobanteVenta] = useState<VentaResponse | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
 
   const [filtroTipo, setFiltroTipo] = useState<'TODAS' | TipoVenta>('TODAS')
@@ -39,6 +37,7 @@ export function HistorialVentas() {
   const [emails, setEmails] = useState<Record<number, string>>({})
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null)
   const [descargandoId, setDescargandoId] = useState<number | null>(null)
+  const [viendoId, setViendoId] = useState<number | null>(null)
 
   const [facturas, setFacturas] = useState<Record<number, FacturaFiscalResponse | null>>({})
   const [docTipos, setDocTipos] = useState<Record<number, ClienteDocTipo>>({})
@@ -114,6 +113,24 @@ export function HistorialVentas() {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo descargar el comprobante')
     } finally {
       setDescargandoId(null)
+    }
+  }
+
+  // "Ver" y "Descargar" pegan al mismo PDF generado por el backend (TicketHtmlBuilder) — antes
+  // "Ver" armaba su propia vista en HTML/CSS con ComprobanteInterno, un formato distinto del PDF
+  // real y con el mismo problema de impresión en la Xprinter 58mm que costó varias vueltas
+  // arreglar del lado del PDF. Unificado: acá también se pide el PDF, solo que se abre en una
+  // pestaña nueva (visor nativo del navegador) en vez de forzar la descarga.
+  async function ver(idVenta: number) {
+    setError(null)
+    setViendoId(idVenta)
+    try {
+      const blob = await descargarVentaPdf(idVenta)
+      verBlob(blob)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo abrir el comprobante')
+    } finally {
+      setViendoId(null)
     }
   }
 
@@ -256,8 +273,12 @@ export function HistorialVentas() {
               <td>
                 {venta.estado === 'CONFIRMADA' && (
                   <>
-                    <button type="button" onClick={() => setComprobanteVenta(venta)}>
-                      Ver
+                    <button
+                      type="button"
+                      onClick={() => ver(venta.idVenta)}
+                      disabled={viendoId === venta.idVenta}
+                    >
+                      {viendoId === venta.idVenta ? 'Abriendo...' : 'Ver'}
                     </button>
                     <button
                       type="button"
@@ -317,10 +338,6 @@ export function HistorialVentas() {
           ))}
         </tbody>
       </table>
-
-      {comprobanteVenta && (
-        <ComprobanteInterno venta={comprobanteVenta} onCerrar={() => setComprobanteVenta(null)} />
-      )}
     </div>
   )
 }

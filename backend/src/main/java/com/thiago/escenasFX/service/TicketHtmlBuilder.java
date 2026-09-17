@@ -72,7 +72,14 @@ final class TicketHtmlBuilder {
      *
      * <p>Tamaños de fuente deliberadamente grandes: la primera versión (8-12px) salió ilegible en
      * la impresora real ("como un cuadrado chico"), y con el alto de página ahora fijo en 210mm
-     * sobra espacio de sobra para agrandar todo sin miedo a que no entre. */
+     * sobra espacio de sobra para agrandar todo sin miedo a que no entre.
+     *
+     * <p><b>Todo en negrita y negro puro</b>: agrandar la letra (arriba) no alcanzó — el dueño la
+     * probó impresa de vuelta y la tipografía fina salía gris y punteada en el cabezal térmico
+     * (resolución baja, un trazo fino no genera suficientes puntos negros continuos para leerse
+     * bien). {@code body} entero en {@code font-weight:bold} en vez de negritar clase por clase —
+     * ninguna clase de acá pisa eso con {@code normal} — y {@code .chico} pasó de {@code #333}
+     * (gris) a {@code #000} (negro puro), mismo criterio que ya tenía el resto del texto. */
     static String estilos() {
         // "body, p, div, table, td { margin:0; padding:0; }": sin este reset, cada <p> conserva
         // el margen por defecto del user-agent y el contenido corre más de lo esperado — ya no es
@@ -80,24 +87,22 @@ final class TicketHtmlBuilder {
         // predecible y controlado solo por las clases de acá.
         return "@page { size: 58mm 210mm; margin: 5mm; }"
             + "body, p, div, table, td { margin:0; padding:0; }"
-            + "body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.35; }"
+            + "body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.35; "
+            + "font-weight: bold; color: #000; }"
             + ".ticket { width: 48mm; }"
             + ".centro { text-align:center; }"
             + ".negrita { font-weight:bold; }"
             + ".nombre { font-size: 16px; }"
             + ".titulo { font-size: 15px; }"
-            // Antes 11px: el dueño la probó impresa (dirección/teléfono en el ticket, CUIT/
-            // Monotributo/"Comprobante autorizado por ARCA"/Vto. CAE en la factura fiscal — todos
-            // comparten esta clase) y pidió agrandarla, seguía chica para leer.
-            + ".chico { font-size: 13px; color:#333; }"
+            + ".chico { font-size: 13px; color:#000; }"
             + ".logo { max-width: 40mm; max-height: 18mm; }"
             + ".separador { border-top: 2px dashed #000; margin: 6px 0; }"
             + ".info { margin: 3px 0; font-size: 12px; }"
             + ".item { margin: 6px 0; }"
-            + ".item-desc { font-size: 13px; font-weight:bold; margin-bottom: 2px; }"
+            + ".item-desc { font-size: 13px; margin-bottom: 2px; }"
             + ".fila { width:100%; font-size: 13px; border-collapse:collapse; }"
             + ".derecha { text-align:right; }"
-            + ".total { font-size: 20px; font-weight:bold; margin-top:6px; }"
+            + ".total { font-size: 20px; margin-top:6px; }"
             + ".nota { margin-top:10px; font-size: 10px; }";
     }
 }

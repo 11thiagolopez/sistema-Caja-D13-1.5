@@ -8,8 +8,8 @@ interface ModalProps {
 }
 
 /**
- * Overlay genérico (sin portal ni focus-trap, igual que el patrón original de
- * ComprobanteInterno). Sin onClose, el modal no se puede descartar clickeando afuera ni con una
+ * Overlay genérico (sin portal ni focus-trap, igual que el patrón que sigue usando
+ * EtiquetaImprimible). Sin onClose, el modal no se puede descartar clickeando afuera ni con una
  * cruz — usado para flujos obligatorios como "abrir caja" post-login.
  */
 export function Modal({ title, onClose, wide, children }: ModalProps) {

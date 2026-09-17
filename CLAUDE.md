@@ -9,7 +9,28 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-16, fix de impresión — corregido con la medida REAL del
+Estado Actual (Actualizado al 2026-09-16, tercera ronda del fix de impresión — negrita/negro
+puro + eliminado `ComprobanteInterno.tsx`, "Ver" y "Descargar" son ahora el mismo PDF):
+
+**Tercera ronda de feedback del dueño probando en la impresora real** (después de las dos rondas
+resumidas en "Estado Anterior" debajo, que ya corrigieron el tamaño de página fijo 58×210mm).
+Reportó dos cosas: (1) el tamaño de letra ya estaba bien pero salía gris y punteada — pidió
+negrita/negro directamente; (2) sospechó que el botón "Imprimir" de la sección Comprobantes
+seguía sacando "otra cosa" distinta de lo ya arreglado, pidió unificar todo. Tenía razón en el
+punto 2: `ComprobanteInterno.tsx` era un **segundo generador de ticket** completamente separado
+del PDF real del backend (`TicketHtmlBuilder`) — su propio HTML/CSS vía `window.print()`, con
+título y contenido distintos (sin marca del local, sin fecha en el PDF) — así que arreglar el PDF
+nunca arreglaba ese botón. Fix: `body { font-weight:bold; color:#000; }` en el CSS compartido de
+`TicketHtmlBuilder`/`FacturaFiscalHtmlBuilder` (backend), y **se eliminó `ComprobanteInterno.tsx`
+entero** — "Ver" (Historial de ventas) y "Ver comprobante" (Cobros, ex-"Generar comprobante")
+ahora piden el mismo `GET /api/ventas/{id}/pdf` que "Descargar" y lo abren en una pestaña nueva
+con el visor de PDF del navegador (`verBlob`, nuevo), en vez de tener su propia vista que podía
+divergir. Backend: 198 tests verdes. Frontend: `tsc -b` **y** `npm run build` limpios (corrido el
+build real de producción, el mismo comando que usa Vercel). **Sigue sin probarse contra la
+impresora física.** Detalle técnico completo en `plan-migracion.md` sección 23 y
+`plan-frontend.md` "Estado actual".
+
+Estado Anterior (Actualizado al 2026-09-16, fix de impresión — corregido con la medida REAL del
 papel tras probar en la impresora física: 58mm×210mm fijo, no rollo de alto automático):
 
 **Bug real reportado por el dueño, en dos rondas.** Primera ronda: nada en el sistema tenía el

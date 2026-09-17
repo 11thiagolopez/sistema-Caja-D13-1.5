@@ -1872,3 +1872,71 @@ tamaño/fuente del HTML, que ningún test verifica byte a byte (mismo motivo que
 21.3). `tsc -b` limpio. Seguimos sin poder probar contra la Xprinter física desde esta máquina de
 desarrollo — este fix está basado directamente en la medida real que dio el dueño probando en su
 impresora, pero falta la confirmación visual final de que ahora imprime legible.
+
+## 23. Sesión 2026-09-16 (misma sesión que la 20-22): negrita + negro puro, y eliminación de `ComprobanteInterno` — un solo generador de ticket, no dos que podían divergir
+
+El dueño probó la sección 22 (fuente más grande) en la impresora real: el tamaño ya estaba bien,
+pero la letra salía **gris y punteada** — típico de una impresora térmica: un trazo fino no genera
+suficientes puntos negros continuos en la resolución del cabezal para leerse nítido. Pidió
+negrita/negro en todos lados directamente ("no logra ser legible... hace lo mejor"). Segundo
+pedido, separado: sospechaba que el botón "Imprimir" de la sección Comprobantes podía estar
+sacando "otra cosa" distinta de lo ya arreglado, y pidió unificar todo.
+
+### 23.1 Negrita + negro puro
+
+Un solo cambio en `TicketHtmlBuilder.estilos()` (compartido con `FacturaFiscalHtmlBuilder`, sección
+21): `body` entero pasa a `font-weight: bold` (en vez de negritar clase por clase, más fácil de
+mantener — ninguna clase de acá lo pisa con `normal`) y `color: #000` explícito; `.chico`
+(dirección/teléfono/CUIT/Monotributo/CAE/Vto., sección 22) pasó de `#333` (gris) a `#000` (negro
+puro). `.item-desc` y `.total` perdieron su `font-weight:bold` individual, redundante ahora que
+`body` ya es bold.
+
+### 23.2 Unificación: se eliminó `ComprobanteInterno.tsx` — "Ver" y "Descargar" son el mismo PDF
+
+**Causa real del segundo síntoma reportado ("el botón imprimir en comprobantes sigue imprimiendo
+lo viejo")**: no era caché ni deploy stale (ya descartado en la ronda anterior) — el botón **"Ver"**
+de Historial de ventas y el flujo de Cobros después de una venta usaban un componente React propio
+(`ComprobanteInterno.tsx`) que renderizaba su **propio HTML/CSS** vía `@media print`/`.comprobante`,
+completamente separado del PDF que arma `TicketHtmlBuilder` en el backend (el que sí se había
+arreglado en las secciones 21-22 y usa el botón **"Descargar"**). Dos generadores de ticket
+distintos, con distinto título ("COMPROBANTE INTERNO N° 0004" + marca "X" vs. "Comprobante de
+venta #4"), sin marca/dirección/teléfono del local en el de React, y sin fecha en el del PDF — y
+cada uno con su propia lógica de impresión, así que arreglar uno no arreglaba el otro. Esto
+explica por qué el ticket y la factura por PDF salían bien pero el botón "Imprimir" seguía mal:
+literalmente eran dos implementaciones distintas.
+
+**Fix: una sola fuente de verdad.** En vez de mantener el CSS de impresión de `ComprobanteInterno`
+sincronizado a mano con `TicketHtmlBuilder` para siempre, se eliminó el componente entero y ahora
+"Ver" (Historial de ventas) y "Ver comprobante" (Cobros, después de una venta — antes decía
+"Generar comprobante") piden el mismo `GET /api/ventas/{id}/pdf` que ya usaba "Descargar", con una
+sola diferencia de UX: en vez de forzar la descarga, `verBlob` (nuevo, en `utils/descargarBlob.ts`)
+abre el blob en una pestaña nueva con el visor nativo de PDF del navegador — que imprime respetando
+el tamaño de página real *embebido en el archivo*, no un `@page`/`@media print` de CSS que cada
+driver de impresora puede interpretar distinto (la causa raíz de todos los problemas de impresión
+de las secciones 21 y 22). Estructuralmente ya no puede volver a pasar que "Ver" y "Descargar"
+muestren cosas distintas: es literalmente el mismo PDF.
+
+- **`utils/descargarBlob.ts`**: `verBlob(blob)`, nuevo, hermano de `descargarBlob` — mismo blob,
+  `window.open` en vez de forzar `<a download>`.
+- **`HistorialVentas.tsx`**: botón "Ver" ahora llama a `ver(idVenta)` (nuevo, pide el PDF y usa
+  `verBlob`) en vez de abrir el modal; se sacó el estado `comprobanteVenta` y el import de
+  `ComprobanteInterno`.
+- **`RegistrarVenta.tsx`**: botón "Generar comprobante" → "Ver comprobante", llama a
+  `verComprobante()` (nuevo, mismo criterio) en vez de `setMostrarComprobante(true)`; se sacó el
+  estado `mostrarComprobante` y el import de `ComprobanteInterno`.
+- **`ComprobanteInterno.tsx`, eliminado.** Era el único componente que renderizaba HTML/CSS propio
+  para imprimir un comprobante de venta/remito — la única pantalla que sigue con ese patrón ahora
+  es `EtiquetaImprimible.tsx` (etiqueta de código de barras, no genera un PDF del backend, no fue
+  parte de este pedido).
+- **`App.css`**: se sacaron todas las clases `.comprobante*` y el `@page comprobante-58mm`
+  (muertos, sin `ComprobanteInterno` que los usara) — **excepto** `.comprobante-acciones`, que
+  Trabajo a domicilio (`TrabajoDomicilio.tsx`) también usa para su fila de botones genérica, sin
+  relación con impresión.
+
+### 23.3 Verificación
+
+Backend: **198 tests verdes** (`mvn -q -o test`). Frontend: `tsc -b` limpio y `npm run build`
+limpio (125 módulos, uno menos que antes por sacar `ComprobanteInterno.tsx` — el build de
+producción es el mismo comando que corre Vercel, corrido a propósito para no repetir el susto de
+la ronda anterior). No probado en la impresora física — sigue sin haber una Xprinter conectada a
+esta máquina de desarrollo.
