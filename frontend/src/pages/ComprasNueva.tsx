@@ -97,8 +97,13 @@ export function ComprasNueva() {
     setFilas((actual) => [...actual, filaVacia()])
   }
 
+  // Bug real: cuando quedaba una sola fila, el guard "length > 1" hacía que quitarFila no
+  // hiciera NADA — ni sacaba la fila (no puede, tiene que quedar al menos una para poder seguir
+  // cargando) ni limpiaba sus campos, así que el producto/cantidad/precios tipeados quedaban ahí
+  // sin resetear. Ahora, si es la última fila, se reemplaza por una fila nueva vacía en vez de
+  // dejarla intacta.
   function quitarFila(id: number) {
-    setFilas((actual) => (actual.length > 1 ? actual.filter((f) => f.id !== id) : actual))
+    setFilas((actual) => (actual.length > 1 ? actual.filter((f) => f.id !== id) : [filaVacia()]))
   }
 
   // Recalcula precio venta a partir de % de ganancia (recargo sobre el costo: 100% = vender al

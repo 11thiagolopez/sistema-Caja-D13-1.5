@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import {
   actualizarProducto,
@@ -12,6 +12,7 @@ import { getProveedores } from '../api/proveedores'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { EtiquetaImprimible } from '../components/EtiquetaImprimible'
+import { colorStock, ETIQUETA_COLOR_STOCK, StockBadge, type ColorStock } from '../components/StockBadge'
 import type {
   MarcaResponse,
   Producto,
@@ -45,8 +46,14 @@ export function Productos() {
 
   const [filtroDescripcion, setFiltroDescripcion] = useState('')
   const [filtroMarca, setFiltroMarca] = useState('')
+  const [filtroProveedor, setFiltroProveedor] = useState('')
+  const [filtroColorStock, setFiltroColorStock] = useState<ColorStock | ''>('')
 
   const [nuevoProducto, setNuevoProducto] = useState<ProductoRequest>(PRODUCTO_VACIO)
+  // % de ganancia deseado sobre el costo (100% = vender al doble) — mismo mecanismo que
+  // ComprasNueva.tsx: autocompleta precioVenta a partir de precioCompra, pero lo deja editable
+  // por si se quiere pisar el cálculo a mano.
+  const [gananciaPctAlta, setGananciaPctAlta] = useState('')
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
   const [ultimoCodigoGenerado, setUltimoCodigoGenerado] = useState<string | null>(null)
   const [ultimoProductoCreado, setUltimoProductoCreado] = useState<Producto | null>(null)
@@ -85,11 +92,47 @@ export function Productos() {
     }
   }, [esAdmin])
 
+  // Derivado de los productos ya cargados (no de GET /api/proveedores, que es ADMIN-only — ver
+  // SecurityConfig): así el filtro funciona también para VENDEDOR, que puede ver Productos pero
+  // no tiene permiso sobre el catálogo de proveedores.
+  const proveedoresDisponibles = Array.from(
+    new Set(productos.map((p) => p.proveedor).filter((p): p is string => Boolean(p))),
+  ).sort((a, b) => a.localeCompare(b))
+
   const productosFiltrados = productos.filter((p) => {
     const matchDescripcion = p.descripcion.toLowerCase().includes(filtroDescripcion.toLowerCase())
     const matchMarca = (p.marca ?? '').toLowerCase().includes(filtroMarca.toLowerCase())
-    return matchDescripcion && matchMarca
+    const matchProveedor = !filtroProveedor || p.proveedor === filtroProveedor
+    const matchColorStock = !filtroColorStock || colorStock(p.stockActual) === filtroColorStock
+    return matchDescripcion && matchMarca && matchProveedor && matchColorStock
   })
+
+  // Mismo mecanismo que ComprasNueva.tsx (precioVenta = precioCompra × (1 + %/100), 100% = vender
+  // al doble): acá no hay ARS/USD como en Compras (el alta de producto siempre fue en pesos), así
+  // que el cálculo es directo sin pasar por la cotización del día.
+  function precioVentaCalculado(precioCompra: number | undefined, pctTexto: string): number | undefined {
+    const pct = Number(pctTexto)
+    if (!pctTexto || Number.isNaN(pct) || precioCompra == null) return undefined
+    return Number((precioCompra * (1 + pct / 100)).toFixed(2))
+  }
+
+  function onCambiarPrecioCompraAlta(texto: string) {
+    const precioCompra = texto ? Number(texto) : undefined
+    const calculado = precioVentaCalculado(precioCompra, gananciaPctAlta)
+    setNuevoProducto((actual) => ({
+      ...actual,
+      precioCompra,
+      ...(calculado != null ? { precioVenta: calculado } : {}),
+    }))
+  }
+
+  function onCambiarGananciaPctAlta(texto: string) {
+    setGananciaPctAlta(texto)
+    const calculado = precioVentaCalculado(nuevoProducto.precioCompra, texto)
+    if (calculado != null) {
+      setNuevoProducto((actual) => ({ ...actual, precioVenta: calculado }))
+    }
+  }
 
   async function onAgregarProducto(event: FormEvent) {
     event.preventDefault()
@@ -110,6 +153,7 @@ export function Productos() {
         setMarcaInfoAlta({ nombre: creado.marca, codigo: creado.numeroMarca, esNueva: !marcaYaExistia })
       }
       setNuevoProducto(PRODUCTO_VACIO)
+      setGananciaPctAlta('')
       getMarcas().then(setMarcas)
       getProveedores().then(setProveedores)
     } catch (err) {
@@ -238,7 +282,7 @@ export function Productos() {
   function celdaEditable(
     producto: Producto,
     campo: CampoEditable,
-    valorMostrado: string,
+    valorMostrado: ReactNode,
     tipo: 'text' | 'number',
     paso?: string,
   ) {
@@ -288,11 +332,38 @@ export function Productos() {
           value={filtroDescripcion}
           onChange={(e) => setFiltroDescripcion(e.target.value)}
         />
-        <input
-          placeholder="Filtrar por marca"
-          value={filtroMarca}
-          onChange={(e) => setFiltroMarca(e.target.value)}
-        />
+        {/* Marca/proveedor/color de stock quedan colapsados: con las 4 opciones de color más los
+            proveedores reales del catálogo (pueden ser varias decenas), tenerlos siempre abiertos
+            junto a la búsqueda rápida por descripción hacía la barra de filtros demasiado larga. */}
+        <details className="filtros-avanzados">
+          <summary>Más filtros (marca, proveedor, color de stock)</summary>
+          <div className="agregar-producto">
+            <input
+              placeholder="Filtrar por marca"
+              value={filtroMarca}
+              onChange={(e) => setFiltroMarca(e.target.value)}
+            />
+            <select value={filtroProveedor} onChange={(e) => setFiltroProveedor(e.target.value)}>
+              <option value="">Todos los proveedores</option>
+              {proveedoresDisponibles.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filtroColorStock}
+              onChange={(e) => setFiltroColorStock(e.target.value as ColorStock | '')}
+            >
+              <option value="">Todos los colores de stock</option>
+              {(Object.keys(ETIQUETA_COLOR_STOCK) as ColorStock[]).map((color) => (
+                <option key={color} value={color}>
+                  {ETIQUETA_COLOR_STOCK[color]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </details>
       </section>
 
       {esAdmin && (
@@ -330,6 +401,7 @@ export function Productos() {
             <th>Descripción</th>
             <th>Marca</th>
             <th>Rubro</th>
+            <th>Proveedor</th>
             <th>Código interno</th>
             <th>Código de fábrica</th>
             <th>Precio venta</th>
@@ -347,6 +419,7 @@ export function Productos() {
               {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
               {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
               <td>{producto.rubro}</td>
+              <td>{producto.proveedor || '—'}</td>
               <td>{producto.codigoInterno}</td>
               {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text')}
               {celdaEditable(
@@ -365,7 +438,7 @@ export function Productos() {
               )}
               <td>{producto.precioVentaUsd != null ? `USD ${producto.precioVentaUsd.toFixed(2)}` : '—'}</td>
               <td>{producto.precioCompraUsd != null ? `USD ${producto.precioCompraUsd.toFixed(2)}` : '—'}</td>
-              {celdaEditable(producto, 'stockActual', String(producto.stockActual), 'number', '1')}
+              {celdaEditable(producto, 'stockActual', <StockBadge stock={producto.stockActual} />, 'number', '1')}
               <td>
                 <button type="button" onClick={() => setEtiquetaProducto(producto)}>
                   Imprimir etiqueta
@@ -472,6 +545,28 @@ export function Productos() {
               )}
             </label>
             <label>
+              Precio de compra
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={nuevoProducto.precioCompra ?? ''}
+                onChange={(e) => onCambiarPrecioCompraAlta(e.target.value)}
+              />
+            </label>
+            <label>
+              % Ganancia
+              <input
+                type="number"
+                step="1"
+                min={0}
+                placeholder="%"
+                value={gananciaPctAlta}
+                onChange={(e) => onCambiarGananciaPctAlta(e.target.value)}
+              />
+              <small>Recargo sobre el costo (100% = vender al doble) — autocompleta el precio de venta.</small>
+            </label>
+            <label>
               Precio de venta
               <input
                 type="number"
@@ -481,21 +576,7 @@ export function Productos() {
                 value={nuevoProducto.precioVenta}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, precioVenta: Number(e.target.value) })}
               />
-            </label>
-            <label>
-              Precio de compra
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={nuevoProducto.precioCompra ?? ''}
-                onChange={(e) =>
-                  setNuevoProducto({
-                    ...nuevoProducto,
-                    precioCompra: e.target.value ? Number(e.target.value) : undefined,
-                  })
-                }
-              />
+              <small>Se autocompleta con precio de compra + % ganancia, pero se puede pisar a mano.</small>
             </label>
             <label>
               Stock inicial

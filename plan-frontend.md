@@ -92,7 +92,11 @@ cotización cargada en el sistema.
 ```
 
 `VentaResponse`: `{idVenta, fecha, idEmpleado, medioPago, tipoComprobante, totalVenta, descuento,
-estado, detalles: [{idProducto, descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
+estado, detalles: [{idProducto, descripcionProducto, cantidad, precioUnitario, subtotal,
+proveedorProducto}]}`. `proveedorProducto` (nuevo, sesión 2026-09-17) es el `Producto.proveedor`
+al momento de la venta — `null` en ítems manuales sin producto de catálogo (mano de obra);
+`HistorialVentas.tsx` lo usa para identificar rápido a qué proveedor corresponde un producto
+vendido si la venta falla o hay un reclamo.
 `estado` es `"CONFIRMADA"` o `"PENDIENTE_AUTORIZACION"` (esto último solo si `descuento > 0`: la
 venta ya descontó stock pero necesita que se confirme el código OTP antes de poder considerarse
 una venta real para el arqueo de caja. El código sólo le llega por email al ADMIN — ahí está el
@@ -316,7 +320,37 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-09-17, cambio solo de backend — sin impacto en el frontend)
+## Estado actual (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % ganancia en alta + proveedor en Productos e Historial)
+
+Pedido de seis partes del dueño, todo en la misma sesión (detalle técnico completo en
+`plan-migracion.md` sección 25):
+
+1. **Código de colores de stock** (`components/StockBadge.tsx`, nuevo): verde (≥5), amarillo
+   (3-4), naranja (1-2), rojo (0). Aplicado en la tabla de `Productos.tsx` y en la tabla de ítems
+   de `Presupuestos.tsx` — los únicos dos lugares donde el stock se muestra como texto renderizable
+   con HTML/CSS. No se pudo aplicar en Cobros/Trabajo a domicilio/Compras porque ahí el producto se
+   busca con `<datalist>` nativo, que no permite estilar sus opciones.
+2. **Fix real en `ComprasNueva.tsx`**: el botón "Quitar" no limpiaba los campos de la última fila
+   restante (el guard `length > 1` la dejaba intacta). Ahora reemplaza la última fila por una
+   vacía.
+3. **Alta de producto con % de ganancia** (`Productos.tsx`): el precio de venta se autocompleta a
+   partir de precio de compra + "% Ganancia" (mismo patrón que ya tenía `ComprasNueva.tsx`), sigue
+   siendo editable a mano. Solo UI — `ProductoRequest` no cambió.
+4. **Columna "Proveedor"** en la tabla de `Productos.tsx` — el dato (`Producto.proveedor`) ya
+   viajaba en `ProductoResponse`, solo faltaba mostrarlo.
+5. **`proveedorProducto` en `DetalleVentaResponse`** (ver "Contrato de API" arriba) — nuevo. Fila
+   expandible por venta en `HistorialVentas.tsx` (ADMIN) con producto/cantidad/proveedor por línea
+   vendida, para identificar rápido el proveedor si una venta falla o hay un reclamo.
+6. **Filtros de Productos reorganizados**: la búsqueda por descripción queda siempre visible;
+   marca, proveedor (nuevo) y color de stock (nuevo) quedan dentro de un `<details>` colapsable
+   ("Más filtros") para no amontonar cuatro filtros simultáneos. El filtro de proveedor deriva sus
+   opciones de los productos ya cargados en memoria, no de `GET /api/proveedores` (exclusivo
+   ADMIN), para que funcione también para VENDEDOR.
+
+Backend: 199 tests verdes. Frontend: `tsc -b` y `npm run lint` limpios. **No probado en un
+navegador real** esta sesión (sin Chrome disponible) — pendiente confirmación visual.
+
+## Estado anterior (Actualizado al 2026-09-17, cambio solo de backend — sin impacto en el frontend)
 
 El comprobante no fiscal (ticket/remito) perdió su título numerado y ganó una "X" grande en un
 recuadro, igual que la letra de la Factura — cambio puntual en `TicketHtmlBuilder`/

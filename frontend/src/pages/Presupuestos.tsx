@@ -4,6 +4,7 @@ import { getProductos } from '../api/productos'
 import { crearPresupuesto, descargarPresupuestoPdf, enviarPresupuestoEmail, getPresupuestos } from '../api/presupuestos'
 import { ApiRequestError } from '../api/client'
 import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
+import { StockBadge } from '../components/StockBadge'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
 import { descargarBlob } from '../utils/descargarBlob'
@@ -238,7 +239,7 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
               <td>{item.cantidad}</td>
               <td>{item.precioUnitario.toFixed(2)}</td>
               <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
-              <td>{item.stockActual ?? '—'}</td>
+              <td>{item.stockActual != null ? <StockBadge stock={item.stockActual} /> : '—'}</td>
               <td>
                 <button type="button" onClick={() => quitarDelCarrito(index)}>
                   Quitar

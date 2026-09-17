@@ -78,6 +78,30 @@ class VentaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void registrarVenta_incluyeProveedorDelProductoEnElDetalle() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        Producto producto = crearProducto(10);
+        producto.setProveedor("Proveedor Test");
+        producto = productoRepo.save(producto);
+        String token = login("vendedor1", "clave123");
+
+        String body = """
+            {
+                "idEmpleado": %d,
+                "medioPago": "EFECTIVO",
+                "detalles": [{"idProducto": %d, "cantidad": 1, "precioUnitario": 100}]
+            }
+            """.formatted(vendedor.getIdEmpleado(), producto.getIdProducto());
+
+        mockMvc.perform(post("/api/ventas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.detalles[0].proveedorProducto").value("Proveedor Test"));
+    }
+
+    @Test
     void registrarVenta_stockInsuficiente_devuelve409() throws Exception {
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         Producto producto = crearProducto(1);

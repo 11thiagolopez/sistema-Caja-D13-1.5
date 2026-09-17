@@ -51,6 +51,7 @@ final class VentaMapper {
             d.getTipo(),
             d.getCantidad(),
             d.getPrecioUnitario(),
-            d.getSubtotal());
+            d.getSubtotal(),
+            d.getProducto() != null ? d.getProducto().getProveedor() : null);
     }
 }

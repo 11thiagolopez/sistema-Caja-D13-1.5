@@ -9,7 +9,39 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-17, comprobante no fiscal: título numerado → "X" grande en
+Estado Actual (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % de
+ganancia en el alta de Productos + proveedor visible en Productos e Historial de ventas):
+
+**Pedido único del dueño con seis partes, todas resueltas en la misma sesión** (detalle técnico
+completo en `plan-migracion.md` sección 25, contrato de API actualizado y "Estado actual" en
+`plan-frontend.md`):
+
+1. Código de colores de stock — rangos exactos: verde (5 o más), amarillo (3-4), naranja (1-2),
+   rojo (0). `components/StockBadge.tsx` (nuevo) centraliza la lógica y el componente visual;
+   aplicado en la tabla de Productos y en la tabla de ítems de Presupuestos — los únicos dos
+   lugares donde el stock se muestra como texto renderizable con HTML/CSS (Cobros, Trabajo a
+   domicilio y Compras buscan el producto con `<datalist>` nativo, que no se puede estilar).
+2. Fix real en Compras: el botón "Quitar" no limpiaba los campos cuando quedaba una sola fila (el
+   guard `length > 1` la dejaba intacta sin hacer nada). Ahora esa última fila se reemplaza por una
+   vacía.
+3. Alta de producto: el precio de venta ahora se autocompleta con precio de compra + "% Ganancia"
+   (mismo patrón que ya tenía Compras), sigue siendo editable a mano. Solo UI, el contrato del
+   backend no cambió.
+4. Columna "Proveedor" nueva en la tabla de Productos (el dato ya existía en el modelo, no se
+   mostraba).
+5. `DetalleVentaResponse` ganó `proveedorProducto` (el proveedor del producto al momento de la
+   venta) — Historial de ventas (ADMIN) ganó una fila expandible por venta con
+   producto/cantidad/proveedor por línea, para identificar rápido el proveedor si una venta falla
+   o hay un reclamo.
+6. Filtros de Productos reorganizados: búsqueda por descripción siempre visible; marca, proveedor
+   (nuevo) y color de stock (nuevo) agrupados en un `<details>` colapsable ("Más filtros") para no
+   amontonar cuatro filtros a la vez.
+
+Backend: 199 tests verdes (incluye test nuevo end-to-end del punto 5). Frontend: `tsc -b` y
+`npm run lint` limpios. **No probado en un navegador real esta sesión** (sin Chrome disponible) —
+pendiente confirmación visual de las seis partes la próxima vez que se abra el sistema.
+
+Estado Anterior (Actualizado al 2026-09-17, comprobante no fiscal: título numerado → "X" grande en
 recuadro, igual que la letra de la Factura):
 
 Pedido puntual del dueño: al comprobante que no es factura (ticket/remito, `TicketHtmlBuilder`)

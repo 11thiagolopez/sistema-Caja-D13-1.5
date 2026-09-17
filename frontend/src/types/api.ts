@@ -142,6 +142,10 @@ export interface DetalleVentaResponse {
   cantidad: number
   precioUnitario: number
   subtotal: number
+  // Texto libre de Producto.proveedor al momento de la venta — null en ítems manuales sin
+  // producto de catálogo (mano de obra, descripción libre). Sirve para identificar rápido a qué
+  // proveedor corresponde un producto vendido si la venta falla o hay un reclamo.
+  proveedorProducto: string | null
 }
 
 export interface VentaResponse {

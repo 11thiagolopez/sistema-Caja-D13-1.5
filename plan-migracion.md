@@ -1981,3 +1981,71 @@ tests verdes** (`mvn -q -o test`, corrida limpia — una corrida anterior en sim
 generación de la muestra falló con un error de conexión a Postgres real por la carpeta `target`
 compartida entre los dos procesos de Maven corriendo a la vez, no por este cambio; confirmado
 corriendo la suite sola después). No probado en la impresora física.
+
+## 25. Sesión 2026-09-17 (misma fecha que la 24): código de colores de stock, fix del botón "Quitar" en Compras, % de ganancia en el alta de Productos, columna y filtro de proveedor, y proveedor por producto en Historial de ventas
+
+Pedido único del dueño con seis partes, todas resueltas en la misma sesión.
+
+### 25.1 Código de colores de stock (rangos exactos pedidos)
+
+Verde (≥5), amarillo (3-4), naranja (1-2), rojo (0). `components/StockBadge.tsx` (nuevo,
+frontend) centraliza la lógica (`colorStock(stock)`) y el componente visual (`<StockBadge>`) para
+que no haya dos implementaciones del mismo rango. Se aplicó en las dos únicas pantallas donde el
+stock se muestra como texto plano renderizable con HTML/CSS: la tabla de `Productos.tsx` y la
+tabla de ítems de `Presupuestos.tsx`. **No se aplicó** en Cobros, Trabajo a domicilio ni Compras
+porque en las tres el producto se busca con un `<datalist>` nativo del navegador, que no permite
+estilar sus opciones — limitación de la plataforma, no un descarte de alcance.
+
+### 25.2 Fix real: "Quitar" en Compras no limpiaba la última fila
+
+`ComprasNueva.tsx`, función `quitarFila`: el guard `actual.length > 1` hacía que, en la última
+fila restante, la función no hiciera nada — ni la eliminaba (no puede, tiene que quedar al menos
+una fila) ni limpiaba sus campos, así que producto/cantidad/precios tipeados quedaban pegados en
+pantalla. Fix: si es la última fila, se reemplaza por una fila nueva vacía (`filaVacia()`) en vez
+de dejarla intacta.
+
+### 25.3 Alta de producto: precio de venta autocalculado con % de ganancia
+
+`Productos.tsx`, formulario de alta: antes se cargaban precio de compra y precio de venta por
+separado, sin relación entre sí. Ahora sigue el mismo patrón que ya existía en
+`ComprasNueva.tsx`: se carga precio de compra + "% Ganancia" (campo nuevo) y el precio de venta se
+autocompleta (`precioVenta = precioCompra × (1 + pct/100)`), pero sigue siendo un campo editable a
+mano por si se quiere pisar el cálculo. El campo "% Ganancia" es solo de UI — el contrato del
+backend (`ProductoRequest`) no cambió, sigue recibiendo `precioCompra`/`precioVenta` en pesos como
+siempre.
+
+### 25.4 Proveedor visible en la tabla de Productos
+
+`Producto.proveedor` (texto libre, ya existía en el modelo/DTO/tipo del frontend, cargado al dar
+de alta un producto, simplemente no se mostraba en la tabla) ganó una columna nueva en
+`Productos.tsx`. Sin cambios de backend — el dato ya viajaba en `ProductoResponse`.
+
+### 25.5 Proveedor por producto vendido, en Historial de ventas
+
+Pedido de trazabilidad: si una venta falla o hay un reclamo, poder identificar rápido a qué
+proveedor corresponde cada producto vendido sin ir a buscarlo a Productos. `DetalleVentaResponse`
+ganó el campo `proveedorProducto` (`VentaMapper.toResponse`, lee `detalle.getProducto()
+.getProveedor()` — `DetalleVenta.producto` es `@ManyToOne` EAGER por default, así que no hay
+N+1 ni cambio de fetch strategy; `null` en ítems manuales sin producto de catálogo, ej. mano de
+obra). `HistorialVentas.tsx` (ADMIN) ganó una fila expandible por venta ("Ver productos"/
+"Ocultar") con una mini-tabla producto/cantidad/proveedor por cada línea vendida. Test nuevo,
+`VentaControllerIntegrationTest.registrarVenta_incluyeProveedorDelProductoEnElDetalle`, verifica
+el campo end-to-end vía `POST /api/ventas`.
+
+### 25.6 Filtros de Productos reorganizados + dos filtros nuevos
+
+Filtros nuevos: por color de stock (`<select>` con las 4 etiquetas de `StockBadge.tsx`) y por
+proveedor (`<select>`, opciones derivadas de los `productos` ya cargados en memoria — a propósito
+no se llama a `GET /api/proveedores`, que es exclusivo ADMIN, para que el filtro funcione también
+para VENDEDOR). Con la búsqueda por descripción y marca ya existentes, iban a quedar cuatro
+filtros simultáneos — se dejó solo la búsqueda por descripción siempre visible y el resto (marca,
+proveedor, color de stock) dentro de un `<details><summary>Más filtros</summary></details>`
+colapsable (`.filtros-avanzados` en `App.css`), sin librería nueva.
+
+### 25.7 Verificación
+
+Backend: **199 tests** verdes (`mvn -q -o test`, incluye el test nuevo de 25.5). Frontend:
+`npx tsc -b` y `npm run lint` (oxlint) limpios — el único warning de lint es
+`react(only-export-components)` en `StockBadge.tsx`, mismo patrón preexistente que ya tienen
+`BuscadorProductoCarrito.tsx` y `AuthContext.tsx`, no es un problema nuevo. **No probado en un
+navegador real** — solo verificación de compilación/tests/lint, sin Chrome disponible esta sesión.

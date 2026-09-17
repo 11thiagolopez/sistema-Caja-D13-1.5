@@ -208,6 +208,57 @@
   margin-bottom: 16px;
 }
 
+/* Código de colores de stock, rangos exactos pedidos por el dueño (ver StockBadge.tsx). Colores
+   con suficiente contraste en tema claro fijo — no se usan variables de --accent porque son
+   semánticos (siempre verde/amarillo/naranja/rojo, no decorativos). */
+.stock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.stock-verde {
+  background: #d4edda;
+  color: #1e7e34;
+}
+
+.stock-amarillo {
+  background: #fff3cd;
+  color: #8a6d00;
+}
+
+.stock-naranja {
+  background: #ffe0b2;
+  color: #a15c00;
+}
+
+.stock-rojo {
+  background: #f8d7da;
+  color: #a71d2a;
+}
+
+/* Filtros de Productos.tsx: "Más filtros" colapsable (proveedor, color de stock, marca) para no
+   amontonar demasiados campos siempre visibles — solo la búsqueda por descripción queda afuera. */
+.filtros-avanzados {
+  margin-bottom: 12px;
+}
+
+.filtros-avanzados summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.filtros-avanzados .agregar-producto {
+  margin-top: 8px;
+}
+
 .tabs {
   display: flex;
   gap: 16px;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, getVentas } from '../api/ventas'
 import { getEmpleados } from '../api/empleados'
@@ -29,6 +29,9 @@ export function HistorialVentas() {
   const [cargando, setCargando] = useState(false)
   const [codigos, setCodigos] = useState<Record<number, string>>({})
   const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
+  // Fila expandida con el detalle de productos vendidos (y su proveedor) — un solo idVenta a la
+  // vez, plegado por default para no alargar la tabla de entrada.
+  const [expandidoId, setExpandidoId] = useState<number | null>(null)
 
   const [filtroTipo, setFiltroTipo] = useState<'TODAS' | TipoVenta>('TODAS')
   const [filtroTecnico, setFiltroTecnico] = useState('')
@@ -224,117 +227,155 @@ export function HistorialVentas() {
             <th>Comprobante</th>
             <th>Enviar por mail</th>
             <th>Factura fiscal</th>
+            <th>Productos</th>
           </tr>
         </thead>
         <tbody>
           {ventasFiltradas.map((venta) => (
-            <tr key={venta.idVenta}>
-              <td>{venta.idVenta}</td>
-              <td>{venta.fecha}</td>
-              <td>
-                {venta.tipoVenta === 'DOMICILIO' ? 'Domicilio' : 'Mostrador'}
-                {venta.tipoVenta === 'DOMICILIO' && venta.estadoTrabajo ? ` (${venta.estadoTrabajo})` : ''}
-              </td>
-              <td>
-                {venta.tipoVenta === 'DOMICILIO'
-                  ? `${venta.clienteNombre ?? '—'}${venta.nombreTecnico ? ` / ${venta.nombreTecnico}` : ''}`
-                  : '—'}
-              </td>
-              <td>{venta.medioPago}</td>
-              <td>{venta.totalVenta.toFixed(2)}</td>
-              <td>{venta.descuento.toFixed(2)}</td>
-              <td>
-                {venta.estado}
-                {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
-                  <Link to={`/ventas/domicilio?id=${venta.idVenta}`}> Abrir para editar</Link>
-                )}
-              </td>
-              <td>
-                {venta.estado === 'PENDIENTE_AUTORIZACION' && (
-                  <span className="confirmar-descuento">
-                    <input
-                      placeholder="Código"
-                      value={codigos[venta.idVenta] ?? ''}
-                      onChange={(e) =>
-                        setCodigos((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))
+            <Fragment key={venta.idVenta}>
+              <tr>
+                <td>{venta.idVenta}</td>
+                <td>{venta.fecha}</td>
+                <td>
+                  {venta.tipoVenta === 'DOMICILIO' ? 'Domicilio' : 'Mostrador'}
+                  {venta.tipoVenta === 'DOMICILIO' && venta.estadoTrabajo ? ` (${venta.estadoTrabajo})` : ''}
+                </td>
+                <td>
+                  {venta.tipoVenta === 'DOMICILIO'
+                    ? `${venta.clienteNombre ?? '—'}${venta.nombreTecnico ? ` / ${venta.nombreTecnico}` : ''}`
+                    : '—'}
+                </td>
+                <td>{venta.medioPago}</td>
+                <td>{venta.totalVenta.toFixed(2)}</td>
+                <td>{venta.descuento.toFixed(2)}</td>
+                <td>
+                  {venta.estado}
+                  {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
+                    <Link to={`/ventas/domicilio?id=${venta.idVenta}`}> Abrir para editar</Link>
+                  )}
+                </td>
+                <td>
+                  {venta.estado === 'PENDIENTE_AUTORIZACION' && (
+                    <span className="confirmar-descuento">
+                      <input
+                        placeholder="Código"
+                        value={codigos[venta.idVenta] ?? ''}
+                        onChange={(e) =>
+                          setCodigos((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => confirmar(venta.idVenta)}
+                        disabled={confirmandoId === venta.idVenta}
+                      >
+                        {confirmandoId === venta.idVenta && <span className="spinner" />}
+                        {confirmandoId === venta.idVenta ? 'Confirmando...' : 'Confirmar'}
+                      </button>
+                    </span>
+                  )}
+                </td>
+                <td>
+                  {venta.estado === 'CONFIRMADA' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => ver(venta.idVenta)}
+                        disabled={viendoId === venta.idVenta}
+                      >
+                        {viendoId === venta.idVenta ? 'Abriendo...' : 'Ver'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => descargar(venta.idVenta)}
+                        disabled={descargandoId === venta.idVenta}
+                      >
+                        {descargandoId === venta.idVenta ? 'Descargando...' : 'Descargar'}
+                      </button>
+                    </>
+                  )}
+                </td>
+                <td>
+                  {venta.estado === 'CONFIRMADA' && (
+                    <span className="confirmar-descuento">
+                      <input
+                        type="email"
+                        placeholder="Email del cliente"
+                        value={emails[venta.idVenta] ?? venta.clienteEmail ?? ''}
+                        onChange={(e) => setEmails((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => enviarPorMail(venta.idVenta)}
+                        disabled={enviandoEmailId === venta.idVenta || !(emails[venta.idVenta] ?? venta.clienteEmail)}
+                      >
+                        {enviandoEmailId === venta.idVenta
+                          ? 'Enviando...'
+                          : venta.comprobanteEnviadoPorEmail
+                            ? 'Reenviar'
+                            : 'Enviar'}
+                      </button>
+                    </span>
+                  )}
+                </td>
+                <td>
+                  {venta.estado === 'CONFIRMADA' && (
+                    <FacturaFiscalCelda
+                      factura={facturas[venta.idVenta]}
+                      docTipo={docTipos[venta.idVenta] ?? 99}
+                      docNro={docNumeros[venta.idVenta] ?? ''}
+                      docNombre={docNombres[venta.idVenta] ?? ''}
+                      facturando={facturandoId === venta.idVenta}
+                      onCambiarDocTipo={(docTipo) =>
+                        setDocTipos((actual) => ({ ...actual, [venta.idVenta]: docTipo }))
                       }
+                      onCambiarDocNro={(docNro) =>
+                        setDocNumeros((actual) => ({ ...actual, [venta.idVenta]: docNro }))
+                      }
+                      onCambiarDocNombre={(docNombre) =>
+                        setDocNombres((actual) => ({ ...actual, [venta.idVenta]: docNombre }))
+                      }
+                      onFacturar={() => facturar(venta.idVenta)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => confirmar(venta.idVenta)}
-                      disabled={confirmandoId === venta.idVenta}
-                    >
-                      {confirmandoId === venta.idVenta && <span className="spinner" />}
-                      {confirmandoId === venta.idVenta ? 'Confirmando...' : 'Confirmar'}
-                    </button>
-                  </span>
-                )}
-              </td>
-              <td>
-                {venta.estado === 'CONFIRMADA' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => ver(venta.idVenta)}
-                      disabled={viendoId === venta.idVenta}
-                    >
-                      {viendoId === venta.idVenta ? 'Abriendo...' : 'Ver'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => descargar(venta.idVenta)}
-                      disabled={descargandoId === venta.idVenta}
-                    >
-                      {descargandoId === venta.idVenta ? 'Descargando...' : 'Descargar'}
-                    </button>
-                  </>
-                )}
-              </td>
-              <td>
-                {venta.estado === 'CONFIRMADA' && (
-                  <span className="confirmar-descuento">
-                    <input
-                      type="email"
-                      placeholder="Email del cliente"
-                      value={emails[venta.idVenta] ?? venta.clienteEmail ?? ''}
-                      onChange={(e) => setEmails((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => enviarPorMail(venta.idVenta)}
-                      disabled={enviandoEmailId === venta.idVenta || !(emails[venta.idVenta] ?? venta.clienteEmail)}
-                    >
-                      {enviandoEmailId === venta.idVenta
-                        ? 'Enviando...'
-                        : venta.comprobanteEnviadoPorEmail
-                          ? 'Reenviar'
-                          : 'Enviar'}
-                    </button>
-                  </span>
-                )}
-              </td>
-              <td>
-                {venta.estado === 'CONFIRMADA' && (
-                  <FacturaFiscalCelda
-                    factura={facturas[venta.idVenta]}
-                    docTipo={docTipos[venta.idVenta] ?? 99}
-                    docNro={docNumeros[venta.idVenta] ?? ''}
-                    docNombre={docNombres[venta.idVenta] ?? ''}
-                    facturando={facturandoId === venta.idVenta}
-                    onCambiarDocTipo={(docTipo) =>
-                      setDocTipos((actual) => ({ ...actual, [venta.idVenta]: docTipo }))
-                    }
-                    onCambiarDocNro={(docNro) =>
-                      setDocNumeros((actual) => ({ ...actual, [venta.idVenta]: docNro }))
-                    }
-                    onCambiarDocNombre={(docNombre) =>
-                      setDocNombres((actual) => ({ ...actual, [venta.idVenta]: docNombre }))
-                    }
-                    onFacturar={() => facturar(venta.idVenta)}
-                  />
-                )}
-              </td>
-            </tr>
+                  )}
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => setExpandidoId((actual) => (actual === venta.idVenta ? null : venta.idVenta))}
+                  >
+                    {expandidoId === venta.idVenta ? 'Ocultar' : 'Ver productos'}
+                  </button>
+                </td>
+              </tr>
+              {expandidoId === venta.idVenta && (
+                <tr>
+                  <td colSpan={13}>
+                    {/* Proveedor por producto vendido: si una venta falla o hay un reclamo, permite
+                        identificar rápido a qué proveedor corresponde cada producto sin tener que
+                        ir a buscarlo a Productos (ver DetalleVentaResponse.proveedorProducto). */}
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Cantidad</th>
+                          <th>Proveedor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {venta.detalles.map((detalle, i) => (
+                          <tr key={i}>
+                            <td>{detalle.descripcionProducto}</td>
+                            <td>{detalle.cantidad}</td>
+                            <td>{detalle.proveedorProducto || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
