@@ -208,39 +208,32 @@
   margin-bottom: 16px;
 }
 
-/* Código de colores de stock, rangos exactos pedidos por el dueño (ver StockBadge.tsx). Colores
-   con suficiente contraste en tema claro fijo — no se usan variables de --accent porque son
-   semánticos (siempre verde/amarillo/naranja/rojo, no decorativos). */
-.stock-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.stock-verde {
+/* Código de colores de stock, rangos exactos pedidos por el dueño (ver utils/stockColor.ts). El
+   color va en el fondo de toda la fila (no solo en el número de stock) para que se note de un
+   vistazo rápido recorriendo la tabla. Colores con contraste suave en tema claro fijo — no se usan
+   variables de --accent porque son semánticos (siempre verde/amarillo/naranja/rojo, no
+   decorativos); el texto queda con el color normal de la tabla, no el de --bg-alt de hover. */
+.fila-stock-verde {
   background: #d4edda;
-  color: #1e7e34;
 }
 
-.stock-amarillo {
+.fila-stock-amarillo {
   background: #fff3cd;
-  color: #8a6d00;
 }
 
-.stock-naranja {
+.fila-stock-naranja {
   background: #ffe0b2;
-  color: #a15c00;
 }
 
-.stock-rojo {
+.fila-stock-rojo {
   background: #f8d7da;
-  color: #a71d2a;
+}
+
+.fila-stock-verde:hover,
+.fila-stock-amarillo:hover,
+.fila-stock-naranja:hover,
+.fila-stock-rojo:hover {
+  filter: brightness(0.96);
 }
 
 /* Filtros de Productos.tsx: "Más filtros" colapsable (proveedor, color de stock, marca) para no

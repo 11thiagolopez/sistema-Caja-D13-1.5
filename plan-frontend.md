@@ -325,11 +325,14 @@ frontend/
 Pedido de seis partes del dueño, todo en la misma sesión (detalle técnico completo en
 `plan-migracion.md` sección 25):
 
-1. **Código de colores de stock** (`components/StockBadge.tsx`, nuevo): verde (≥5), amarillo
-   (3-4), naranja (1-2), rojo (0). Aplicado en la tabla de `Productos.tsx` y en la tabla de ítems
-   de `Presupuestos.tsx` — los únicos dos lugares donde el stock se muestra como texto renderizable
-   con HTML/CSS. No se pudo aplicar en Cobros/Trabajo a domicilio/Compras porque ahí el producto se
-   busca con `<datalist>` nativo, que no permite estilar sus opciones.
+1. **Código de colores de stock** (`utils/stockColor.ts`): verde (≥5), amarillo (3-4), naranja
+   (1-2), rojo (0). El color pinta la **fila entera** (`claseFilaStock`, clase `fila-stock-*` en
+   el `<tr>`) — corregido tras el primer intento, que coloreaba solo un badge en el número de
+   stock y el dueño pidió que se note de un vistazo recorriendo la tabla, no enfocando esa columna.
+   Aplicado en la tabla de `Productos.tsx` y en la fila del carrito de `Presupuestos.tsx` — los
+   únicos dos lugares donde el stock se muestra en una fila renderizable con HTML/CSS. No se pudo
+   aplicar en Cobros/Trabajo a domicilio/Compras porque ahí el producto se busca con `<datalist>`
+   nativo, que no permite estilar sus opciones.
 2. **Fix real en `ComprasNueva.tsx`**: el botón "Quitar" no limpiaba los campos de la última fila
    restante (el guard `length > 1` la dejaba intacta). Ahora reemplaza la última fila por una
    vacía.

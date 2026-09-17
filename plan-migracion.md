@@ -2049,3 +2049,26 @@ Backend: **199 tests** verdes (`mvn -q -o test`, incluye el test nuevo de 25.5).
 `react(only-export-components)` en `StockBadge.tsx`, mismo patrón preexistente que ya tienen
 `BuscadorProductoCarrito.tsx` y `AuthContext.tsx`, no es un problema nuevo. **No probado en un
 navegador real** — solo verificación de compilación/tests/lint, sin Chrome disponible esta sesión.
+
+### 25.8 Corrección posterior, misma sesión: el color va en la fila entera, no en el número de stock
+
+El dueño aclaró después de ver el resumen: el color tiene que pintar la **fila del producto
+completa**, para verse de un vistazo rápido recorriendo la tabla — no solo el número de stock (el
+badge coloreado quedaba chico y había que enfocar la vista en esa columna puntual para notarlo).
+
+Cambio 100% frontend: `components/StockBadge.tsx` se reemplazó por `utils/stockColor.ts` (ya no
+hace falta un componente con JSX — el helper solo calcula el color y la clase CSS). Nuevo
+`claseFilaStock(stock)` devuelve `fila-stock-{color}`, aplicado como `className` del `<tr>` en la
+tabla de `Productos.tsx` (con `title` del `<tr>` mostrando la etiqueta del rango, para quien pase
+el mouse) y de la fila del carrito en `Presupuestos.tsx`. La celda de stock volvió a mostrar el
+número plano (ya no un badge coloreado — el color está en el fondo de toda la fila). CSS en
+`App.css`: `.stock-badge`/`.stock-verde` etc. (coloreaban un `<span>`) se reemplazaron por
+`.fila-stock-verde`/`.fila-stock-amarillo`/`.fila-stock-naranja`/`.fila-stock-rojo` (colorean el
+`<tr>` completo), con un leve oscurecido en `:hover` para no perder la fila coloreada bajo el
+estilo de hover de `.celda-editable`. El filtro por color de stock (`filtroColorStock`,
+sección 25.6) no cambió — sigue usando `colorStock()`, ahora importado de `utils/stockColor.ts`.
+
+Verificado: `tsc -b`, `npm run lint` (mismo único warning preexistente, ahora en
+`BuscadorProductoCarrito.tsx`/`AuthContext.tsx` nada más — el de `StockBadge.tsx` desapareció con
+el archivo) y `npm run build` (build real de producción) limpios. Sin cambios de backend, no hizo
+falta re-correr `mvn test`. Sigue sin probarse en un navegador real.

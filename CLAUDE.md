@@ -17,10 +17,13 @@ completo en `plan-migracion.md` sección 25, contrato de API actualizado y "Esta
 `plan-frontend.md`):
 
 1. Código de colores de stock — rangos exactos: verde (5 o más), amarillo (3-4), naranja (1-2),
-   rojo (0). `components/StockBadge.tsx` (nuevo) centraliza la lógica y el componente visual;
-   aplicado en la tabla de Productos y en la tabla de ítems de Presupuestos — los únicos dos
-   lugares donde el stock se muestra como texto renderizable con HTML/CSS (Cobros, Trabajo a
-   domicilio y Compras buscan el producto con `<datalist>` nativo, que no se puede estilar).
+   rojo (0). `utils/stockColor.ts` centraliza la lógica; el color pinta la **fila entera** del
+   producto (`claseFilaStock`, clase `fila-stock-*` en el `<tr>`) — corregido en la misma sesión
+   tras un primer intento que coloreaba solo el número de stock, porque el dueño pidió que se note
+   de un vistazo recorriendo la tabla. Aplicado en la tabla de Productos y en la fila del carrito
+   de Presupuestos — los únicos dos lugares donde el stock se muestra en una fila renderizable con
+   HTML/CSS (Cobros, Trabajo a domicilio y Compras buscan el producto con `<datalist>` nativo, que
+   no se puede estilar).
 2. Fix real en Compras: el botón "Quitar" no limpiaba los campos cuando quedaba una sola fila (el
    guard `length > 1` la dejaba intacta sin hacer nada). Ahora esa última fila se reemplaza por una
    vacía.

@@ -12,7 +12,7 @@ import { getProveedores } from '../api/proveedores'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { EtiquetaImprimible } from '../components/EtiquetaImprimible'
-import { colorStock, ETIQUETA_COLOR_STOCK, StockBadge, type ColorStock } from '../components/StockBadge'
+import { claseFilaStock, colorStock, ETIQUETA_COLOR_STOCK, type ColorStock } from '../utils/stockColor'
 import type {
   MarcaResponse,
   Producto,
@@ -415,7 +415,11 @@ export function Productos() {
         </thead>
         <tbody>
           {productosFiltrados.map((producto) => (
-            <tr key={producto.idProducto}>
+            <tr
+              key={producto.idProducto}
+              className={claseFilaStock(producto.stockActual)}
+              title={ETIQUETA_COLOR_STOCK[colorStock(producto.stockActual)]}
+            >
               {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
               {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
               <td>{producto.rubro}</td>
@@ -438,7 +442,7 @@ export function Productos() {
               )}
               <td>{producto.precioVentaUsd != null ? `USD ${producto.precioVentaUsd.toFixed(2)}` : '—'}</td>
               <td>{producto.precioCompraUsd != null ? `USD ${producto.precioCompraUsd.toFixed(2)}` : '—'}</td>
-              {celdaEditable(producto, 'stockActual', <StockBadge stock={producto.stockActual} />, 'number', '1')}
+              {celdaEditable(producto, 'stockActual', producto.stockActual, 'number', '1')}
               <td>
                 <button type="button" onClick={() => setEtiquetaProducto(producto)}>
                   Imprimir etiqueta
