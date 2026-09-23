@@ -2072,3 +2072,71 @@ Verificado: `tsc -b`, `npm run lint` (mismo único warning preexistente, ahora e
 `BuscadorProductoCarrito.tsx`/`AuthContext.tsx` nada más — el de `StockBadge.tsx` desapareció con
 el archivo) y `npm run build` (build real de producción) limpios. Sin cambios de backend, no hizo
 falta re-correr `mvn test`. Sigue sin probarse en un navegador real.
+
+## 26. Sesión 2026-09-23: bug real al cargar una marca nueva ("error inesperado") — crash en la reutilización de código histórico + el rango de 2 dígitos estaba agotado
+
+El dueño reportó: al dar de alta un producto con una marca nueva, "Agregar producto" tiraba
+"Ocurrió un error inesperado" — y antes de eso, en otro intento, "No hay códigos de marca
+disponibles". Dos bugs reales distintos, los dos en `MarcaService`, diagnosticados consultando
+directo la base de Supabase (`jyumiicapspsxgucirjd`) además de leer el código.
+
+### 26.1 El crash: `crearDesdeUsoHistorico` podía violar el UNIQUE de `marcas.codigo`
+
+Desde el fix de la sección 15 (reciclar el `numeroMarca` histórico más usado por un nombre en
+productos migrados, en vez de inventar un código nuevo), `crearDesdeUsoHistorico` insertaba una
+fila nueva en `marcas` con ese código histórico **sin chequear si ese código ya estaba tomado en
+el catálogo por OTRA marca**. Los datos migrados tienen justamente ese ruido (documentado desde la
+sección 15: `"01"` es CAMBRE para la mayoría de los productos pero también ACYTRA/PRIVE/KALLAY
+para unos pocos cada uno) — así que para un nombre nuevo cuyo código histórico más usado ya
+pertenecía a otra marca en el catálogo, el `INSERT` violaba la restricción `UNIQUE` de
+`marcas.codigo`. Esa excepción de base no está mapeada en `GlobalExceptionHandler` (que sí mapea
+`IllegalStateException`/`IllegalArgumentException` a mensajes claros), así que caía en el
+manejador catch-all y el dueño veía "Ocurrió un error inesperado" en vez de un error accionable.
+
+**Fix**: `crearDesdeUsoHistorico` ahora chequea `marcaRepo.existsByCodigo(codigoHistorico)` antes
+de intentar guardar. Si el código ya está tomado, devuelve `Optional.empty()` — `resolverOCrear`
+cae naturalmente al `orElseGet` que asigna un código nuevo vía `siguienteCodigoLibre()`, igual que
+si el nombre nunca hubiera aparecido en productos. Test nuevo,
+`MarcaServiceTest.resolverOCrear_codigoHistoricoYaTomadoPorOtraMarca_caeAUnCodigoNuevo`, reproduce
+el caso exacto ("PROVENZA" con código histórico "01" ya tomado por CAMBRE).
+
+### 26.2 El hallazgo más grave: el rango de 2 dígitos estaba prácticamente agotado
+
+Consultando la base real con el MCP de Supabase se confirmó que el mensaje "No hay códigos de
+marca disponibles" (`IllegalStateException` de `siguienteCodigoLibre`, mapeado a 409 — un mensaje
+correcto, no un bug de mapeo) reflejaba un problema real de capacidad: de los 100 códigos posibles
+(`"00"` a `"99"`), **sólo `"00"` seguía completamente libre** — ni en `marcas.codigo` ni en
+`productos.numero_marca` (68 marcas en el catálogo, con códigos hasta `"99"`; el resto de los
+códigos de 2 dígitos ya estaban en uso por productos históricos). Es decir: aunque se arreglara el
+crash de 26.1, cualquier marca genuinamente nueva (sin historial en productos) iba a seguir
+fallando apenas se pisara ese último código libre.
+
+Consultado el dueño sobre cómo resolverlo (ampliar el rango vs. liberar sólo `"00"` como parche vs.
+decidir después) — eligió **ampliar a 3 dígitos**.
+
+**Fix**: `marcas.codigo` se amplió de `varchar(2)` a `varchar(3)` en Supabase (`ALTER TABLE marcas
+ALTER COLUMN codigo TYPE varchar(3)` — sólo ensancha la columna, no toca ninguna fila existente,
+los 68 códigos de 2 dígitos quedan intactos). `MarcaService.siguienteCodigoLibre()` ahora genera
+códigos de 3 dígitos, arrancando en `"100"` (por encima de cualquier código de 2 dígitos posible,
+así nunca puede colisionar con uno viejo) hasta `"999"` — 900 códigos nuevos disponibles. Los
+`numeroMarca` de 3 dígitos conviven sin problema con los de 2: `Producto.numeroMarca` es
+`varchar(10)` en la base y `codigoInterno` (`varchar(50)`) no depende de un ancho fijo para el
+segmento de marca en ningún lado del código (auditado, no hay ningún `substring`/parseo posicional
+sobre `codigoInterno`). Tests actualizados: `resolverOCrear_nombreNuncaUsado_generaCodigoNuevoDesde100`
+(antes esperaba `"41"`, ahora `"100"`) y tres tests de `ProductoControllerIntegrationTest`
+(`crear_comoAdmin_generaCodigoInternoConCorrelativo`,
+`crear_sinCodigoDeFabrica_usaElCodigoInternoComoCodigoBarras`,
+`buscarPorCodigo_comoVendedor_encuentraPorCodigoInterno`) que hardcodeaban
+`codigoInterno`/`codigoBarras` esperando el viejo código "41" para una marca sin historial en la
+base H2 de test (`"0105410001"` → `"01051000001"`, 11 dígitos en vez de 10).
+
+### 26.3 Verificación
+
+Backend: **200 tests** verdes (`mvn -q -o test`, incluye el test nuevo de 26.1 — el otro cambio en
+`MarcaServiceTest` fue actualizar el valor esperado de un test existente, no sumar uno). Frontend:
+sin cambios — la marca se tipea como nombre libre en el alta de producto, el
+código lo asigna siempre el backend; no hay ningún `maxLength` ni formato fijo sobre el código de
+marca en el frontend (los `maxLength={2}` de `Productos.tsx`/`ComprasNueva.tsx` son de rubro y
+familia, no de marca). No probado en un navegador real — verificado con tests automáticos +
+consultas SQL directas contra la base real de Supabase para confirmar el estado de los códigos
+antes y después del cambio de esquema.

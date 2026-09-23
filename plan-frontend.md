@@ -202,11 +202,14 @@ esos quedan fuera del cálculo de ganancia (siguen existiendo como arqueo puro e
 |---|---|---|
 | GET | `/api/marcas` | `MarcaResponse[]` — `{idMarca, nombre, codigo}` |
 
-Catálogo nombre↔código de 2 dígitos. No hay `POST` público: se crea de forma transparente al dar de
-alta un producto o una compra con un nombre de marca que todavía no existe (`MarcaService.resolverOCrear`).
-El frontend arma un mapa `codigo → nombre` con esta lista para mostrar/buscar por nombre en
-`Producto.marca` (que sigue siendo el código de 2 dígitos en la respuesta de `/api/productos`, sin
-cambios en ese contrato).
+Catálogo nombre↔código interno. No hay `POST` público: se crea de forma transparente al dar de
+alta un producto o una compra con un nombre de marca que todavía no existe
+(`MarcaService.resolverOCrear`). El código es de 2 dígitos para las marcas migradas/creadas antes
+del 2026-09-23 y de 3 dígitos (desde `"100"`) para las nuevas — ver `plan-migracion.md` sección 26,
+el rango de 2 dígitos se agotó. **Nota**: `Producto.marca` en la respuesta de `/api/productos` es
+el NOMBRE de la marca (no el código) desde la sesión 2026-08-05 — el código vive aparte en
+`Producto.numeroMarca`, usado solo para armar `codigoInterno`. El frontend no necesita ningún mapa
+código→nombre: escribe y muestra el nombre directamente.
 
 ### Proveedores (`/api/proveedores`) — ADMIN
 

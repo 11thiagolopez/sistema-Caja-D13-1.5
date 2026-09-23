@@ -64,17 +64,46 @@ class MarcaServiceTest {
         assertThat(resultado.getNombre()).isEqualTo("KALLAY");
     }
 
+    /**
+     * Reproduce el bug real reportado el 2026-09-23: al cargar una marca nueva ("PROVENZA"), el
+     * código histórico más usado por ese nombre en productos migrados ("01") ya estaba asignado
+     * en el catálogo a OTRA marca (CAMBRE) — insertar una segunda fila con codigo="01" viola el
+     * UNIQUE de marcas.codigo, y esa excepción de base no mapeada se colaba como un 500 genérico
+     * ("Ocurrió un error inesperado") en vez de dar de alta el producto. El fix: si el código
+     * histórico ya está tomado en el catálogo, se cae a un código nuevo en vez de reintentarlo.
+     */
     @Test
-    void resolverOCrear_nombreNuncaUsado_generaCodigoNuevoDesde41() {
+    void resolverOCrear_codigoHistoricoYaTomadoPorOtraMarca_caeAUnCodigoNuevo() {
+        when(marcaRepo.findByNombreIgnoreCase("PROVENZA")).thenReturn(Optional.empty());
+        when(productoRepo.buscarUsoHistoricoDeMarca("PROVENZA")).thenReturn(
+            List.<Object[]>of(new Object[] { "01", "PROVENZA", 2L }));
+        when(marcaRepo.existsByCodigo("01")).thenReturn(true);
+        when(marcaRepo.existsByCodigo("100")).thenReturn(false);
+        when(productoRepo.existsByNumeroMarca("100")).thenReturn(false);
+        when(marcaRepo.save(any(Marca.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Marca resultado = marcaService.resolverOCrear("PROVENZA");
+
+        assertThat(resultado.getCodigo()).isEqualTo("100");
+        assertThat(resultado.getNombre()).isEqualTo("PROVENZA");
+    }
+
+    /**
+     * El rango de 2 dígitos ("00" a "99") se agotó en la base real (confirmado por consulta
+     * directa a Supabase el 2026-09-23) — el generador de códigos nuevos ahora arranca en "100"
+     * (3 dígitos, ver siguienteCodigoLibre).
+     */
+    @Test
+    void resolverOCrear_nombreNuncaUsado_generaCodigoNuevoDesde100() {
         when(marcaRepo.findByNombreIgnoreCase("MARCA NUEVA")).thenReturn(Optional.empty());
         when(productoRepo.buscarUsoHistoricoDeMarca("MARCA NUEVA")).thenReturn(List.of());
-        when(marcaRepo.existsByCodigo("41")).thenReturn(false);
-        when(productoRepo.existsByNumeroMarca("41")).thenReturn(false);
+        when(marcaRepo.existsByCodigo("100")).thenReturn(false);
+        when(productoRepo.existsByNumeroMarca("100")).thenReturn(false);
         when(marcaRepo.save(any(Marca.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Marca resultado = marcaService.resolverOCrear("MARCA NUEVA");
 
-        assertThat(resultado.getCodigo()).isEqualTo("41");
+        assertThat(resultado.getCodigo()).isEqualTo("100");
         assertThat(resultado.getNombre()).isEqualTo("MARCA NUEVA");
     }
 }

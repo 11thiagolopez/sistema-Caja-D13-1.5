@@ -9,7 +9,35 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % de
+Estado Actual (Actualizado al 2026-09-23, bug real al cargar marca nueva: crash + rango de
+códigos de 2 dígitos agotado, ampliado a 3):
+
+**Reporte del dueño**: al dar de alta un producto con una marca nueva, "Agregar producto" tiraba
+"Ocurrió un error inesperado" (y antes, en otro intento, "No hay códigos de marca disponibles").
+Dos bugs reales en `MarcaService`, diagnosticados leyendo el código y consultando directo la base
+de Supabase (detalle técnico completo en `plan-migracion.md` sección 26):
+
+1. **El crash**: `crearDesdeUsoHistorico` reciclaba el `numeroMarca` histórico más usado por un
+   nombre en productos migrados sin chequear si ese código ya estaba tomado en el catálogo por
+   OTRA marca (ruido real de los datos migrados: `"01"` es CAMBRE para la mayoría pero también
+   ACYTRA/PRIVE/KALLAY para unos pocos). El `INSERT` violaba el `UNIQUE` de `marcas.codigo`, una
+   excepción no mapeada en `GlobalExceptionHandler` que caía en el catch-all genérico. Fix: si el
+   código histórico ya está tomado, se cae a `siguienteCodigoLibre()` en vez de romper.
+2. **El hallazgo más grave**: consultando la base real se confirmó que el rango de 2 dígitos
+   (`"00"`-`"99"`, 100 códigos posibles) estaba prácticamente agotado — sólo `"00"` seguía
+   completamente libre. Cualquier marca genuinamente nueva iba a seguir fallando aunque se
+   arreglara el crash. Consultado el dueño, eligió **ampliar a 3 dígitos**: `marcas.codigo` pasó
+   de `varchar(2)` a `varchar(3)` en Supabase (sin tocar filas existentes) y
+   `siguienteCodigoLibre()` ahora genera códigos desde `"100"` hasta `"999"` (900 nuevos
+   disponibles), sin colisión posible con los códigos de 2 dígitos viejos.
+
+Backend: **200 tests** verdes (test nuevo en `MarcaServiceTest` + 3 tests de
+`ProductoControllerIntegrationTest` actualizados, que hardcodeaban el viejo código "41" en el
+`codigoInterno`/`codigoBarras` esperado). Sin cambios de frontend — la marca se tipea como nombre
+libre, el código lo asigna siempre el backend. No probado en un navegador real — verificado con
+tests automáticos + consultas SQL directas contra Supabase antes y después del cambio de esquema.
+
+Estado Anterior (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % de
 ganancia en el alta de Productos + proveedor visible en Productos e Historial de ventas):
 
 **Pedido único del dueño con seis partes, todas resueltas en la misma sesión** (detalle técnico

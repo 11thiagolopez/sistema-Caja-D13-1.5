@@ -41,7 +41,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(PRODUCTO_BODY))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoInterno").value("0105410001"))
+            .andExpect(jsonPath("$.codigoInterno").value("01051000001"))
             .andExpect(jsonPath("$.activo").value(true));
 
         // Segundo producto con un código de fábrica distinto: el mismo código dos veces chocaría
@@ -56,7 +56,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(segundoBody))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoInterno").value("0105410002"));
+            .andExpect(jsonPath("$.codigoInterno").value("01051000002"));
     }
 
     @Test
@@ -83,8 +83,8 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(bodySinCodigoFabrica))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.codigoBarras").value("0105410001"))
-            .andExpect(jsonPath("$.codigoInterno").value("0105410001"));
+            .andExpect(jsonPath("$.codigoBarras").value("01051000001"))
+            .andExpect(jsonPath("$.codigoInterno").value("01051000001"));
     }
 
     @Test
@@ -249,7 +249,7 @@ class ProductoControllerIntegrationTest extends AbstractIntegrationTest {
         String tokenVendedor = tokenVendedor();
 
         mockMvc.perform(get("/api/productos/buscar-por-codigo")
-                .param("codigo", "0105410001")
+                .param("codigo", "01051000001")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.descripcion").value("Destornillador Stanley"));
