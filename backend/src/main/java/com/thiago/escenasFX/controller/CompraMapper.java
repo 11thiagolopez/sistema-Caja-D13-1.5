@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.thiago.escenasFX.dto.CompraItemResponse;
@@ -21,6 +22,7 @@ final class CompraMapper {
             .map(CompraMapper::toResponse)
             .toList();
 
+        BigDecimal montoPagado = compra.getMontoPagado() != null ? compra.getMontoPagado() : BigDecimal.ZERO;
         return new CompraResponse(
             compra.getIdCompra(),
             compra.getFecha(),
@@ -28,6 +30,8 @@ final class CompraMapper {
             compra.getProveedor() != null ? compra.getProveedor().getNombre() : null,
             compra.getMedioPago(),
             compra.getTotalCompra(),
+            montoPagado,
+            compra.getTotalCompra().subtract(montoPagado),
             items);
     }
 

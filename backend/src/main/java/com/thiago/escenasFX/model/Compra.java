@@ -44,6 +44,13 @@ public class Compra {
     @Column(name = "total_compra", precision = 12, scale = 2)
     private BigDecimal totalCompra = BigDecimal.ZERO;
 
+    // Cuánto de totalCompra ya se le pagó al proveedor — por defecto, al registrar la compra, se
+    // paga todo de una (mismo comportamiento de siempre); CompraService.registrarPago lo va
+    // incrementando con pagos posteriores. saldoPendiente = totalCompra - montoPagado (calculado,
+    // no se guarda aparte).
+    @Column(name = "monto_pagado", precision = 12, scale = 2)
+    private BigDecimal montoPagado = BigDecimal.ZERO;
+
     @ManyToOne
     @JoinColumn(name = "id_empleado_registro")
     private Empleado empleadoRegistro;

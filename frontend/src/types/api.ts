@@ -2,7 +2,9 @@
 // pantallas propias) — es una categoría de empleado, no un rol con acceso al sistema.
 export type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO'
 
-export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA'
+// SALDO_CUENTA_CORRIENTE: nunca se elige a mano en el <select> de medio de pago — el backend lo
+// fuerza solo cuando montoSaldoAplicado cubre el total completo de la venta (ver VentaRequest).
+export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'SALDO_CUENTA_CORRIENTE'
 
 export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO'
 
@@ -102,6 +104,102 @@ export interface ProveedorResponse {
   activo: boolean
 }
 
+// 80 CUIT | 96 DNI | 99 sin documento — misma convención que ClienteDocTipo de Factura.
+export interface ClienteRequest {
+  nombre: string
+  docTipo: ClienteDocTipo
+  docNro?: string
+  telefono?: string
+  email?: string
+  direccion?: string
+}
+
+export interface ClienteResponse {
+  idCliente: number
+  nombre: string
+  docTipo: ClienteDocTipo
+  docNro: string | null
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+  activo: boolean
+}
+
+export type TipoMovimientoCuentaCorriente = 'CREDITO' | 'DEBITO'
+
+export interface MovimientoCuentaCorrienteClienteResponse {
+  idMovimiento: number
+  fecha: string
+  tipo: TipoMovimientoCuentaCorriente
+  monto: number
+  descripcion: string | null
+  idNotaCredito: number | null
+  idVentaAplicacion: number | null
+}
+
+export interface CuentaCorrienteClienteResponse {
+  idCliente: number
+  nombreCliente: string
+  saldoActual: number
+  movimientos: MovimientoCuentaCorrienteClienteResponse[]
+}
+
+// DEVOLUCION_MERCADERIA y ANULACION_TOTAL devuelven stock; ERROR_TIPEO y DESCUENTO_POSTERIOR no.
+export type MotivoNotaCredito =
+  | 'DEVOLUCION_MERCADERIA'
+  | 'ERROR_TIPEO'
+  | 'DESCUENTO_POSTERIOR'
+  | 'ANULACION_TOTAL'
+
+export type AlcanceNotaCredito = 'TOTAL' | 'PARCIAL'
+
+export interface DetalleNotaCreditoRequest {
+  idDetalleVentaOriginal: number
+  cantidad: number
+}
+
+// "detalles" solo es obligatorio/se envía cuando alcance=PARCIAL — con TOTAL el backend expande
+// solas todas las líneas de la venta por su cantidad remanente.
+export interface NotaCreditoRequest {
+  idVentaOriginal: number
+  idEmpleado: number
+  idCliente?: number
+  motivo: MotivoNotaCredito
+  alcance: AlcanceNotaCredito
+  detalles?: DetalleNotaCreditoRequest[]
+}
+
+export interface DetalleNotaCreditoResponse {
+  idDetalle: number
+  idProducto: number | null
+  descripcionProducto: string | null
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+}
+
+// estado: EMITIDA (interna, o ya con CAE) | PENDIENTE_FISCAL (esFiscal=true, falta emitir ante
+// ARCA) | ERROR (ARCA rechazó o falló la conexión — reintentable con POST .../emitir-fiscal).
+export interface NotaCreditoResponse {
+  idNotaCredito: number
+  idVentaOriginal: number
+  idCliente: number
+  nombreCliente: string
+  fecha: string
+  motivo: MotivoNotaCredito
+  alcance: AlcanceNotaCredito
+  montoTotal: number
+  esFiscal: boolean
+  estado: 'EMITIDA' | 'PENDIENTE_FISCAL' | 'ERROR'
+  puntoVenta: number | null
+  tipoComprobante: number | null
+  numero: number | null
+  cae: string | null
+  caeVencimiento: string | null
+  errorDetalle: string | null
+  detalles: DetalleNotaCreditoResponse[]
+}
+
 export interface CargarStockRequest {
   codigo: string
   cantidad: number
@@ -133,9 +231,14 @@ export interface VentaRequest {
   detalles: DetalleVentaRequest[]
   descuento?: number
   motivoDescuento?: string
+  // Cuenta corriente: idCliente obligatorio si montoSaldoAplicado > 0. Si el saldo cubre el
+  // total completo, el backend ignora "medioPago" y fuerza "SALDO_CUENTA_CORRIENTE".
+  idCliente?: number
+  montoSaldoAplicado?: number
 }
 
 export interface DetalleVentaResponse {
+  idDetalle: number
   idProducto: number | null
   descripcionProducto: string
   tipo: TipoLinea
@@ -167,6 +270,11 @@ export interface VentaResponse {
   estadoTrabajo: EstadoTrabajo | null
   idEmpleadoTecnico: number | null
   nombreTecnico: string | null
+  // Cliente del catálogo nuevo (cuenta corriente) — distinto de clienteNombre/clienteTelefono
+  // arriba, que son texto libre de Trabajo a domicilio.
+  idCliente: number | null
+  nombreCliente: string | null
+  montoSaldoAplicado: number | null
   detalles: DetalleVentaResponse[]
 }
 
@@ -290,6 +398,9 @@ export interface ResumenDiaResponse {
   efectivoFinal: number
   totalDigital: number
   cajaTotalDelDia: number
+  // Informativo, no suma a cajaTotalDelDia: ventas pagadas (total o parcialmente) con saldo de
+  // cuenta corriente en vez de dinero real.
+  ventasPagadasConSaldo: number
 }
 
 export interface ResumenSesionResponse {
@@ -364,6 +475,9 @@ export interface CompraRequest {
   proveedorNombre: string
   medioPago: MedioPago
   items: CompraItemRequest[]
+  // Cuenta corriente de proveedor, nuevo: ausente = se paga todo de una (comportamiento de
+  // siempre); un valor menor al total deja el resto como deuda pendiente.
+  montoPagado?: number
 }
 
 export interface CompraItemResponse {
@@ -384,7 +498,71 @@ export interface CompraResponse {
   nombreProveedor: string | null
   medioPago: MedioPago
   totalCompra: number
+  montoPagado: number
+  saldoPendiente: number
   items: CompraItemResponse[]
+}
+
+export interface RegistrarPagoProveedorRequest {
+  idEmpleado: number
+  monto: number
+  medioPago: MedioPago
+}
+
+export interface DetalleDevolucionProveedorRequest {
+  idProducto: number
+  cantidad: number
+  precioUnitario: number
+}
+
+export interface DevolucionProveedorRequest {
+  idProveedor: number
+  idEmpleado: number
+  idCompraOriginal?: number
+  motivo?: string
+  detalles: DetalleDevolucionProveedorRequest[]
+}
+
+export interface DetalleDevolucionProveedorResponse {
+  idDetalle: number
+  idProducto: number
+  descripcionProducto: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+}
+
+export interface DevolucionProveedorResponse {
+  idDevolucion: number
+  idProveedor: number
+  nombreProveedor: string
+  idCompraOriginal: number | null
+  fecha: string
+  motivo: string | null
+  montoTotal: number
+  detalles: DetalleDevolucionProveedorResponse[]
+}
+
+// DEBE_COMPRA (suma deuda) | HABER_PAGO | HABER_DEVOLUCION (ambos restan).
+export type TipoMovimientoCuentaCorrienteProveedor = 'DEBE_COMPRA' | 'HABER_PAGO' | 'HABER_DEVOLUCION'
+
+export interface MovimientoCuentaCorrienteProveedorResponse {
+  idMovimiento: number
+  fecha: string
+  tipo: TipoMovimientoCuentaCorrienteProveedor
+  monto: number
+  medioPago: string | null
+  descripcion: string | null
+  idCompra: number | null
+  idDevolucion: number | null
+}
+
+export interface CuentaCorrienteProveedorResponse {
+  idProveedor: number
+  nombreProveedor: string
+  // Cuánto le debemos al proveedor hoy. Negativo = el proveedor nos debe a nosotros.
+  saldoPendiente: number
+  movimientos: MovimientoCuentaCorrienteProveedorResponse[]
 }
 
 export interface PagoProveedorDTO {

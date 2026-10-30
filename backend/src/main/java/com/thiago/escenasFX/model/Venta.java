@@ -103,6 +103,19 @@ public class Venta {
     @JoinColumn(name = "id_empleado_tecnico")
     private Empleado empleadoTecnico;
 
+    // Nullable: ninguna venta existente lo tiene todavía. Lo usa Nota de Crédito para "heredar"
+    // el cliente de la venta cuando esté disponible, y Cobros lo pide cuando se paga (total o
+    // parcialmente) con el saldo de cuenta corriente del cliente (ver montoSaldoAplicado).
+    @ManyToOne
+    @JoinColumn(name = "id_cliente")
+    private Cliente cliente;
+
+    // Cuánto de esta venta se pagó con el saldo a favor del cliente (null/no aplica si no se usó
+    // saldo). VentaService.registrarVenta lo valida contra el saldo disponible y crea el
+    // MovimientoCuentaCorrienteCliente DEBITO correspondiente.
+    @Column(name = "monto_saldo_aplicado", precision = 12, scale = 2)
+    private BigDecimal montoSaldoAplicado;
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleVenta> detalles = new ArrayList<>();
 }

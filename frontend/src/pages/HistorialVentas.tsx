@@ -227,6 +227,7 @@ export function HistorialVentas() {
             <th>Comprobante</th>
             <th>Enviar por mail</th>
             <th>Factura fiscal</th>
+            <th>Nota de crédito</th>
             <th>Productos</th>
           </tr>
         </thead>
@@ -340,6 +341,11 @@ export function HistorialVentas() {
                   )}
                 </td>
                 <td>
+                  {venta.estado === 'CONFIRMADA' && (
+                    <Link to={`/notas-credito/nueva?idVenta=${venta.idVenta}`}>Nota de crédito</Link>
+                  )}
+                </td>
+                <td>
                   <button
                     type="button"
                     onClick={() => setExpandidoId((actual) => (actual === venta.idVenta ? null : venta.idVenta))}
@@ -350,7 +356,7 @@ export function HistorialVentas() {
               </tr>
               {expandidoId === venta.idVenta && (
                 <tr>
-                  <td colSpan={13}>
+                  <td colSpan={14}>
                     {/* Proveedor por producto vendido: si una venta falla o hay un reclamo, permite
                         identificar rápido a qué proveedor corresponde cada producto sin tener que
                         ir a buscarlo a Productos (ver DetalleVentaResponse.proveedorProducto). */}

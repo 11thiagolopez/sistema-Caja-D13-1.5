@@ -11,11 +11,15 @@ import org.springframework.transaction.annotation.Transactional;
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
+import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteCliente;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
+import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteClienteRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -24,6 +28,7 @@ import com.thiago.escenasFX.repository.VentaRepository;
 public class VentaService {
 
     private static final String NOMBRE_LOCAL = "D13 Distribuidora";
+    private static final String MEDIO_PAGO_SALDO = "SALDO_CUENTA_CORRIENTE";
 
     private final VentaRepository ventaRepo;
     private final ProductoRepository productoRepo;
@@ -33,10 +38,13 @@ public class VentaService {
     private final SesionCajaRepository sesionRepo;
     private final PdfService pdfService;
     private final NotificacionService notificacionService;
+    private final ClienteRepository clienteRepo;
+    private final MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
             EmpleadoRepository empleadoRepo, OtpService otpService, EmailService emailService,
-            SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService) {
+            SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService,
+            ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo) {
         this.ventaRepo = ventaRepo;
         this.productoRepo = productoRepo;
         this.empleadoRepo = empleadoRepo;
@@ -45,6 +53,8 @@ public class VentaService {
         this.sesionRepo = sesionRepo;
         this.pdfService = pdfService;
         this.notificacionService = notificacionService;
+        this.clienteRepo = clienteRepo;
+        this.movimientoCuentaCorrienteRepo = movimientoCuentaCorrienteRepo;
     }
 
     /**
@@ -103,6 +113,8 @@ public class VentaService {
         venta.setDescuento(descuento);
         venta.setTotalVenta(totalBruto.subtract(descuento));
 
+        BigDecimal montoSaldoAplicado = validarYAplicarSaldoCliente(venta);
+
         if (descuento.compareTo(BigDecimal.ZERO) > 0) {
             String codigo = otpService.generarCodigo();
             venta.setEstado("PENDIENTE_AUTORIZACION");
@@ -110,6 +122,7 @@ public class VentaService {
             venta.setOtpExpiraEn(otpService.nuevaExpiracion());
 
             Venta guardada = ventaRepo.save(venta);
+            registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
 
             emailService.enviarOtpAAdmins(
                 "Autorización de descuento - venta #" + guardada.getIdVenta(),
@@ -122,7 +135,74 @@ public class VentaService {
         }
 
         venta.setEstado("CONFIRMADA");
-        return ventaRepo.save(venta);
+        Venta guardada = ventaRepo.save(venta);
+        registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
+        return guardada;
+    }
+
+    /**
+     * Cuenta corriente (saldo a favor acreditado por una Nota de Crédito): valida que haya un
+     * cliente, que el monto pedido no supere el total de la venta ni el saldo disponible
+     * (lockeando la fila del cliente para que dos ventas simultáneas no puedan gastar el mismo
+     * saldo dos veces — mismo motivo que ProductoRepository.buscarPorIdConLock para stock), y si
+     * cubre el total completo fuerza medioPago="SALDO_CUENTA_CORRIENTE" sin confiar en lo que
+     * mandó el frontend. Devuelve el monto validado (o ZERO si no se pidió saldo) para que el
+     * caller lo use después de guardar la venta — el movimiento de cuenta corriente necesita el
+     * id de la venta ya persistida.
+     */
+    private BigDecimal validarYAplicarSaldoCliente(Venta venta) {
+        BigDecimal montoSaldoAplicado = venta.getMontoSaldoAplicado();
+        if (montoSaldoAplicado == null || montoSaldoAplicado.compareTo(BigDecimal.ZERO) <= 0) {
+            venta.setMontoSaldoAplicado(null);
+            return BigDecimal.ZERO;
+        }
+        if (venta.getCliente() == null) {
+            throw new IllegalArgumentException("Para pagar con el saldo de cuenta corriente hay que indicar un cliente");
+        }
+        if (montoSaldoAplicado.compareTo(venta.getTotalVenta()) > 0) {
+            throw new IllegalArgumentException("El saldo aplicado no puede ser mayor al total de la venta");
+        }
+
+        Cliente cliente = clienteRepo.buscarPorIdConLock(venta.getCliente().getIdCliente())
+            .orElseThrow(() -> new IllegalArgumentException("Cliente no existe: " + venta.getCliente().getIdCliente()));
+        BigDecimal saldoDisponible = calcularSaldoCliente(cliente.getIdCliente());
+        if (montoSaldoAplicado.compareTo(saldoDisponible) > 0) {
+            throw new IllegalStateException("El cliente no tiene saldo suficiente (disponible: $"
+                + saldoDisponible + ", solicitado: $" + montoSaldoAplicado + ")");
+        }
+
+        venta.setCliente(cliente);
+        venta.setMontoSaldoAplicado(montoSaldoAplicado);
+        if (montoSaldoAplicado.compareTo(venta.getTotalVenta()) == 0) {
+            venta.setMedioPago(MEDIO_PAGO_SALDO);
+        }
+        return montoSaldoAplicado;
+    }
+
+    // Misma fórmula que ClienteService.calcularSaldo (CREDITO menos DEBITO del historial) —
+    // duplicada a propósito para no crear una dependencia de VentaService hacia ClienteService
+    // por una suma de 5 líneas; el lock pessimista de arriba es lo que evita la condición de
+    // carrera, no esta consulta en sí.
+    private BigDecimal calcularSaldoCliente(Integer idCliente) {
+        BigDecimal saldo = BigDecimal.ZERO;
+        for (MovimientoCuentaCorrienteCliente m : movimientoCuentaCorrienteRepo.findByClienteIdClienteOrderByFechaDesc(idCliente)) {
+            saldo = "CREDITO".equals(m.getTipo()) ? saldo.add(m.getMonto()) : saldo.subtract(m.getMonto());
+        }
+        return saldo;
+    }
+
+    private void registrarDebitoCuentaCorrienteSiCorresponde(Venta guardada, BigDecimal montoSaldoAplicado) {
+        if (montoSaldoAplicado.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        MovimientoCuentaCorrienteCliente movimiento = new MovimientoCuentaCorrienteCliente();
+        movimiento.setCliente(guardada.getCliente());
+        movimiento.setTipo("DEBITO");
+        movimiento.setMonto(montoSaldoAplicado);
+        movimiento.setVentaAplicacion(guardada);
+        movimiento.setDescripcion("Pago con saldo de cuenta corriente — venta #" + guardada.getIdVenta());
+        movimiento.setEmpleado(guardada.getEmpleado());
+        movimientoCuentaCorrienteRepo.save(movimiento);
     }
 
     @Transactional

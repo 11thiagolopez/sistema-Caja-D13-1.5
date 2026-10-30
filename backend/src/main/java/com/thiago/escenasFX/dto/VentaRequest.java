@@ -31,4 +31,11 @@ public class VentaRequest {
     private BigDecimal descuento;
 
     private String motivoDescuento;
+
+    // Cuenta corriente (saldo a favor del cliente, acreditado por una Nota de Crédito):
+    // idCliente obligatorio si montoSaldoAplicado > 0 — VentaService valida que el cliente tenga
+    // saldo suficiente y, si cubre el total completo, fuerza medioPago="SALDO_CUENTA_CORRIENTE"
+    // sin confiar en lo que mande el frontend.
+    private Integer idCliente;
+    private BigDecimal montoSaldoAplicado;
 }

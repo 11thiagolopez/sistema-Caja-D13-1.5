@@ -19,6 +19,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,12 +27,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
+import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteCliente;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.Venta;
+import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteClienteRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -55,6 +60,10 @@ class VentaServiceTest {
     private PdfService pdfService;
     @Mock
     private NotificacionService notificacionService;
+    @Mock
+    private ClienteRepository clienteRepo;
+    @Mock
+    private MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
 
     @InjectMocks
     private VentaService ventaService;
@@ -65,6 +74,20 @@ class VentaServiceTest {
         lenient().when(sesionRepo.findByEstado(anyString()))
             .thenReturn(Optional.empty());
         lenient().when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private Cliente cliente(int id) {
+        Cliente c = new Cliente();
+        c.setIdCliente(id);
+        c.setNombre("Cliente de prueba");
+        return c;
+    }
+
+    private MovimientoCuentaCorrienteCliente movimiento(String tipo, String monto) {
+        MovimientoCuentaCorrienteCliente m = new MovimientoCuentaCorrienteCliente();
+        m.setTipo(tipo);
+        m.setMonto(new BigDecimal(monto));
+        return m;
     }
 
     private Producto producto(int idProducto, int stockActual) {
@@ -270,6 +293,117 @@ class VentaServiceTest {
         Venta guardada = ventaService.registrarVenta(venta);
 
         assertThat(guardada.getSesion()).isEqualTo(sesionAbierta);
+    }
+
+    @Test
+    void registrarVenta_saldoCubreElTotal_fuerzaMedioPagoSaldoYDebita() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+        Cliente cliente = cliente(5);
+        when(clienteRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(cliente));
+        when(movimientoCuentaCorrienteRepo.findByClienteIdClienteOrderByFechaDesc(5))
+            .thenReturn(List.of(movimiento("CREDITO", "1000")));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+        venta.setMedioPago("EFECTIVO"); // el backend lo tiene que ignorar y forzar el de saldo.
+        venta.setCliente(cliente);
+        venta.setMontoSaldoAplicado(new BigDecimal("100"));
+
+        Venta guardada = ventaService.registrarVenta(venta);
+
+        assertThat(guardada.getMedioPago()).isEqualTo("SALDO_CUENTA_CORRIENTE");
+        assertThat(guardada.getMontoSaldoAplicado()).isEqualByComparingTo("100");
+
+        ArgumentCaptor<MovimientoCuentaCorrienteCliente> captor =
+            ArgumentCaptor.forClass(MovimientoCuentaCorrienteCliente.class);
+        verify(movimientoCuentaCorrienteRepo).save(captor.capture());
+        assertThat(captor.getValue().getTipo()).isEqualTo("DEBITO");
+        assertThat(captor.getValue().getMonto()).isEqualByComparingTo("100");
+        assertThat(captor.getValue().getVentaAplicacion()).isEqualTo(guardada);
+    }
+
+    @Test
+    void registrarVenta_saldoParcial_mantieneElMedioPagoDelResto() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+        Cliente cliente = cliente(5);
+        when(clienteRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(cliente));
+        when(movimientoCuentaCorrienteRepo.findByClienteIdClienteOrderByFechaDesc(5))
+            .thenReturn(List.of(movimiento("CREDITO", "1000")));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+        venta.setMedioPago("EFECTIVO");
+        venta.setCliente(cliente);
+        venta.setMontoSaldoAplicado(new BigDecimal("30"));
+
+        Venta guardada = ventaService.registrarVenta(venta);
+
+        assertThat(guardada.getMedioPago()).isEqualTo("EFECTIVO"); // no cubre el total, no se fuerza.
+        assertThat(guardada.getMontoSaldoAplicado()).isEqualByComparingTo("30");
+        verify(movimientoCuentaCorrienteRepo).save(any(MovimientoCuentaCorrienteCliente.class));
+    }
+
+    @Test
+    void registrarVenta_saldoSinCliente_lanzaExcepcion() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+        venta.setMontoSaldoAplicado(new BigDecimal("50"));
+
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("indicar un cliente");
+
+        verify(movimientoCuentaCorrienteRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarVenta_saldoMayorAlTotal_lanzaExcepcion() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+        venta.setCliente(cliente(5));
+        venta.setMontoSaldoAplicado(new BigDecimal("150"));
+
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("no puede ser mayor al total");
+    }
+
+    @Test
+    void registrarVenta_saldoInsuficiente_lanzaExcepcion() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+        Cliente cliente = cliente(5);
+        when(clienteRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(cliente));
+        when(movimientoCuentaCorrienteRepo.findByClienteIdClienteOrderByFechaDesc(5))
+            .thenReturn(List.of(movimiento("CREDITO", "20")));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+        venta.setCliente(cliente);
+        venta.setMontoSaldoAplicado(new BigDecimal("50"));
+
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("no tiene saldo suficiente");
+
+        verify(movimientoCuentaCorrienteRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarVenta_sinMontoSaldoAplicado_noTocaClienteNiMovimiento() {
+        Producto producto = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+
+        Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
+
+        Venta guardada = ventaService.registrarVenta(venta);
+
+        assertThat(guardada.getMontoSaldoAplicado()).isNull();
+        verify(clienteRepo, never()).buscarPorIdConLock(any());
+        verify(movimientoCuentaCorrienteRepo, never()).save(any());
     }
 
     @Test

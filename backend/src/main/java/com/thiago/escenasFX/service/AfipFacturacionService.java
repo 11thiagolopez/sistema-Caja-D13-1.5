@@ -45,10 +45,26 @@ public class AfipFacturacionService {
         this.cuit = cuit;
     }
 
-    /** Concepto AFIP: 1 = Productos, 2 = Servicios, 3 = Productos y Servicios. */
+    /**
+     * Concepto AFIP: 1 = Productos, 2 = Servicios, 3 = Productos y Servicios.
+     *
+     * cbteAsocTipo/PtoVta/Nro (los 3 últimos, todos nullable): comprobante asociado — usado por
+     * una Nota de Crédito para referenciar la factura original (WSFEv1 exige esto para poder
+     * "para 12 o 13 pueden asociarse 11, 12, 13 y 15", confirmado contra el manual oficial de
+     * WSFEv1). null en los 3 para una Factura, que no referencia nada.
+     */
     public record DatosFactura(int puntoVenta, int cbteTipo, int concepto, int docTipo, String docNro,
             BigDecimal importe, LocalDate fecha, LocalDate fchServDesde, LocalDate fchServHasta,
-            LocalDate fchVtoPago) {
+            LocalDate fchVtoPago, Integer cbteAsocTipo, Integer cbteAsocPtoVta, Integer cbteAsocNro) {
+
+        // Constructor de compatibilidad: Factura (sin comprobante asociado) sigue llamando con
+        // los mismos 10 argumentos de siempre — FacturaFiscalService no necesita cambiar.
+        public DatosFactura(int puntoVenta, int cbteTipo, int concepto, int docTipo, String docNro,
+                BigDecimal importe, LocalDate fecha, LocalDate fchServDesde, LocalDate fchServHasta,
+                LocalDate fchVtoPago) {
+            this(puntoVenta, cbteTipo, concepto, docTipo, docNro, importe, fecha, fchServDesde, fchServHasta,
+                fchVtoPago, null, null, null);
+        }
     }
 
     public record ResultadoCae(boolean aprobado, Integer numero, String cae, LocalDate caeVencimiento,
@@ -111,6 +127,17 @@ public class AfipFacturacionService {
             detalle.append("<ar:FchServDesde>").append(datos.fchServDesde().format(FECHA_AFIP)).append("</ar:FchServDesde>")
                 .append("<ar:FchServHasta>").append(datos.fchServHasta().format(FECHA_AFIP)).append("</ar:FchServHasta>")
                 .append("<ar:FchVtoPago>").append(datos.fchVtoPago().format(FECHA_AFIP)).append("</ar:FchVtoPago>");
+        }
+        // CbtesAsoc (comprobante asociado): solo lo manda una Nota de Crédito, para referenciar
+        // la factura original. Posición verificada contra el manual oficial de WSFEv1 (después de
+        // MonCotiz/FchServDesde-Hasta-VtoPago, antes de Tributos/Iva/Opcionales, que este sistema
+        // no usa).
+        if (datos.cbteAsocTipo() != null) {
+            detalle.append("<ar:CbtesAsoc><ar:CbteAsoc>")
+                .append("<ar:Tipo>").append(datos.cbteAsocTipo()).append("</ar:Tipo>")
+                .append("<ar:PtoVta>").append(datos.cbteAsocPtoVta()).append("</ar:PtoVta>")
+                .append("<ar:Nro>").append(datos.cbteAsocNro()).append("</ar:Nro>")
+                .append("</ar:CbteAsoc></ar:CbtesAsoc>");
         }
 
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"

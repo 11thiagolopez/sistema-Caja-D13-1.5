@@ -110,6 +110,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/gastos/**").hasRole("ADMIN")
                 .requestMatchers("/api/compras/**").hasRole("ADMIN")
                 .requestMatchers("/api/empleados/**").hasRole("ADMIN")
+                // Clientes y Notas de crédito: ADMIN-only por ahora, igual que Proveedores/Compras
+                // — Cobros no pide todavía un cliente (eso es la fase de saldo a favor como medio
+                // de pago), así que VENDEDOR no necesita tocar ninguno de los dos endpoints.
+                .requestMatchers("/api/clientes/**").hasRole("ADMIN")
+                .requestMatchers("/api/notas-credito/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/productos/**").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/productos", "/api/productos/cargar-stock").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/productos/**").hasRole("ADMIN")

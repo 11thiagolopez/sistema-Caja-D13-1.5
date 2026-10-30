@@ -9,7 +9,89 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-09-23, bug real al cargar marca nueva: crash + rango de
+Estado Actual (Actualizado al 2026-10-30, Notas de Crédito + catálogo de Clientes — las 4 fases
+completas, sin AFIP homologación):
+
+**Fase 4, misma sesión, última de las 4 (detalle completo en `plan-migracion.md` sección 27.6)**:
+cuenta corriente de Proveedores. `Compra` ganó `montoPagado` (ausente en el request = se paga
+todo de una, comportamiento de siempre) — cada compra inserta un `DEBE_COMPRA` por el total y,
+si corresponde, un `HABER_PAGO` por lo pagado en el momento, en un ledger nuevo
+(`MovimientoCuentaCorrienteProveedor`, mismo criterio que el de clientes: nunca un saldo suelto,
+siempre recalculado). `POST /api/compras/{id}/pagos` registra un pago posterior contra una
+compra puntual (rechaza si supera el saldo pendiente de *esa* compra). `POST
+/api/proveedores/devoluciones` (espejo de Nota de Crédito del lado compra, sin AFIP — B2B
+interno) reduce stock real y acredita la cuenta corriente **general** del proveedor, no contra
+una compra puntual. `GET /api/proveedores/{id}/cuenta-corriente` da el saldo total (negativo =
+el proveedor nos debe a nosotros) + historial. Pantalla nueva `CuentaCorrienteProveedores.tsx`
+(`/proveedores/cuenta-corriente`), junto a la ya existente `PagosProveedores.tsx` sin
+reemplazarla (esa sigue siendo un reporte informativo de compras, no de pagos reales).
+
+**Fase 3, misma sesión, agregada después de las fases 1 y 2 (detalle completo en
+`plan-migracion.md` sección 27.5)**: el saldo a favor de la cuenta corriente ya se puede aplicar
+como medio de pago en Cobros (`POST /api/ventas` gana `idCliente`/`montoSaldoAplicado`). Si el
+saldo cubre el total completo, el backend fuerza `medioPago="SALDO_CUENTA_CORRIENTE"` sin confiar
+en lo que mande el frontend; si es parcial, el resto se paga con el medio de pago elegido. El
+cliente se lockea (`ClienteRepository.buscarPorIdConLock`) antes de validar saldo disponible, para
+que dos ventas simultáneas no puedan gastar el mismo saldo dos veces. `CajaService.armarResumen`
+resta la parte pagada con saldo de los buckets de efectivo/transferencia/tarjeta (no es dinero
+real cobrado) y agrega un campo informativo nuevo `ventasPagadasConSaldo` al resumen de caja, sin
+sumar al total. `RegistrarVenta.tsx` (Cobros) ganó un selector de cliente opcional + el campo de
+"pagar con saldo". **Pendiente de SQL**: `ventas.monto_saldo_aplicado` (numeric nullable) — esta
+columna había quedado afuera del SQL de la fase 1 por error (el plan final no la incluyó, aunque
+el borrador sí la tenía) y hubo que pedirla aparte en esta misma sesión.
+
+Con esto, **las 4 fases del pedido quedaron completas** esta misma sesión.
+
+**Pedido grande y nuevo del dueño**: poder emitir notas de crédito (buscar la venta original,
+motivo + alcance total/parcial, devolver stock si corresponde, acreditar saldo a favor del
+cliente, validar fiscalmente ante ARCA con la misma letra C) más cuenta corriente para
+ventas y compras. Dado el tamaño (toca AFIP en producción sin homologación, y requiere una
+entidad `Cliente` que no existía), se dividió en 4 fases — detalle completo, decisiones y
+hoja de ruta en `plan-migracion.md` sección 27. Esta sesión hizo las fases 1 y 2:
+
+1. **Catálogo `Cliente` nuevo** (como Marca/Proveedor, identificado por CUIT/DNI), ABM completo
+   en `/api/clientes` (ADMIN-only). `Venta` ganó un `cliente` nullable (Cobros no lo pide
+   todavía — eso es la fase 3).
+2. **Nota de Crédito, interna primero** (`NotaCredito`/`DetalleNotaCredito`, nunca modifica la
+   Venta original): busca la venta (reusa `GET /api/ventas/{id}` y `?desde&hasta`, sin
+   endpoint nuevo), motivo (devolución/error de tipeo/descuento posterior/anulación total) +
+   alcance (total/parcial), devuelve stock solo si el motivo corresponde, bloquea pedir más de
+   lo que le queda sin acreditar a una línea entre notas parciales sucesivas.
+3. **Cuenta corriente de cliente** (`MovimientoCuentaCorrienteCliente`): ledger de
+   créditos/débitos, nunca un número de saldo suelto — se recalcula siempre sumando el
+   historial, para que quede auditable. Pantalla nueva por cliente con el historial.
+4. **Emisión fiscal ante ARCA** (fase 2, `NotaCreditoFiscalService`): Nota de Crédito C =
+   tipo de comprobante AFIP **13**, referenciando la Factura C original (11) vía `CbtesAsoc` —
+   verificado contra el manual oficial de WSFEv1 antes de tocar código (el primer intento de
+   ubicación del bloque `CbtesAsoc` en el XML, copiado de una exploración previa sin verificar,
+   estaba mal — el manual real lo pone después de `MonCotiz`, no después de `DocNro`; se corrigió
+   antes de escribir el código real). `AfipFacturacionService` no necesitó tocar su lógica de
+   firma/parseo: `cbteTipo` ya estaba parametrizado de punta a punta.
+5. **`ReporteService.balanceFinanciero`** resta las notas de crédito del período (de los
+   ingresos siempre; del costo de mercadería solo si el motivo devolvió stock) — nunca toca
+   `comisionesPorVendedor`/`ventasPorMarca`/`productosGanadores`, decisión pendiente de
+   confirmar con el dueño (detalle en el plan).
+
+Backend: **254 tests** verdes (`mvn test`). Frontend: `tsc -b`, `npm run lint` y `npm run build`
+limpios. Pantallas nuevas: `/clientes`, `/clientes/:id/cuenta-corriente`, `/notas-credito/nueva`
+(con link desde cada fila de Historial de ventas), `/proveedores/cuenta-corriente`, más el
+selector de cliente/saldo agregado en Cobros (`RegistrarVenta.tsx`). **No probado en un
+navegador real** (sin Chrome disponible en esta máquina) — tampoco se pudo arrancar el backend
+contra Supabase real desde este entorno (sin las variables de entorno
+`SUPABASE_DB_PASSWORD`/`JWT_SECRET`/`GMAIL_APP_PASSWORD`, que son variables de usuario de Windows
+de la máquina de desarrollo, no de este entorno).
+
+El dueño corrió a mano, en esta sesión: el SQL de la fase 1 (catálogo `clientes`,
+`notas_credito`, `detalle_notas_credito`, `movimientos_cuenta_corriente_cliente`,
+`ventas.id_cliente`); el de la fase 2
+(`notas_credito.punto_venta/tipo_comprobante/numero/cae/cae_vencimiento/error_detalle`); el de
+la fase 3 (`ventas.monto_saldo_aplicado` — **nota**: esta columna había quedado afuera del SQL de
+la fase 1 por un error al condensar el plan final, hubo que pedirla aparte); y el de la fase 4
+(`compras.monto_pagado` + backfill, `devoluciones_proveedor`, `detalle_devolucion_proveedor`,
+`movimientos_cuenta_corriente_proveedor`) — confirmar que este último también se corrió antes de
+usar los pagos/devoluciones de proveedor contra producción.
+
+Estado Anterior (Actualizado al 2026-09-23, bug real al cargar marca nueva: crash + rango de
 códigos de 2 dígitos agotado, ampliado a 3):
 
 **Reporte del dueño**: al dar de alta un producto con una marca nueva, "Agregar producto" tiraba

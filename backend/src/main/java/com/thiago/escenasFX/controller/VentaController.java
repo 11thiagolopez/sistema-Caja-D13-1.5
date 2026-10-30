@@ -23,10 +23,12 @@ import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.dto.VentaRequest;
 import com.thiago.escenasFX.dto.VentaResponse;
+import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
+import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -42,13 +44,15 @@ public class VentaController {
     private final VentaRepository ventaRepo;
     private final EmpleadoRepository empleadoRepo;
     private final ProductoRepository productoRepo;
+    private final ClienteRepository clienteRepo;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
-            EmpleadoRepository empleadoRepo, ProductoRepository productoRepo) {
+            EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo) {
         this.ventaService = ventaService;
         this.ventaRepo = ventaRepo;
         this.empleadoRepo = empleadoRepo;
         this.productoRepo = productoRepo;
+        this.clienteRepo = clienteRepo;
     }
 
     @PostMapping
@@ -62,6 +66,13 @@ public class VentaController {
         venta.setTipoComprobante(request.getTipoComprobante());
         venta.setDescuento(request.getDescuento());
         venta.setMotivoDescuento(request.getMotivoDescuento());
+        if (request.getIdCliente() != null) {
+            // Referencia liviana, igual patrón que Producto: VentaService hace el findById/lock
+            // real cuando corresponde (al aplicar saldo), esto solo evita un SELECT de más.
+            Cliente clienteRef = clienteRepo.getReferenceById(request.getIdCliente());
+            venta.setCliente(clienteRef);
+        }
+        venta.setMontoSaldoAplicado(request.getMontoSaldoAplicado());
 
         for (DetalleVentaRequest detalleReq : request.getDetalles()) {
             DetalleVenta detalle = new DetalleVenta();

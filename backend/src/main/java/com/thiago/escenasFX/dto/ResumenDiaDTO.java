@@ -28,4 +28,8 @@ public class ResumenDiaDTO {
     private BigDecimal efectivoFinal;
     private BigDecimal totalDigital;
     private BigDecimal cajaTotalDelDia;
+
+    // Informativo, no suma a cajaTotalDelDia: cuánto de las ventas del período se pagó con saldo
+    // de cuenta corriente (total o parcialmente) en vez de dinero real.
+    private BigDecimal ventasPagadasConSaldo;
 }

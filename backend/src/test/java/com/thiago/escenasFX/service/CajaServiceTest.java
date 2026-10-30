@@ -198,6 +198,50 @@ class CajaServiceTest {
     }
 
     @Test
+    void calcularResumenDeSesion_ventaConSaldoParcial_noCuentaElSaldoComoEfectivoReal() {
+        SesionCaja sesion = new SesionCaja();
+        sesion.setIdSesion(10);
+        sesion.setMontoInicial(new BigDecimal("1000"));
+        when(sesionRepo.findById(10)).thenReturn(Optional.of(sesion));
+
+        // Venta de $300 en efectivo, pero $50 se pagaron con saldo de cuenta corriente — el
+        // efectivo real que entró a la caja es $250, no $300.
+        Venta ventaConSaldoParcial = ventaConfirmada("EFECTIVO", "300");
+        ventaConSaldoParcial.setMontoSaldoAplicado(new BigDecimal("50"));
+        when(ventaRepo.findBySesion_IdSesionAndEstado(10, "CONFIRMADA")).thenReturn(List.of(ventaConSaldoParcial));
+        when(movRepo.findBySesion_IdSesion(10)).thenReturn(List.of());
+
+        ResumenDiaDTO resumen = cajaService.calcularResumenDeSesion(10);
+
+        assertThat(resumen.getVentasEfectivo()).isEqualByComparingTo("250");
+        assertThat(resumen.getVentasPagadasConSaldo()).isEqualByComparingTo("50");
+        assertThat(resumen.getEfectivoFinal()).isEqualByComparingTo("1250"); // 1000 + 250
+    }
+
+    @Test
+    void calcularResumenDeSesion_ventaPagadaCompletamenteConSaldo_noSumaEnNingunMedio() {
+        SesionCaja sesion = new SesionCaja();
+        sesion.setIdSesion(10);
+        sesion.setMontoInicial(new BigDecimal("1000"));
+        when(sesionRepo.findById(10)).thenReturn(Optional.of(sesion));
+
+        // El backend fuerza medioPago="SALDO_CUENTA_CORRIENTE" cuando el saldo cubre el total —
+        // no matchea ningún bucket de EFECTIVO/TRANSFERENCIA/TARJETA, como corresponde.
+        Venta ventaConSaldoTotal = ventaConfirmada("SALDO_CUENTA_CORRIENTE", "500");
+        ventaConSaldoTotal.setMontoSaldoAplicado(new BigDecimal("500"));
+        when(ventaRepo.findBySesion_IdSesionAndEstado(10, "CONFIRMADA")).thenReturn(List.of(ventaConSaldoTotal));
+        when(movRepo.findBySesion_IdSesion(10)).thenReturn(List.of());
+
+        ResumenDiaDTO resumen = cajaService.calcularResumenDeSesion(10);
+
+        assertThat(resumen.getVentasEfectivo()).isEqualByComparingTo("0");
+        assertThat(resumen.getVentasTransferencia()).isEqualByComparingTo("0");
+        assertThat(resumen.getVentasTarjeta()).isEqualByComparingTo("0");
+        assertThat(resumen.getVentasPagadasConSaldo()).isEqualByComparingTo("500");
+        assertThat(resumen.getCajaTotalDelDia()).isEqualByComparingTo("1000"); // solo el monto inicial
+    }
+
+    @Test
     void calcularResumenDeSesion_sesionNoExiste_lanzaExcepcion() {
         when(sesionRepo.findById(99)).thenReturn(Optional.empty());
 

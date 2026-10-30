@@ -19,11 +19,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.thiago.escenasFX.dto.ComisionEmpleadoDTO;
 import com.thiago.escenasFX.dto.FormaPagoResumenDTO;
 import com.thiago.escenasFX.dto.MarcaRankingDTO;
+import com.thiago.escenasFX.model.DetalleNotaCredito;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.NotaCredito;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.GastoRepository;
+import com.thiago.escenasFX.repository.NotaCreditoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +37,9 @@ class ReporteServiceTest {
 
     @Mock
     private GastoRepository gastoRepo;
+
+    @Mock
+    private NotaCreditoRepository notaCreditoRepo;
 
     @InjectMocks
     private ReporteService reporteService;
@@ -162,6 +168,7 @@ class ReporteServiceTest {
         Venta v = venta("EFECTIVO", detalle(p, 1, "100"), detalleManual("Apertura de cerradura", 1, "5000"));
         when(ventaRepo.findByFechaBetweenAndEstado(any(), any(), eq("CONFIRMADA"))).thenReturn(List.of(v));
         when(gastoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of());
+        when(notaCreditoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of());
 
         var balance = reporteService.balanceFinanciero(LocalDate.now(), LocalDate.now());
 
@@ -169,6 +176,53 @@ class ReporteServiceTest {
         // ($5000 de ingreso) no suma costo.
         assertThat(balance.getCostoMercaderia()).isEqualByComparingTo("40");
         assertThat(balance.getIngresosPorVentas()).isEqualByComparingTo("5100");
+    }
+
+    @Test
+    void balanceFinanciero_notaDeCreditoConDevolucion_restaIngresosYCostoDeMercaderia() {
+        Producto p = producto(1, "KALOP");
+        p.setPrecioCompra(new BigDecimal("40"));
+        Venta v = venta("EFECTIVO", detalle(p, 1, "100"));
+        when(ventaRepo.findByFechaBetweenAndEstado(any(), any(), eq("CONFIRMADA"))).thenReturn(List.of(v));
+        when(gastoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of());
+
+        DetalleNotaCredito detalleNc = new DetalleNotaCredito();
+        detalleNc.setProducto(p);
+        detalleNc.setCantidad(1);
+        NotaCredito nc = new NotaCredito();
+        nc.setMotivo("DEVOLUCION_MERCADERIA");
+        nc.setMontoTotal(new BigDecimal("100"));
+        nc.setDetalles(List.of(detalleNc));
+        when(notaCreditoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of(nc));
+
+        var balance = reporteService.balanceFinanciero(LocalDate.now(), LocalDate.now());
+
+        // La venta sola daría ingresos=100, costo=40 — la nota de crédito los anula por completo.
+        assertThat(balance.getIngresosPorVentas()).isEqualByComparingTo("0");
+        assertThat(balance.getCostoMercaderia()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void balanceFinanciero_notaDeCreditoPorErrorDeTipeo_noAfectaElCostoDeMercaderia() {
+        Producto p = producto(1, "KALOP");
+        p.setPrecioCompra(new BigDecimal("40"));
+        Venta v = venta("EFECTIVO", detalle(p, 1, "100"));
+        when(ventaRepo.findByFechaBetweenAndEstado(any(), any(), eq("CONFIRMADA"))).thenReturn(List.of(v));
+        when(gastoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of());
+
+        DetalleNotaCredito detalleNc = new DetalleNotaCredito();
+        detalleNc.setProducto(p);
+        detalleNc.setCantidad(1);
+        NotaCredito nc = new NotaCredito();
+        nc.setMotivo("ERROR_TIPEO"); // no devuelve stock, así que tampoco debe descontar costo.
+        nc.setMontoTotal(new BigDecimal("30"));
+        nc.setDetalles(List.of(detalleNc));
+        when(notaCreditoRepo.findByFechaBetweenOrderByFechaDesc(any(), any())).thenReturn(List.of(nc));
+
+        var balance = reporteService.balanceFinanciero(LocalDate.now(), LocalDate.now());
+
+        assertThat(balance.getIngresosPorVentas()).isEqualByComparingTo("70"); // 100 - 30
+        assertThat(balance.getCostoMercaderia()).isEqualByComparingTo("40"); // sin cambios
     }
 
     @Test

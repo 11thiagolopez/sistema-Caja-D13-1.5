@@ -61,6 +61,29 @@ class AfipFacturacionServiceTest {
     }
 
     @Test
+    void construirEnvelope_notaDeCredito_incluyeCbtesAsocConLaFacturaOriginal() {
+        DatosFactura datos = new DatosFactura(1, 13, 1, 99, "0", new BigDecimal("500"),
+            LocalDate.of(2026, 10, 30), null, null, null, 11, 1, 42);
+
+        String envelope = service.construirEnvelopeFECAESolicitar(cred, datos, 7);
+
+        assertThat(envelope).contains("<ar:CbteTipo>13</ar:CbteTipo>");
+        assertThat(envelope)
+            .contains("<ar:CbtesAsoc><ar:CbteAsoc><ar:Tipo>11</ar:Tipo><ar:PtoVta>1</ar:PtoVta><ar:Nro>42</ar:Nro>"
+                + "</ar:CbteAsoc></ar:CbtesAsoc>");
+    }
+
+    @Test
+    void construirEnvelope_facturaSinComprobanteAsociado_noIncluyeCbtesAsoc() {
+        DatosFactura datos = new DatosFactura(1, 11, 1, 99, "0", new BigDecimal("500"),
+            LocalDate.of(2026, 10, 30), null, null, null);
+
+        String envelope = service.construirEnvelopeFECAESolicitar(cred, datos, 7);
+
+        assertThat(envelope).doesNotContain("CbtesAsoc");
+    }
+
+    @Test
     void parsearResultadoCae_aprobado_extraeCaeYVencimiento() {
         String respuesta = respuestaFecaeSolicitar("A", "5", "70012345678901", "20260829", null, null);
 

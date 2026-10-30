@@ -36,6 +36,12 @@ export function Caja() {
         <li>
           <strong>Caja total del día: {resumen.cajaTotalDelDia.toFixed(2)}</strong>
         </li>
+        {resumen.ventasPagadasConSaldo > 0 && (
+          <li>
+            Pagado con saldo de cuenta corriente (no es dinero real cobrado):{' '}
+            {resumen.ventasPagadasConSaldo.toFixed(2)}
+          </li>
+        )}
       </ul>
     </div>
   )

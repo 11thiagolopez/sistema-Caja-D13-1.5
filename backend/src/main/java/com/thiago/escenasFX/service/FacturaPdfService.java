@@ -4,13 +4,15 @@ import com.google.zxing.BarcodeFormat;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
-import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.thiago.escenasFX.model.FacturaFiscal;
+import com.thiago.escenasFX.model.NotaCredito;
 import com.thiago.escenasFX.model.Venta;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,58 +38,86 @@ public class FacturaPdfService {
         }
 
         Venta venta = factura.getVenta();
-
-        // 1. Mapear los detalles de la venta
         List<FacturaFiscalHtmlBuilder.Linea> items = venta.getDetalles().stream()
             .map(d -> new FacturaFiscalHtmlBuilder.Linea(
-                d.getProducto().getDescripcion(), 
+                d.getProducto().getDescripcion(),
                 d.getCantidad(),
                 d.getPrecioUnitario(),
                 d.getSubtotal()
             )).collect(Collectors.toList());
 
-        // 2. Preparar los datos del cliente: con CUIT/DNI se imprime el nombre/razón social tal
-        // como cualquier factura real de ARCA (WSFEv1 no lo pide ni lo devuelve, lo carga el ADMIN
-        // al facturar — ver FacturaFiscalService). Consumidor Final no tiene nombre asociado.
-        String docNroStr = factura.getClienteDocNro() != null ? factura.getClienteDocNro() : "0";
+        String titulo = String.format("Factura Nro: %04d-%08d", factura.getPuntoVenta(), factura.getNumero());
+
+        return generarPdfComun(titulo, items, factura.getImporte(), factura.getPuntoVenta(), factura.getNumero(),
+            factura.getTipoComprobante(), factura.getClienteDocTipo(), factura.getClienteDocNro(),
+            factura.getClienteNombre(), factura.getCae(), factura.getCaeVencimiento(),
+            venta.getFecha().toLocalDate());
+    }
+
+    /**
+     * Mismo armado que generarPdf(FacturaFiscal), pero para una Nota de Crédito C ya emitida ante
+     * ARCA (NotaCreditoFiscalService). Los datos del cliente (CUIT/DNI/nombre) no se guardan en
+     * NotaCredito — se toman de la FacturaFiscal de la venta original, que es el documento que
+     * legalmente identifica al cliente ante ARCA; facturaOriginal se lo pasa quien llama
+     * (NotaCreditoController), que ya la necesita para validar que la nota es emitible.
+     */
+    public byte[] generarPdfNotaCredito(NotaCredito notaCredito, FacturaFiscal facturaOriginal) throws Exception {
+        if (!"EMITIDA".equals(notaCredito.getEstado()) || notaCredito.getCae() == null) {
+            throw new IllegalStateException("La nota de crédito no está emitida ante ARCA o no tiene CAE.");
+        }
+
+        List<FacturaFiscalHtmlBuilder.Linea> items = notaCredito.getDetalles().stream()
+            .map(d -> new FacturaFiscalHtmlBuilder.Linea(d.getDescripcion(), d.getCantidad(), d.getPrecioUnitario(),
+                d.getSubtotal()))
+            .collect(Collectors.toList());
+
+        String titulo = String.format("Nota de Crédito Nro: %04d-%08d", notaCredito.getPuntoVenta(),
+            notaCredito.getNumero());
+
+        return generarPdfComun(titulo, items, notaCredito.getMontoTotal(), notaCredito.getPuntoVenta(),
+            notaCredito.getNumero(), notaCredito.getTipoComprobante(), facturaOriginal.getClienteDocTipo(),
+            facturaOriginal.getClienteDocNro(), facturaOriginal.getClienteNombre(), notaCredito.getCae(),
+            notaCredito.getCaeVencimiento(), notaCredito.getFecha().toLocalDate());
+    }
+
+    private byte[] generarPdfComun(String titulo, List<FacturaFiscalHtmlBuilder.Linea> items, BigDecimal importe,
+            int puntoVenta, int numero, int tipoComprobante, int clienteDocTipo, String clienteDocNro,
+            String clienteNombre, String cae, LocalDate caeVencimiento, LocalDate fecha) throws Exception {
+        // Con CUIT/DNI se imprime el nombre/razón social tal como cualquier factura real de ARCA
+        // (WSFEv1 no lo pide ni lo devuelve, lo carga el ADMIN al facturar). Consumidor Final no
+        // tiene nombre asociado.
+        String docNroStr = clienteDocNro != null ? clienteDocNro : "0";
         List<String> infoCliente;
-        if (factura.getClienteDocTipo() == 99) {
+        if (clienteDocTipo == 99) {
             infoCliente = List.of("Cliente: Consumidor Final");
         } else {
-            String etiquetaDoc = factura.getClienteDocTipo() == 80 ? "CUIT" : "DNI";
+            String etiquetaDoc = clienteDocTipo == 80 ? "CUIT" : "DNI";
             infoCliente = List.of(
-                "Apellido y Nombre / Razón Social: " + factura.getClienteNombre(),
+                "Apellido y Nombre / Razón Social: " + clienteNombre,
                 etiquetaDoc + ": " + docNroStr
             );
         }
 
-        // 3. Generar la imagen del Código QR de ARCA
-        String qrImageBase64 = generarQrBase64(factura, venta.getFecha().toLocalDate().toString(), docNroStr);
-
-        // 4. Obtener el logo automáticamente desde tu PdfService existente
+        String qrImageBase64 = generarQrBase64(puntoVenta, tipoComprobante, numero, importe, clienteDocTipo,
+            docNroStr, cae, fecha.toString());
         String logoBase64 = pdfService.logoDataUri();
 
-        // 5. Armar el título formal
-        String titulo = String.format("Factura Nro: %04d-%08d", factura.getPuntoVenta(), factura.getNumero());
-
-        // 6. Construir el HTML pasándole el logo automático
         String html = FacturaFiscalHtmlBuilder.construir(
-            titulo, "C", infoCliente, items, factura.getImporte(), logoBase64,
-            factura.getCae(), factura.getCaeVencimiento().toString(), qrImageBase64, formatearCuit(cuitEmisor)
+            titulo, "C", infoCliente, items, importe, logoBase64,
+            cae, caeVencimiento.toString(), qrImageBase64, formatearCuit(cuitEmisor)
         );
 
-        // 7. Renderizar a PDF (podés usar el método de tu PdfService o dejar el PdfRendererBuilder directo)
         return pdfService.generarPdf(html);
     }
 
-    private String generarQrBase64(FacturaFiscal factura, String fechaStr, String docNroStr) throws Exception {
+    private String generarQrBase64(int puntoVenta, int tipoComprobante, int numero, BigDecimal importe,
+            int clienteDocTipo, String docNroStr, String cae, String fechaStr) throws Exception {
         String jsonQr = String.format(
             "{\"ver\":1,\"fecha\":\"%s\",\"cuit\":%s,\"ptoVta\":%d,\"tipoCmp\":%d,\"nroCmp\":%d,\"importe\":%s,\"moneda\":\"PES\",\"ctz\":1,\"tipoDocRec\":%d,\"nroDocRec\":%s,\"tipoCodAut\":\"E\",\"codAut\":%s}",
-            fechaStr, cuitEmisor, factura.getPuntoVenta(),
-            factura.getTipoComprobante(), factura.getNumero(), factura.getImporte().toString(),
-            factura.getClienteDocTipo(), docNroStr, factura.getCae()
+            fechaStr, cuitEmisor, puntoVenta, tipoComprobante, numero, importe.toString(), clienteDocTipo,
+            docNroStr, cae
         );
-        
+
         String qrCodificado = Base64.getEncoder().encodeToString(jsonQr.getBytes());
         String urlAfip = "https://www.afip.gob.ar/fe/qr/?p=" + qrCodificado;
 
@@ -95,7 +125,7 @@ public class FacturaPdfService {
         BitMatrix bitMatrix = qrCodeWriter.encode(urlAfip, BarcodeFormat.QR_CODE, 150, 150);
         ByteArrayOutputStream pngOut = new ByteArrayOutputStream();
         MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOut);
-        
+
         return "data:image/png;base64," + Base64.getEncoder().encodeToString(pngOut.toByteArray());
     }
 

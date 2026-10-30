@@ -17,12 +17,15 @@ import com.thiago.escenasFX.dto.ComisionEmpleadoDTO;
 import com.thiago.escenasFX.dto.FormaPagoResumenDTO;
 import com.thiago.escenasFX.dto.MarcaRankingDTO;
 import com.thiago.escenasFX.dto.ProductoRankingDTO;
+import com.thiago.escenasFX.model.DetalleNotaCredito;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.Gasto;
+import com.thiago.escenasFX.model.NotaCredito;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.GastoRepository;
+import com.thiago.escenasFX.repository.NotaCreditoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 
 @Service
@@ -30,12 +33,23 @@ public class ReporteService {
 
     private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
 
+    // Motivos de Nota de Crédito que devuelven stock — igual lista que
+    // NotaCreditoService.MOTIVOS_QUE_DEVUELVEN_STOCK (duplicada a propósito: son dos
+    // responsabilidades distintas — acá decide si se resta del costo de mercadería del período,
+    // allá si se reingresa stock real — no vale la pena una clase de constantes compartida para
+    // una lista de 2 strings).
+    private static final List<String> MOTIVOS_QUE_DEVUELVEN_STOCK = List.of(
+        "DEVOLUCION_MERCADERIA", "ANULACION_TOTAL");
+
     private final VentaRepository ventaRepo;
     private final GastoRepository gastoRepo;
+    private final NotaCreditoRepository notaCreditoRepo;
 
-    public ReporteService(VentaRepository ventaRepo, GastoRepository gastoRepo) {
+    public ReporteService(VentaRepository ventaRepo, GastoRepository gastoRepo,
+            NotaCreditoRepository notaCreditoRepo) {
         this.ventaRepo = ventaRepo;
         this.gastoRepo = gastoRepo;
+        this.notaCreditoRepo = notaCreditoRepo;
     }
 
     public List<ProductoRankingDTO> productosGanadores(LocalDate desde, LocalDate hasta, int limit) {
@@ -166,6 +180,14 @@ public class ReporteService {
         return d.getProducto().getPrecioCompra();
     }
 
+    /** Costo de mercadería que vuelve a sumar una línea de nota de crédito que devolvió stock. */
+    private BigDecimal costoDevueltoDeLinea(DetalleNotaCredito d) {
+        if (d.getProducto() == null || d.getProducto().getPrecioCompra() == null) {
+            return BigDecimal.ZERO;
+        }
+        return d.getProducto().getPrecioCompra().multiply(BigDecimal.valueOf(d.getCantidad()));
+    }
+
     public List<Venta> ventasPorVendedor(LocalDate desde, LocalDate hasta, Integer idEmpleado) {
         List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
             ESTADO_CONFIRMADA);
@@ -209,6 +231,27 @@ public class ReporteService {
             .flatMap(v -> v.getDetalles().stream())
             .map(d -> costoUnitarioDelDetalle(d).multiply(BigDecimal.valueOf(d.getCantidad())))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Las notas de crédito del período restan de los ingresos (plata que se le devolvió al
+        // cliente, fiscal o interna — las dos son revenue real dado de baja) y, si el motivo
+        // devolvió stock, también del costo de mercadería (esa mercadería ya no se vendió de
+        // verdad en este período, volvió al depósito). Nunca se tocan Venta/DetalleVenta: la nota
+        // de crédito es un documento aparte, ver clase NotaCredito.
+        List<NotaCredito> notasCredito = notaCreditoRepo.findByFechaBetweenOrderByFechaDesc(
+            desde.atStartOfDay(), hasta.atTime(23, 59, 59));
+
+        BigDecimal totalNotasCredito = notasCredito.stream()
+            .map(NotaCredito::getMontoTotal)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal costoDevueltoPorNotasCredito = notasCredito.stream()
+            .filter(nc -> MOTIVOS_QUE_DEVUELVEN_STOCK.contains(nc.getMotivo()))
+            .flatMap(nc -> nc.getDetalles().stream())
+            .map(this::costoDevueltoDeLinea)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        ingresosPorVentas = ingresosPorVentas.subtract(totalNotasCredito);
+        costoMercaderia = costoMercaderia.subtract(costoDevueltoPorNotasCredito);
 
         List<Gasto> gastos = gastoRepo.findByFechaBetweenOrderByFechaDesc(desde, hasta);
         BigDecimal gastosOperativos = gastos.stream()

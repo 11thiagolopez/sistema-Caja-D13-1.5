@@ -24,4 +24,5 @@ public class ResumenDiaResponse {
     private BigDecimal efectivoFinal;
     private BigDecimal totalDigital;
     private BigDecimal cajaTotalDelDia;
+    private BigDecimal ventasPagadasConSaldo;
 }

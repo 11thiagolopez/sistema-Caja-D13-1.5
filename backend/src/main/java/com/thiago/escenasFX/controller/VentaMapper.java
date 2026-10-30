@@ -40,6 +40,9 @@ final class VentaMapper {
             venta.getEstadoTrabajo(),
             venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getIdEmpleado() : null,
             venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getNombre() : null,
+            venta.getCliente() != null ? venta.getCliente().getIdCliente() : null,
+            venta.getCliente() != null ? venta.getCliente().getNombre() : null,
+            venta.getMontoSaldoAplicado(),
             detalles);
     }
 

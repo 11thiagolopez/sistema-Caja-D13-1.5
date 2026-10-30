@@ -100,8 +100,12 @@ public class FacturaFiscalService {
         return facturaRepo.findByVentaIdVenta(idVenta);
     }
 
-    /** 1 = Productos, 2 = Servicios, 3 = Productos y Servicios (según AFIP). */
-    private int concepto(List<DetalleVenta> detalles) {
+    /**
+     * 1 = Productos, 2 = Servicios, 3 = Productos y Servicios (según AFIP). Package-private (no
+     * private): NotaCreditoFiscalService lo reusa para calcular el concepto de la nota de
+     * crédito a partir de las líneas de venta originales que acredita.
+     */
+    static int concepto(List<DetalleVenta> detalles) {
         boolean hayServicio = detalles.stream().anyMatch(d -> "SERVICIO".equals(d.getTipo()));
         boolean hayProducto = detalles.stream().anyMatch(d -> !"SERVICIO".equals(d.getTipo()));
         if (hayServicio && hayProducto) {

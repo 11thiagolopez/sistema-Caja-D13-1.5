@@ -2,12 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
+import { getCuentaCorrienteCliente } from '../api/clientes'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
+import { BuscadorClienteSelect } from '../components/BuscadorClienteSelect'
 import { useCarrito } from '../hooks/useCarrito'
 import { verBlob } from '../utils/descargarBlob'
-import type { DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
+import type { ClienteResponse, DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
 
 interface ItemCarrito extends DetalleVentaRequest {
   descripcionProducto: string
@@ -21,6 +23,12 @@ export function RegistrarVenta() {
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
   const [descuento, setDescuento] = useState('')
   const [motivoDescuento, setMotivoDescuento] = useState('')
+
+  // Cuenta corriente: elegir un cliente es opcional, solo hace falta si se va a pagar (total o
+  // parcialmente) con su saldo a favor.
+  const [cliente, setCliente] = useState<ClienteResponse | null>(null)
+  const [saldoDisponible, setSaldoDisponible] = useState<number | null>(null)
+  const [montoSaldoAplicado, setMontoSaldoAplicado] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -44,6 +52,16 @@ export function RegistrarVenta() {
       .then(setProductos)
       .catch(() => setError('No se pudieron cargar los productos'))
   }, [])
+
+  useEffect(() => {
+    if (!cliente) {
+      setSaldoDisponible(null)
+      return
+    }
+    getCuentaCorrienteCliente(cliente.idCliente)
+      .then((cc) => setSaldoDisponible(cc.saldoActual))
+      .catch(() => setSaldoDisponible(null))
+  }, [cliente])
 
   function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
     const precioVenta = producto.precioVenta
@@ -81,6 +99,7 @@ export function RegistrarVenta() {
     setEnviando(true)
     try {
       const descuentoNumero = descuento ? Number(descuento) : undefined
+      const montoSaldoNumero = montoSaldoAplicado ? Number(montoSaldoAplicado) : undefined
       const venta = await registrarVenta({
         idEmpleado: sesion.idEmpleado,
         medioPago,
@@ -92,6 +111,8 @@ export function RegistrarVenta() {
         })),
         descuento: descuentoNumero,
         motivoDescuento: descuentoNumero ? motivoDescuento : undefined,
+        idCliente: cliente?.idCliente,
+        montoSaldoAplicado: montoSaldoNumero,
       })
       setResultado(venta)
       vaciarCarrito()
@@ -99,6 +120,8 @@ export function RegistrarVenta() {
       setMotivoDescuento('')
       setEmailComprobante('')
       setErrorComprobante(null)
+      setCliente(null)
+      setMontoSaldoAplicado('')
       // Precargamos el id de venta abajo (sigue editable): quien registró la venta con
       // descuento es normalmente quien la va a confirmar apenas el admin le pase el código.
       if (venta.estado === 'PENDIENTE_AUTORIZACION') {
@@ -207,6 +230,34 @@ export function RegistrarVenta() {
       </p>
 
       <form onSubmit={onSubmit}>
+        <section>
+          <h4>Cliente (opcional — solo para pagar con saldo de cuenta corriente)</h4>
+          <BuscadorClienteSelect idClienteSeleccionado={cliente?.idCliente ?? null} onSeleccionar={setCliente} />
+          {cliente && saldoDisponible != null && (
+            <p>
+              Saldo disponible de {cliente.nombre}: ${saldoDisponible.toFixed(2)}
+              {saldoDisponible > 0 && (
+                <>
+                  {' — '}
+                  <label>
+                    Pagar con saldo
+                    <input
+                      type="number"
+                      min={0}
+                      max={Math.min(saldoDisponible, total)}
+                      step="0.01"
+                      value={montoSaldoAplicado}
+                      onChange={(e) => setMontoSaldoAplicado(e.target.value)}
+                    />
+                  </label>
+                </>
+              )}
+            </p>
+          )}
+          {montoSaldoAplicado && Number(montoSaldoAplicado) >= total && (
+            <p>Se paga el total con saldo — el medio de pago de abajo no aplica.</p>
+          )}
+        </section>
         <label>
           Medio de pago
           <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
@@ -249,6 +300,12 @@ export function RegistrarVenta() {
               ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: se envió un código a los administradores por email.`
               : `Venta #${resultado.idVenta} confirmada.`}
           </p>
+          {resultado.montoSaldoAplicado != null && resultado.montoSaldoAplicado > 0 && (
+            <p>
+              Se pagaron ${resultado.montoSaldoAplicado.toFixed(2)} con el saldo de cuenta corriente de{' '}
+              {resultado.nombreCliente}.
+            </p>
+          )}
           {resultado.estado === 'CONFIRMADA' && (
             <button type="button" onClick={verComprobante} disabled={viendoComprobante}>
               {viendoComprobante && <span className="spinner" />}

@@ -261,6 +261,13 @@ public class CajaService {
         BigDecimal ventasEfectivo = sumarVentasPorMedio(ventas, "EFECTIVO");
         BigDecimal ventasTransferencia = sumarVentasPorMedio(ventas, "TRANSFERENCIA");
         BigDecimal ventasTarjeta = sumarVentasPorMedio(ventas, "TARJETA");
+        // Informativo: una venta pagada 100% con saldo ya queda afuera de los tres buckets de
+        // arriba (su medioPago es "SALDO_CUENTA_CORRIENTE", no matchea ninguno) — esto es la
+        // suma total de saldo aplicado (ventas pagadas del todo o en parte con saldo), para que
+        // se vea en el arqueo sin confundirse con dinero real cobrado.
+        BigDecimal ventasPagadasConSaldo = ventas.stream()
+            .map(CajaService::saldoAplicadoDe)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal retirosEfectivo = sumarRetirosPorMedio(retiros, "EFECTIVO");
         BigDecimal retirosTransferencia = sumarRetirosPorMedio(retiros, "TRANSFERENCIA");
@@ -270,14 +277,21 @@ public class CajaService {
         BigDecimal cajaTotal = efectivoFinal.add(totalDigital);
 
         return new ResumenDiaDTO(ventas, retiros, montoInicial, ventasEfectivo, ventasTransferencia, ventasTarjeta,
-            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal);
+            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal, ventasPagadasConSaldo);
     }
 
+    // Una venta con pago parcial en saldo sigue teniendo medioPago="EFECTIVO"/etc. por el resto,
+    // pero totalVenta incluye la parte pagada con saldo — hay que restarla para no contar como
+    // dinero real cobrado algo que en realidad fue un crédito de cuenta corriente.
     private BigDecimal sumarVentasPorMedio(List<Venta> ventas, String medioPago) {
         return ventas.stream()
             .filter(v -> medioPago.equalsIgnoreCase(v.getMedioPago()))
-            .map(Venta::getTotalVenta)
+            .map(v -> v.getTotalVenta().subtract(saldoAplicadoDe(v)))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static BigDecimal saldoAplicadoDe(Venta v) {
+        return v.getMontoSaldoAplicado() != null ? v.getMontoSaldoAplicado() : BigDecimal.ZERO;
     }
 
     private BigDecimal sumarRetirosPorMedio(List<MovimientoCaja> retiros, String medioPago) {

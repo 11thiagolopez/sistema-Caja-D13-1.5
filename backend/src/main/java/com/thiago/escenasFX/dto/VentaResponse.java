@@ -28,5 +28,11 @@ public class VentaResponse {
     private String estadoTrabajo;
     private Integer idEmpleadoTecnico;
     private String nombreTecnico;
+    // Cliente del catálogo nuevo (cuenta corriente) — distinto de clienteNombre/clienteTelefono
+    // arriba, que son texto libre de Trabajo a domicilio. Null si la venta no tiene cliente
+    // vinculado (hoy el caso normal en Cobros, que todavía no lo pide).
+    private Integer idCliente;
+    private String nombreCliente;
+    private BigDecimal montoSaldoAplicado;
     private List<DetalleVentaResponse> detalles;
 }

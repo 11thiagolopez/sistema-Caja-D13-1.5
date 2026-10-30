@@ -1,8 +1,24 @@
 import { request } from './client'
-import type { CompraRequest, CompraResponse, PagoProveedorDTO, ProductoComprasRankingDTO } from '../types/api'
+import type {
+  CompraRequest,
+  CompraResponse,
+  PagoProveedorDTO,
+  ProductoComprasRankingDTO,
+  RegistrarPagoProveedorRequest,
+} from '../types/api'
 
 export function registrarCompra(compra: CompraRequest): Promise<CompraResponse> {
   return request<CompraResponse>('/api/compras', { method: 'POST', body: JSON.stringify(compra) })
+}
+
+export function registrarPagoProveedor(
+  idCompra: number,
+  pago: RegistrarPagoProveedorRequest,
+): Promise<CompraResponse> {
+  return request<CompraResponse>(`/api/compras/${idCompra}/pagos`, {
+    method: 'POST',
+    body: JSON.stringify(pago),
+  })
 }
 
 export function getCompras(desde: string, hasta: string): Promise<CompraResponse[]> {

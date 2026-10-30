@@ -131,7 +131,8 @@ public class CajaController {
             resumen.getRetirosTransferencia(),
             resumen.getEfectivoFinal(),
             resumen.getTotalDigital(),
-            resumen.getCajaTotalDelDia());
+            resumen.getCajaTotalDelDia(),
+            resumen.getVentasPagadasConSaldo());
     }
 
     private SesionCajaResponse toResponse(SesionCaja sesion) {

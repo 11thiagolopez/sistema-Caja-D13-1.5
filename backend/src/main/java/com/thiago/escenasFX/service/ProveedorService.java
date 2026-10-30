@@ -40,7 +40,7 @@ public class ProveedorService {
         proveedorRepo.save(proveedor);
     }
 
-    private Proveedor obtenerPorId(Integer id) {
+    public Proveedor obtenerPorId(Integer id) {
         return proveedorRepo.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Proveedor no existe: " + id));
     }

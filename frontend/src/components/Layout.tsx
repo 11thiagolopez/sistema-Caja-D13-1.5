@@ -46,12 +46,18 @@ const SECCIONES: NavSection[] = [
     items: [
       { label: 'Agregar compra', to: '/compras/nueva' },
       { label: 'Consultar compras', to: '/compras' },
+      { label: 'Cuenta corriente de proveedores', to: '/proveedores/cuenta-corriente' },
     ],
   },
   {
     label: 'Vendedores',
     roles: ['ADMIN'],
     items: [{ label: 'Vendedores', to: '/vendedores' }],
+  },
+  {
+    label: 'Clientes',
+    roles: ['ADMIN'],
+    items: [{ label: 'Clientes', to: '/clientes' }],
   },
   {
     label: 'Reportes',

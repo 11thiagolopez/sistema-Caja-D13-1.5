@@ -1,6 +1,16 @@
 # Plan de migración: Sistema D13 (JavaFX + SQLite) → Spring Boot (REST + PostgreSQL)
 
-## Para retomar mañana
+> **⚠️ Nota de vigencia**: las dos secciones que siguen ("Para retomar mañana" y "Estado de
+> avance") describen el proyecto solo hasta el **2026-08-05** y no se volvieron a actualizar
+> después — en particular, el bloqueante de compilador de Java que mencionan (sección 15.6) **ya
+> se resolvió** (reinstalación del JDK) y no aplica desde hace muchas sesiones. Para saber en qué
+> paso está el proyecto *hoy*, ver la sección "Estado Actual" de `CLAUDE.md` (fuente de verdad,
+> se actualiza cada sesión) — este archivo sigue acumulando el detalle técnico de cada sesión como
+> un historial numerado (secciones 12 a 26 y en adelante), referenciado desde ahí. Las dos
+> secciones de abajo quedan como registro histórico de cómo se pensó el cierre de esa sesión en
+> particular, no como el estado real del sistema.
+
+## Para retomar mañana (histórico — ver nota de vigencia arriba)
 
 **⚠️ Antes que nada: hay un compilador de Java roto en la máquina (ver sección 15.6) — el fix del
 bug de marcas está escrito pero no desplegado. Seguir los "primeros pasos" del final de la sección
@@ -200,7 +210,7 @@ nunca se había probado más allá de la lectura del código). Commits de la ses
 
 ---
 
-## Estado de avance
+## Estado de avance (histórico, hasta 2026-08-05 — ver nota de vigencia al principio del documento)
 
 - [x] Paso 1 — Housekeeping: `application.properties` movido a la raíz de `resources`, `module-info.java`
       y todo el código JavaFX (`App`, `Main`, `controllers/*`, `utils/Paths`, `*.fxml`, `styles.css`,
@@ -2140,3 +2150,268 @@ marca en el frontend (los `maxLength={2}` de `Productos.tsx`/`ComprasNueva.tsx` 
 familia, no de marca). No probado en un navegador real — verificado con tests automáticos +
 consultas SQL directas contra la base real de Supabase para confirmar el estado de los códigos
 antes y después del cambio de esquema.
+
+## 27. Sesión 2026-10-30: Notas de Crédito + catálogo de Clientes + cuenta corriente — fases 1 y 2 de 4 (pedido grande, dividido en fases)
+
+**Pedido del dueño, con el flujo completo descripto en 6 pasos**: buscar la venta/factura
+original, motivo (devolución de mercadería/error de tipeo/descuento posterior/anulación total) +
+alcance (total o parcial — ej. devolver 1 de 3 productos), impacto en stock (solo si el motivo
+corresponde), impacto en cuenta corriente del cliente (saldo a favor, usable en una compra
+futura; el efectivo físico lo maneja el cajero aparte, el sistema no lo devuelve solo),
+validación fiscal ante ARCA con la misma letra que el comprobante original, y que no se borre el
+original (quedan vinculados). **Además** pidió cuenta corriente de Proveedores, con pagos
+parciales de Compras y devoluciones de mercadería que se descuentan de esa cuenta.
+
+Es un pedido grande que toca dinero real y AFIP en producción (sin homologación — una nota de
+crédito fiscal mal emitida es irreversible), y requiere una entidad `Cliente` que **no existía**
+(hasta ahora las ventas solo guardaban nombre/email/teléfono como texto libre). Se decidió, con
+el dueño, dividirlo en 4 fases (plan completo guardado como artefacto de la sesión — pedir si
+hace falta releerlo) y hacer esta sesión las fases 1 y 2.
+
+### 27.1 Decisiones de negocio confirmadas por el dueño antes de empezar
+
+1. **Cliente**: catálogo nuevo con CUIT/DNI como clave (no solo identificar por nombre tipeado).
+2. **Alcance fiscal de la Nota de Crédito**: también para ventas sin factura fiscal (comprobante
+   interno) — en ese caso la nota queda interna, sin CAE, sin llamar a ARCA.
+3. **Saldo a favor**: debe poder aplicarse automáticamente como medio de pago en una venta futura
+   (Cobros) — no solo informativo. Pendiente de implementar (fase 3).
+4. **Cuenta corriente de Proveedores**: tiene que resolver las dos cosas a la vez — pagos
+   parciales de Compras y devoluciones de mercadería que se descuentan de esa cuenta. Pendiente
+   de implementar (fase 4).
+
+### 27.2 Fase 1 — Cliente + Nota de Crédito interna + cuenta corriente de cliente
+
+**`Cliente`** (`model/Cliente.java`, tabla `clientes`): `nombre`, `docTipo` (80 CUIT/96 DNI/99 sin
+documento, misma convención que `FacturaFiscal.clienteDocTipo`), `docNro`, `telefono`, `email`,
+`direccion`, `activo` (baja lógica). `ClienteService`/`ClienteController` (`/api/clientes`,
+ADMIN-only por ahora — Cobros no pide cliente todavía) siguen el mismo esqueleto que
+`Proveedor`/`ProveedorService`. `Venta` ganó un campo `cliente` `@ManyToOne` nullable: ninguna
+venta existente lo tiene, y no se pide desde el frontend en esta fase.
+
+**`NotaCredito` + `DetalleNotaCredito`** (`model/`, tablas `notas_credito`/
+`detalle_notas_credito`): documento nuevo, **nunca modifica la `Venta`/`DetalleVenta` original**
+— mismo criterio que `FacturaFiscal` respecto de `Venta` (de hecho no podía reusar esa tabla:
+`FacturaFiscal.venta` es `@OneToOne` con FK única por venta, upserteada por
+`FacturaFiscalService.facturar()`). `NotaCreditoService.crear()`:
+- Valida que la venta esté `CONFIRMADA`.
+- Resuelve el cliente: el del request, o el de `venta.getCliente()` si existe (en la práctica
+  siempre hay que elegir uno a mano hoy, porque ninguna venta tiene cliente vinculado todavía);
+  si no hay ninguno, 400.
+- Alcance `TOTAL` expande automáticamente a todas las líneas por su cantidad remanente (no
+  reenviar detalles desde el frontend); `PARCIAL` usa las líneas/cantidades del request.
+- Devuelve stock (reusa el patrón exacto de `VentaService.guardarTrabajoDomicilio`: lock
+  pessimista vía `ProductoRepository.buscarPorIdConLock` + `stockActual += cantidad`) solo si el
+  motivo es `DEVOLUCION_MERCADERIA` o `ANULACION_TOTAL` — `ERROR_TIPEO`/`DESCUENTO_POSTERIOR`
+  nunca tocan stock.
+- **Guarda anti-doble-acreditación**: antes de aceptar una cantidad para una línea, suma cuánto
+  ya se acreditó esa misma línea en notas de crédito anteriores
+  (`DetalleNotaCreditoRepository.sumarCantidadAcreditada`) y rechaza si se pide más que el
+  remanente — cubre el caso de dos notas parciales sucesivas sobre la misma línea.
+- `esFiscal = true` si la venta original tiene una `FacturaFiscal` con `estado=EMITIDA`; el
+  `estado` inicial de la nota queda `PENDIENTE_FISCAL` en ese caso (falta la fase 2) o `EMITIDA`
+  directo si es interna (ya no hay nada más que hacer).
+- Crea un `MovimientoCuentaCorrienteCliente` tipo `CREDITO` por el monto total.
+
+**Cuenta corriente, deliberadamente un ledger, no un número de saldo**: es dinero, y un
+`Cliente.saldoActual` mutable no deja rastro de por qué el saldo es el que es. El saldo
+(`ClienteService.calcularSaldo`) se recalcula siempre sumando `CREDITO` menos `DEBITO` del
+historial — la tabla de movimientos es la fuente de verdad, igual criterio que cualquier libro
+contable real.
+
+**No se tocó la búsqueda de la venta original** ("paso 1" del pedido): se reusan
+`GET /api/ventas/{id}` (por número) y `GET /api/ventas?desde=&hasta=` (por rango, filtrando por
+nombre de cliente en el frontend) — los dos ya existían y ya eran ADMIN-only, no hizo falta
+tocar `VentaController`.
+
+**Frontend**: `Clientes.tsx` (ABM), `CuentaCorrienteCliente.tsx` (saldo + historial),
+`BuscadorClienteSelect.tsx` (buscador + alta rápida vía `<datalist>` nativo, mismo patrón que
+`BuscadorProductoCarrito.tsx`), `NotaCredito.tsx` (flujo de 3 pasos: buscar venta → motivo/
+alcance/líneas + cliente → confirmar), con un link "Nota de crédito" nuevo en cada fila
+`CONFIRMADA` de `HistorialVentas.tsx`.
+
+### 27.3 Fase 2 — Emisión fiscal ante ARCA (WSFEv1)
+
+**Verificación previa obligatoria, antes de escribir código** (dado que no hay homologación):
+se descargó y leyó el manual oficial de WSFEv1 (`manual_desarrollador_COMPG_v3_3.pdf`,
+`pdftotext` para buscar texto dentro del PDF) para confirmar dos cosas que una exploración previa
+había dejado como supuestos sin verificar:
+1. **Código de comprobante**: confirmado contra la tabla oficial — `13: Nota de Crédito C` (y
+   `11: Factura C`, `12: Nota de Débito C`).
+2. **Posición de `CbtesAsoc` en el XML**: el supuesto inicial (justo después de `DocNro`, antes
+   de `CbteDesde`) **estaba mal**. El ejemplo real del manual lo ubica después de `MonCotiz`
+   (al final de `FECAEDetRequest`, antes de `Tributos`/`Iva`/`Opcionales`). También se confirmó
+   la regla de asociación: *"Para 12 o 13 pueden asociarse 11, 12, 13 y 15"* — una Nota de
+   Crédito C puede referenciar una Factura C, exactamente el caso de este negocio (Monotributo,
+   siempre Factura C). Subcampos de `CbteAsoc`: `Tipo`/`PtoVta`/`Nro` obligatorios, `Cuit`/
+   `CbteFch` opcionales (no se envían, no hacen falta).
+
+**`AfipFacturacionService.DatosFactura`** ganó 3 campos nullable (`cbteAsocTipo/PtoVta/Nro`) con
+un constructor de compatibilidad de 10 argumentos (el que ya usaban `FacturaFiscalService` y los
+tests) para no tocar esos call sites. `construirEnvelopeFECAESolicitar` agrega el bloque
+`<CbtesAsoc><CbteAsoc>...` en la posición verificada, solo si `cbteAsocTipo != null`. El resto de
+`AfipFacturacionService` (consulta de último autorizado, parseo de la respuesta) no necesitó
+ningún cambio: `cbteTipo` ya estaba parametrizado de punta a punta, así que pedir el tipo 13 en
+vez de 11 ya devuelve la numeración correcta e independiente para notas de crédito.
+
+**`NotaCreditoFiscalService`** (nuevo, sibling de `FacturaFiscalService`): `emitir(idNotaCredito)`
+valida que la nota sea `esFiscal` y no esté ya `EMITIDA`, busca la `FacturaFiscal` `EMITIDA` de la
+venta original (si no existe, error — no se puede asociar algo que no está emitido), calcula el
+concepto (`FacturaFiscalService.concepto`, promovido a package-private para reusarlo) a partir de
+las líneas de venta originales que la nota acredita, y llama a
+`AfipFacturacionService.emitirFacturaC` con `cbteTipo=13` y el comprobante asociado = la Factura
+C original (`tipo=11`, `puntoVenta`/`numero` de esa factura). Mismo patrón de error que
+`FacturaFiscalService.facturar`: ARCA-rechaza o falla la conexión → `estado=ERROR` con
+`errorDetalle`, reintentable llamando de nuevo al mismo endpoint; nunca se propaga la excepción
+ni se toca la venta.
+
+**Los datos del cliente (CUIT/DNI/nombre) para el PDF y el QR salen de la `FacturaFiscal`
+original, no de `NotaCredito.cliente`** — son conceptualmente distintos: `NotaCredito.cliente`
+es el catálogo interno nuevo (para la cuenta corriente), mientras que el documento fiscal tiene
+que identificar al mismo cliente que ya identificó la factura original ante ARCA.
+`FacturaPdfService` se refactorizó (sin cambiar su método público `generarPdf(FacturaFiscal)`)
+para extraer un helper común y agregar `generarPdfNotaCredito(NotaCredito, FacturaFiscal)`.
+
+**`ReporteService.balanceFinanciero`** resta el total de notas de crédito del período de
+`ingresosPorVentas` (todas, fiscales o internas — ambas son revenue real dado de baja) y de
+`costoMercaderia` solo la proporción de líneas que devolvieron stock. **Deliberadamente no se
+tocó** `comisionesPorVendedor`/`ventasPorMarca`/`productosGanadores` — afectaría comisiones ya
+pagadas y es una decisión de negocio que el dueño todavía no confirmó explícitamente.
+
+Endpoints nuevos: `POST /api/notas-credito/{id}/emitir-fiscal`,
+`GET /api/notas-credito/{id}/factura-pdf` (ambos bajo el mismo matcher ADMIN-only de
+`/api/notas-credito/**` de la fase 1, no hizo falta tocar `SecurityConfig`).
+
+### 27.4 Verificación
+
+Backend: **232 tests** verdes (`mvn test` — 12 nuevos de la fase 1 más 20 de la fase 2:
+`NotaCreditoFiscalServiceTest` completo, extensión de `AfipFacturacionServiceTest` para
+`CbtesAsoc`, extensión de `ReporteServiceTest` para el neteo, un test de integración end-to-end
+venta→factura→nota de crédito→emisión fiscal→PDF). Frontend: `tsc -b`, `npm run lint` y
+`npm run build` limpios. **No probado en un navegador real ni contra Supabase real** — esta
+sesión no tuvo acceso a Chrome ni a las variables de entorno (`SUPABASE_DB_PASSWORD`/
+`JWT_SECRET`/`GMAIL_APP_PASSWORD`) de la máquina de desarrollo real. El dueño corrió a mano el SQL
+de las tablas nuevas de la fase 1; el de los campos fiscales de la fase 2
+(`notas_credito.punto_venta/tipo_comprobante/numero/cae/cae_vencimiento/error_detalle`, todos
+nullable) queda pendiente de correr antes de probar la emisión fiscal contra producción real.
+
+**Pendiente — fases 3 y 4** (hoja de ruta, no implementadas esta sesión): usar el saldo a favor
+como medio de pago en Cobros (`VentaService`/`CajaService` necesitan tocarse: validar saldo
+disponible con lock, nueva lógica de medio de pago mixto, ajustar el arqueo para no contar el
+saldo aplicado como dinero real cobrado); cuenta corriente de Proveedores con pagos parciales de
+Compras (`Compra` necesita un campo `montoPagado`) y devoluciones de mercadería (tablas y
+servicio nuevos, espejo de Nota de Crédito pero sin AFIP, B2B interno).
+
+### 27.5 Fase 3 (misma sesión, agregada después de 27.2/27.3): saldo a favor como medio de pago en Cobros
+
+**`VentaRequest` ganó `idCliente`/`montoSaldoAplicado`** (ambos opcionales).
+`VentaController.registrar` resuelve `idCliente` en una referencia liviana de `Cliente` (mismo
+patrón que ya hace con `Producto`) y la pasa a `VentaService.registrarVenta`, que hace todo el
+trabajo real en un método nuevo, `validarYAplicarSaldoCliente`:
+- Si no se pidió saldo (`montoSaldoAplicado` null o ≤ 0), no hace nada — comportamiento idéntico
+  al de antes de esta fase, cero cambio de conducta para el 100% de las ventas existentes.
+- Si se pidió, exige un `cliente` en la venta (400 si no hay), rechaza si el monto pedido supera
+  el total de la venta (400), y **lockea la fila del cliente**
+  (`ClienteRepository.buscarPorIdConLock`, agregado ya en la fase 1 justamente para este momento)
+  antes de calcular el saldo disponible — mismo motivo que el lock pessimista de
+  `ProductoRepository` sobre stock: sin esto, dos ventas simultáneas podrían leer el mismo saldo,
+  pasar la validación juntas, y dejarlo negativo.
+- Si el saldo pedido **cubre el total completo** de la venta, fuerza
+  `medioPago="SALDO_CUENTA_CORRIENTE"` **sin confiar en lo que mandó el frontend** (mismo
+  criterio de "recalcular, no confiar" que ya usa este método para el total/subtotal) — si es
+  parcial, el medio de pago elegido sigue aplicando por el resto.
+- El movimiento `DEBITO` en `MovimientoCuentaCorrienteCliente` se crea recién después de guardar
+  la venta (necesita su id para `ventaAplicacion`), en los dos puntos de guardado del método
+  (rama con descuento/OTP pendiente, y rama confirmada directo) — **el saldo se debita de
+  inmediato, incluso si la venta queda `PENDIENTE_AUTORIZACION`** por un descuento manual, mismo
+  criterio que ya existía para el stock (se reserva de inmediato, sin liberación automática si el
+  OTP nunca se confirma). Es una decisión deliberada de consistencia con el código existente, no
+  un caso nuevo sin pensar.
+
+**`CajaService.armarResumen`**: una venta pagada parcialmente con saldo sigue teniendo
+`medioPago="EFECTIVO"` (o el que sea) por el resto, pero `totalVenta` incluye la parte pagada con
+saldo — `sumarVentasPorMedio` ahora resta `montoSaldoAplicado` de cada venta antes de sumar, para
+no contar como dinero real algo que en realidad fue un crédito de cuenta corriente. Una venta
+pagada 100% con saldo ya quedaba afuera de los tres buckets (su medioPago no matchea ninguno) sin
+necesidad de cambio. `ResumenDiaDTO`/`ResumenDiaResponse` ganaron `ventasPagadasConSaldo`
+(informativo, no suma a `cajaTotalDelDia`) para que se vea en el arqueo sin confundirse con
+dinero real cobrado — mostrado en `Caja.tsx` solo cuando es mayor a cero.
+
+**Frontend**: `RegistrarVenta.tsx` (Cobros) ganó una sección "Cliente (opcional)" con
+`BuscadorClienteSelect`; al elegir un cliente se consulta su saldo
+(`GET /api/clientes/{id}/cuenta-corriente`) y aparece un input "Pagar con saldo" (tope
+`min(saldoDisponible, total)`). Si el monto cubre el total, se avisa que el medio de pago de
+abajo no aplica (el backend lo va a ignorar).
+
+**Bug propio encontrado armando el SQL de esta fase**: la columna `ventas.monto_saldo_aplicado`
+debía haber salido ya en el SQL de la fase 1 (estaba en el borrador de diseño original) pero no
+llegó al plan final que de verdad se ejecutó — quedó afuera por un error al condensar el
+documento. Se pidió aparte en esta sesión antes de poder probar el flujo.
+
+**Verificación**: backend **242 tests** verdes (10 nuevos: 6 en `VentaServiceTest` cubriendo
+saldo-cubre-el-total/parcial/sin-cliente/mayor-al-total/insuficiente/sin-saldo-no-toca-nada, 2 en
+`CajaServiceTest` para el ajuste del arqueo, 2 de integración end-to-end en
+`VentaControllerIntegrationTest` — venta→nota de crédito→saldo→nueva venta pagada con ese saldo,
+y saldo insuficiente → 409). Frontend: `tsc -b`, `npm run lint` y `npm run build` limpios. No
+probado en un navegador real ni contra Supabase real, mismos motivos que las fases 1 y 2.
+
+### 27.6 Fase 4 (misma sesión, última de las 4): cuenta corriente de Proveedores
+
+**`Compra` ganó `montoPagado`** (`CompraRequest.montoPagado`, opcional — ausente mantiene el
+comportamiento de siempre: se paga todo de una). `CompraService.registrarCompra` siempre inserta
+un movimiento `DEBE_COMPRA` por el total en un ledger nuevo
+(`MovimientoCuentaCorrienteProveedor`, mismo criterio que `MovimientoCuentaCorrienteCliente`:
+nunca un saldo suelto, siempre recalculado sumando el historial) y, si `montoPagado > 0`, también
+un `HABER_PAGO` por lo pagado en el momento — para una compra "normal" (pagada del todo, como
+siempre) estos dos movimientos se cancelan y el saldo pendiente del proveedor no se mueve, cero
+cambio de conducta para quien no usa esto.
+
+**`CompraService.registrarPago(idCompra, monto, medioPago, empleado)`** (nuevo,
+`POST /api/compras/{id}/pagos`): pago posterior contra **una compra puntual** — rechaza (409) si
+el monto supera el saldo pendiente de *esa* compra (`totalCompra - montoPagado`), incrementa
+`Compra.montoPagado` e inserta un `HABER_PAGO` más en el ledger. No lockea la fila de `Compra`:
+operación manual de ADMIN, volumen bajo, mismo riesgo aceptado y documentado que
+`NotaCreditoService` ya asume para su guarda de doble acreditación.
+
+**`CompraService.registrarDevolucion`** (nuevo, `POST /api/proveedores/devoluciones`): espejo
+del lado compra de la Nota de Crédito, pero sin AFIP (B2B interno, nunca llega a ARCA). Por
+línea: lockea el producto (`buscarPorIdConLock`), valida stock suficiente, lo decrementa.
+Inserta un `HABER_DEVOLUCION` que acredita la cuenta corriente **general** del proveedor —
+**decisión deliberada, no earmarked contra una compra puntual** (a diferencia de un pago): el
+proveedor queda "a favor" nuestro por ese monto, descontable de cualquier pago futuro, sin
+importar a cuál compra se refería la mercadería devuelta. `idCompraOriginal` en el request es
+puramente informativo (para trazabilidad), no afecta el saldo de esa compra en particular.
+
+**`calcularSaldoProveedor(idProveedor)`**: `DEBE_COMPRA` suma lo que le debemos al proveedor,
+`HABER_PAGO`/`HABER_DEVOLUCION` lo restan — si el resultado es negativo, es el proveedor quien
+nos debe a nosotros (devoluciones o pagos de más). `GET /api/proveedores/{id}/cuenta-corriente`
+expone esto más el historial completo.
+
+**Ningún endpoint nuevo necesitó un matcher nuevo en `SecurityConfig`**: `POST
+/api/compras/{id}/pagos` cae bajo el matcher existente `/api/compras/**` (ADMIN-only) y
+`POST`/`GET /api/proveedores/devoluciones` + `GET /api/proveedores/{id}/cuenta-corriente` caen
+bajo `/api/proveedores/**` (también ADMIN-only) — mismo hallazgo que ya se repitió en las fases
+1 a 3, los nuevos sub-paths de un prefijo ya protegido no necesitan nada adicional.
+
+**`ProveedorService.obtenerPorId` pasó de privado a público** — único cambio de visibilidad
+necesario, para que `CompraService.registrarDevolucion` pudiera resolver el proveedor por id sin
+duplicar esa búsqueda.
+
+**Frontend**: `CuentaCorrienteProveedores.tsx` (`/proveedores/cuenta-corriente`, nuevo) — elegir
+un proveedor muestra su saldo + historial; "Registrar pago" busca las compras de ese proveedor
+con saldo pendiente en un rango de fechas (filtrado client-side sobre `GET /api/compras`, que ya
+existía) y permite pagar una puntual; "Registrar devolución" reusa `BuscadorProductoCarrito` +
+`useCarrito` (mismo patrón que Cobros) para armar las líneas. Convive con la ya existente
+`PagosProveedores.tsx` sin reemplazarla — esa pantalla sigue siendo un reporte informativo de
+compras por proveedor (cuánto se le compró), no un registro de pagos reales.
+
+**Verificación**: backend **254 tests** verdes (12 nuevos: 8 en `CompraServiceTest` —
+compra sin/con/mayor-a-100%-montoPagado, pago dentro/fuera del saldo pendiente, devolución
+reduce-stock/stock-insuficiente, cálculo de saldo — y 4 de integración nuevos en
+`ProveedorControllerIntegrationTest`, archivo nuevo: compra con pago parcial → pago posterior →
+saldo en cero, pago que supera el saldo → 409, devolución → stock devuelto + saldo a favor de
+D13, y 403 para VENDEDOR). Frontend: `tsc -b`, `npm run lint` y `npm run build` limpios. No
+probado en un navegador real ni contra Supabase real, mismos motivos que las fases anteriores.
+
+**Con esto, las 4 fases del pedido original del dueño quedaron completas** en esta misma sesión
+(2026-10-30): Notas de Crédito (interna y fiscal ante ARCA), catálogo de Clientes, saldo a favor
+aplicable como medio de pago en Cobros, y cuenta corriente de Proveedores.

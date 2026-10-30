@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,7 @@ import com.thiago.escenasFX.dto.CompraRequest;
 import com.thiago.escenasFX.dto.CompraResponse;
 import com.thiago.escenasFX.dto.PagoProveedorDTO;
 import com.thiago.escenasFX.dto.ProductoComprasRankingDTO;
+import com.thiago.escenasFX.dto.RegistrarPagoProveedorRequest;
 import com.thiago.escenasFX.model.Compra;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
@@ -62,5 +64,14 @@ public class CompraController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @RequestParam(defaultValue = "10") int limit) {
         return compraService.productosMasComprados(desde, hasta, limit);
+    }
+
+    @PostMapping("/{id}/pagos")
+    public CompraResponse registrarPago(@PathVariable Integer id,
+            @Valid @RequestBody RegistrarPagoProveedorRequest request) {
+        Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
+            .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
+        Compra compra = compraService.registrarPago(id, request.getMonto(), request.getMedioPago(), empleado);
+        return CompraMapper.toResponse(compra);
     }
 }

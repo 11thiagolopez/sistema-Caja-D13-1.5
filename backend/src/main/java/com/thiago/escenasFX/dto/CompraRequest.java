@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -29,4 +30,9 @@ public class CompraRequest {
     @NotEmpty
     @Valid
     private List<CompraItemRequest> items;
+
+    // Cuenta corriente de proveedor, nuevo: ausente o null = se paga todo de una (comportamiento
+    // de siempre); un valor menor al total deja el resto como deuda pendiente con el proveedor,
+    // pagable después con POST /api/compras/{id}/pagos.
+    private BigDecimal montoPagado;
 }

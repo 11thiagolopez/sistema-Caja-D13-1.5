@@ -2,6 +2,8 @@ package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -11,15 +13,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.CompraItemRequest;
 import com.thiago.escenasFX.dto.CompraRequest;
+import com.thiago.escenasFX.dto.DetalleDevolucionProveedorRequest;
+import com.thiago.escenasFX.dto.DevolucionProveedorRequest;
 import com.thiago.escenasFX.dto.PagoProveedorDTO;
 import com.thiago.escenasFX.dto.ProductoComprasRankingDTO;
 import com.thiago.escenasFX.dto.ProductoRequest;
 import com.thiago.escenasFX.model.Compra;
 import com.thiago.escenasFX.model.CompraItem;
+import com.thiago.escenasFX.model.DetalleDevolucionProveedor;
+import com.thiago.escenasFX.model.DevolucionProveedor;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Proveedor;
 import com.thiago.escenasFX.repository.CompraRepository;
+import com.thiago.escenasFX.repository.DevolucionProveedorRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 
 @Service
@@ -29,13 +38,19 @@ public class CompraService {
     private final ProductoRepository productoRepo;
     private final ProductoService productoService;
     private final ProveedorService proveedorService;
+    private final MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
+    private final DevolucionProveedorRepository devolucionProveedorRepo;
 
     public CompraService(CompraRepository compraRepo, ProductoRepository productoRepo,
-            ProductoService productoService, ProveedorService proveedorService) {
+            ProductoService productoService, ProveedorService proveedorService,
+            MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo,
+            DevolucionProveedorRepository devolucionProveedorRepo) {
         this.compraRepo = compraRepo;
         this.productoRepo = productoRepo;
         this.productoService = productoService;
         this.proveedorService = proveedorService;
+        this.movimientoProveedorRepo = movimientoProveedorRepo;
+        this.devolucionProveedorRepo = devolucionProveedorRepo;
     }
 
     @Transactional
@@ -80,7 +95,67 @@ public class CompraService {
         }
 
         compra.setTotalCompra(total);
-        return compraRepo.save(compra);
+
+        // Cuenta corriente de proveedor: ausente = se paga todo de una (comportamiento de
+        // siempre, cero cambio de conducta para quien no usa esto). Un valor menor deja el resto
+        // como deuda pendiente, pagable después con registrarPago.
+        BigDecimal montoPagado = req.getMontoPagado() != null ? req.getMontoPagado() : total;
+        if (montoPagado.compareTo(BigDecimal.ZERO) < 0 || montoPagado.compareTo(total) > 0) {
+            throw new IllegalArgumentException("El monto pagado no puede ser negativo ni mayor al total de la compra");
+        }
+        compra.setMontoPagado(montoPagado);
+
+        Compra guardada = compraRepo.save(compra);
+
+        registrarMovimientoProveedor(proveedor, "DEBE_COMPRA", total, guardada, null, null, empleado,
+            "Compra #" + guardada.getIdCompra());
+        if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
+            registrarMovimientoProveedor(proveedor, "HABER_PAGO", montoPagado, guardada, req.getMedioPago(), null,
+                empleado, "Pago al registrar la compra #" + guardada.getIdCompra());
+        }
+
+        return guardada;
+    }
+
+    /**
+     * Pago posterior contra una compra puntual ya registrada — a diferencia del pago inicial de
+     * registrarCompra, este sí puede dejar saldo pendiente parcial. No lockea la fila de Compra:
+     * es una operación manual de ADMIN, de volumen bajo, mismo criterio de riesgo aceptado que
+     * NotaCreditoService documenta para su guarda de doble acreditación.
+     */
+    @Transactional
+    public Compra registrarPago(Integer idCompra, BigDecimal monto, String medioPago, Empleado empleado) {
+        Compra compra = compraRepo.findById(idCompra)
+            .orElseThrow(() -> new IllegalArgumentException("Compra no existe: " + idCompra));
+
+        BigDecimal montoPagadoActual = compra.getMontoPagado() != null ? compra.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal saldoPendiente = compra.getTotalCompra().subtract(montoPagadoActual);
+        if (monto.compareTo(saldoPendiente) > 0) {
+            throw new IllegalStateException("El pago supera el saldo pendiente de la compra #" + idCompra
+                + " (pendiente: $" + saldoPendiente + ", pagado: $" + monto + ")");
+        }
+
+        compra.setMontoPagado(montoPagadoActual.add(monto));
+        Compra guardada = compraRepo.save(compra);
+
+        registrarMovimientoProveedor(compra.getProveedor(), "HABER_PAGO", monto, guardada, medioPago, null,
+            empleado, "Pago contra la compra #" + idCompra);
+
+        return guardada;
+    }
+
+    private void registrarMovimientoProveedor(Proveedor proveedor, String tipo, BigDecimal monto, Compra compra,
+            String medioPago, DevolucionProveedor devolucion, Empleado empleado, String descripcion) {
+        MovimientoCuentaCorrienteProveedor movimiento = new MovimientoCuentaCorrienteProveedor();
+        movimiento.setProveedor(proveedor);
+        movimiento.setTipo(tipo);
+        movimiento.setMonto(monto);
+        movimiento.setCompra(compra);
+        movimiento.setMedioPago(medioPago);
+        movimiento.setDevolucion(devolucion);
+        movimiento.setDescripcion(descripcion);
+        movimiento.setEmpleado(empleado);
+        movimientoProveedorRepo.save(movimiento);
     }
 
     private Producto resolverProducto(CompraItemRequest itemReq, Proveedor proveedor) {
@@ -145,5 +220,78 @@ public class CompraService {
             .sorted(Comparator.comparingLong(ProductoComprasRankingDTO::getCantidadComprada).reversed())
             .limit(limit)
             .toList();
+    }
+
+    public List<MovimientoCuentaCorrienteProveedor> movimientosProveedor(Integer idProveedor) {
+        return movimientoProveedorRepo.findByProveedorIdProveedorOrderByFechaDesc(idProveedor);
+    }
+
+    public List<DevolucionProveedor> listarDevolucionesPorRango(LocalDateTime desde, LocalDateTime hasta) {
+        return devolucionProveedorRepo.findByFechaBetweenOrderByFechaDesc(desde, hasta);
+    }
+
+    // Mismo criterio que ClienteService.calcularSaldo: nunca se guarda un saldo suelto, se
+    // recalcula siempre sumando el ledger. Acá DEBE_COMPRA suma lo que le debemos al proveedor,
+    // HABER_PAGO/HABER_DEVOLUCION lo restan.
+    public BigDecimal calcularSaldoProveedor(Integer idProveedor) {
+        BigDecimal saldo = BigDecimal.ZERO;
+        for (MovimientoCuentaCorrienteProveedor m : movimientosProveedor(idProveedor)) {
+            saldo = "DEBE_COMPRA".equals(m.getTipo()) ? saldo.add(m.getMonto()) : saldo.subtract(m.getMonto());
+        }
+        return saldo;
+    }
+
+    /**
+     * Devolución de mercadería a un proveedor — espejo del lado compra de la Nota de Crédito,
+     * sin AFIP (B2B interno). Reduce stock real y acredita la cuenta corriente GENERAL del
+     * proveedor (no earmarked contra una compra puntual, ver DevolucionProveedor).
+     */
+    @Transactional
+    public DevolucionProveedor registrarDevolucion(DevolucionProveedorRequest req, Empleado empleado) {
+        Proveedor proveedor = proveedorService.obtenerPorId(req.getIdProveedor());
+        Compra compraOriginal = req.getIdCompraOriginal() != null
+            ? compraRepo.findById(req.getIdCompraOriginal())
+                .orElseThrow(() -> new IllegalArgumentException("Compra no existe: " + req.getIdCompraOriginal()))
+            : null;
+
+        List<DetalleDevolucionProveedor> detalles = new ArrayList<>();
+        BigDecimal montoTotal = BigDecimal.ZERO;
+
+        for (DetalleDevolucionProveedorRequest lineaReq : req.getDetalles()) {
+            Producto producto = productoRepo.buscarPorIdConLock(lineaReq.getIdProducto())
+                .orElseThrow(() -> new IllegalArgumentException("Producto no existe: " + lineaReq.getIdProducto()));
+            if (producto.getStockActual() < lineaReq.getCantidad()) {
+                throw new IllegalStateException("Stock insuficiente para devolver " + producto.getDescripcion());
+            }
+            producto.setStockActual(producto.getStockActual() - lineaReq.getCantidad());
+            productoRepo.save(producto);
+
+            BigDecimal subtotal = lineaReq.getPrecioUnitario().multiply(BigDecimal.valueOf(lineaReq.getCantidad()));
+            DetalleDevolucionProveedor detalle = new DetalleDevolucionProveedor();
+            detalle.setProducto(producto);
+            detalle.setCantidad(lineaReq.getCantidad());
+            detalle.setPrecioUnitario(lineaReq.getPrecioUnitario());
+            detalle.setSubtotal(subtotal);
+            detalles.add(detalle);
+
+            montoTotal = montoTotal.add(subtotal);
+        }
+
+        DevolucionProveedor devolucion = new DevolucionProveedor();
+        devolucion.setProveedor(proveedor);
+        devolucion.setCompraOriginal(compraOriginal);
+        devolucion.setMotivo(req.getMotivo());
+        devolucion.setMontoTotal(montoTotal);
+        devolucion.setEmpleado(empleado);
+        detalles.forEach(d -> d.setDevolucion(devolucion));
+        devolucion.setDetalles(detalles);
+
+        DevolucionProveedor guardada = devolucionProveedorRepo.save(devolucion);
+
+        registrarMovimientoProveedor(proveedor, "HABER_DEVOLUCION", montoTotal, null, null, guardada, empleado,
+            "Devolución #" + guardada.getIdDevolucion()
+                + (req.getMotivo() != null && !req.getMotivo().isBlank() ? " (" + req.getMotivo() + ")" : ""));
+
+        return guardada;
     }
 }

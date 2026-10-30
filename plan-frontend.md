@@ -58,18 +58,60 @@ domicilio y calcular su comisión), no tiene ningún endpoint habilitado en `Sec
 `token` y `rol` (ej. en memoria + `localStorage` para persistir la sesión) para el resto de los
 llamados y para decidir qué mostrar en la UI.
 
-### Productos (`/api/productos`) — ADMIN y VENDEDOR
+### Productos (`/api/productos`) — ADMIN y VENDEDOR (alta/edición/baja: solo ADMIN)
 
-| Método | Ruta | Devuelve |
-|---|---|---|
-| GET | `/api/productos` | `Producto[]` (entidad completa: incluye `stockActual`, `precioVenta`, `precioCompra`, `precioVentaUsd`, `precioCompraUsd`) |
-| GET | `/api/productos/{id}` | `Producto` |
+| Método | Ruta | Rol | Body | Devuelve |
+|---|---|---|---|---|
+| GET | `/api/productos` | ADMIN, VENDEDOR | — | `ProductoResponse[]` |
+| GET | `/api/productos/{id}` | ADMIN, VENDEDOR | — | `ProductoResponse` |
+| GET | `/api/productos/buscar-por-codigo?codigo=` | ADMIN, VENDEDOR | — | `ProductoResponse` (busca por `codigoBarras` o `codigoInterno`, solo `activo=true`) |
+| POST | `/api/productos` | **solo ADMIN** | `ProductoRequest` (ver abajo) | `201 ProductoResponse` |
+| POST | `/api/productos/cargar-stock` | **solo ADMIN** | `{codigo, cantidad}` | `ProductoResponse` (suma `cantidad` al stock del producto resuelto por `codigo`) |
+| PATCH | `/api/productos/{id}` | **solo ADMIN** | `ProductoUpdateRequest` (ver abajo) | `ProductoResponse` |
+| DELETE | `/api/productos/{id}` | **solo ADMIN** | — | baja lógica (`activo=false`), `204` |
+
+**Ya no devuelve la entidad JPA directo** (esto cambió respecto a versiones anteriores de este
+documento) — `ProductoResponse`: `{idProducto, rubro, familia, marca, numeroMarca, correlativo,
+codigoInterno, proveedor, codigoFabrica, codigoBarras, descripcion, precioVenta, precioCompra,
+precioVentaUsd, precioCompraUsd, stockActual, activo}`.
 
 `precioVentaUsd`/`precioCompraUsd` (dolarización, 2026-08-12): ancla en USD de los precios en
 pesos, recalculada sola cada vez que se guarda un precio (alta, edición en línea, compra) contra
 la última cotización conocida — nunca se editan directo, son de solo lectura en el frontend
 (`Productos.tsx` los muestra como dos columnas extra). Pueden ser `null` si todavía no hay ninguna
 cotización cargada en el sistema.
+
+`ProductoRequest` (alta, `POST /api/productos`):
+```ts
+{
+  rubro: string;          // 2 dígitos
+  familia: string;        // 2 dígitos
+  marca: string;          // nombre libre, no un código — ver sección Marcas abajo
+  proveedor: string;
+  codigoFabrica?: string; // tipeado a mano o escaneado
+  descripcion: string;
+  precioVenta: number;
+  precioCompra?: number;
+  stockActual: number;
+}
+```
+
+`ProductoUpdateRequest` (edición en línea, `PATCH /api/productos/{id}`, 2026-08-05) — **todos los
+campos son opcionales, semántica PATCH**: solo se actualiza el que venga no-nulo.
+```ts
+{
+  descripcion?: string;
+  marca?: string;
+  precioVenta?: number;
+  precioCompra?: number;
+  stockActual?: number;
+  codigoFabrica?: string;  // "" (string vacío) limpia el código de fábrica
+}
+```
+No incluye `rubro`/código de marca/`proveedor`: esos forman parte de `codigoInterno` o de la
+resolución de catálogos, cambiarlos ahí rompería esa identidad — para eso existe el alta de un
+producto nuevo. `Productos.tsx` (solo ADMIN) usa esto para la edición en línea tocando una celda
+de la tabla (Enter guarda, Escape cancela, click afuera guarda).
 
 ### Ventas (`/api/ventas`)
 
@@ -78,6 +120,9 @@ cotización cargada en el sistema.
 | POST | `/api/ventas` | ADMIN, VENDEDOR | `VentaRequest` (ver abajo) | `VentaResponse` |
 | POST | `/api/ventas/descuento/confirmar` | ADMIN, VENDEDOR | `{idVenta, codigo}` | `VentaResponse` |
 | GET | `/api/ventas?desde=&hasta=` | **solo ADMIN** | — | `VentaResponse[]` |
+| GET | `/api/ventas/{id}` | **solo ADMIN** | — | `VentaResponse` |
+| GET | `/api/ventas/{id}/pdf` | **solo ADMIN** | — | PDF del comprobante (ticket o remito según `tipoVenta`), armado al vuelo, sin guardarse de antemano |
+| POST | `/api/ventas/{id}/enviar-comprobante` | ADMIN, VENDEDOR | `{email}` | `VentaResponse` (manda el mismo PDF por mail, marca `comprobanteEnviadoPorEmail=true`) |
 
 `VentaRequest`:
 ```ts
@@ -85,41 +130,98 @@ cotización cargada en el sistema.
   idEmpleado: number;
   medioPago: string;        // "EFECTIVO" | "TRANSFERENCIA" | "TARJETA"
   tipoComprobante?: string;
-  detalles: { idProducto: number; cantidad: number; precioUnitario: number }[];
+  detalles: {
+    idProducto?: number;    // línea de catálogo, descuenta stock
+    descripcion?: string;   // O ESTO: ítem manual/mano de obra, no toca stock — uno de los dos es obligatorio
+    tipo?: string;          // "ARTICULO" (default) | "COPIA" (legado) | "SERVICIO"
+    cantidad: number;
+    precioUnitario: number;
+  }[];
   descuento?: number;       // si > 0, requiere motivoDescuento
   motivoDescuento?: string;
+  // Cuenta corriente, nuevo 2026-10-30 (fase 3 de Notas de Crédito — ver plan-migracion.md
+  // sección 27.5): idCliente obligatorio si montoSaldoAplicado > 0. Si el saldo cubre el total
+  // completo, el backend ignora "medioPago" y fuerza "SALDO_CUENTA_CORRIENTE" sin confiar en lo
+  // que mande el frontend.
+  idCliente?: number;
+  montoSaldoAplicado?: number;
 }
 ```
 
 `VentaResponse`: `{idVenta, fecha, idEmpleado, medioPago, tipoComprobante, totalVenta, descuento,
-estado, detalles: [{idProducto, descripcionProducto, cantidad, precioUnitario, subtotal,
-proveedorProducto}]}`. `proveedorProducto` (nuevo, sesión 2026-09-17) es el `Producto.proveedor`
-al momento de la venta — `null` en ítems manuales sin producto de catálogo (mano de obra);
-`HistorialVentas.tsx` lo usa para identificar rápido a qué proveedor corresponde un producto
-vendido si la venta falla o hay un reclamo.
-`estado` es `"CONFIRMADA"` o `"PENDIENTE_AUTORIZACION"` (esto último solo si `descuento > 0`: la
-venta ya descontó stock pero necesita que se confirme el código OTP antes de poder considerarse
-una venta real para el arqueo de caja. El código sólo le llega por email al ADMIN — ahí está el
-control de seguridad —, pero desde el 2026-07-30 cualquiera de los dos roles puede escribirlo en
-`POST /api/ventas/descuento/confirmar`, porque en la práctica es el VENDEDOR quien está frente al
-cliente y termina la venta apenas el ADMIN le pasa el código).
+estado, clienteEmail, comprobanteEnviadoPorEmail, tipoVenta, clienteNombre, clienteTelefono,
+direccionTrabajo, descripcionTrabajo, estadoTrabajo, idEmpleadoTecnico, nombreTecnico, idCliente,
+nombreCliente, montoSaldoAplicado, detalles: [{idDetalle, idProducto, descripcionProducto, tipo,
+cantidad, precioUnitario, subtotal, proveedorProducto}]}`.
+
+- `tipoVenta` es `"MOSTRADOR"` o `"DOMICILIO"` — los campos `clienteNombre`/`clienteTelefono`/
+  `direccionTrabajo`/`descripcionTrabajo`/`estadoTrabajo`/`idEmpleadoTecnico`/`nombreTecnico` solo
+  tienen valor en ventas `DOMICILIO` (ver subsección "Trabajo a domicilio" abajo).
+- `idCliente`/`nombreCliente` (nuevo 2026-10-30) son el cliente del catálogo `/api/clientes` —
+  **distintos** de `clienteNombre`/`clienteTelefono` arriba, que son texto libre de Trabajo a
+  domicilio. `montoSaldoAplicado` es cuánto de esta venta se pagó con saldo de cuenta corriente
+  (`null` si no se usó saldo). `medioPago` puede valer `"SALDO_CUENTA_CORRIENTE"` cuando el saldo
+  cubrió el total completo.
+- `proveedorProducto` (sesión 2026-09-17) es el `Producto.proveedor` al momento de la venta —
+  `null` en ítems manuales sin producto de catálogo; `HistorialVentas.tsx` lo usa para identificar
+  rápido a qué proveedor corresponde un producto vendido si la venta falla o hay un reclamo.
+- `estado` es `"CONFIRMADA"` o `"PENDIENTE_AUTORIZACION"` (esto último solo si `descuento > 0`: la
+  venta ya descontó stock pero necesita que se confirme el código OTP antes de poder considerarse
+  una venta real para el arqueo de caja. El código sólo le llega por email al ADMIN — ahí está el
+  control de seguridad —, pero desde el 2026-07-30 cualquiera de los dos roles puede escribirlo en
+  `POST /api/ventas/descuento/confirmar`, porque en la práctica es el VENDEDOR quien está frente al
+  cliente y termina la venta apenas el ADMIN le pasa el código).
 
 **UX a resolver**: no hay un endpoint "ventas pendientes de autorización". Para que un ADMIN vea
 qué ventas están esperando confirmación, hay que pedir `GET /api/ventas?desde=hoy&hasta=hoy` y
 filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 
+### Trabajo a domicilio (`/api/ventas/trabajo-domicilio`) — **exclusivo ADMIN**, nuevo 2026-08-10
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| POST | `/api/ventas/trabajo-domicilio` | `TrabajoDomicilioRequest` (ver abajo) | `VentaResponse` |
+| PUT | `/api/ventas/trabajo-domicilio/{id}` | igual que POST (sin `idVenta`, va en la URL) | `VentaResponse` |
+
+`TrabajoDomicilioRequest`:
+```ts
+{
+  idVenta?: number;           // ausente = crear uno nuevo; presente (solo en el PUT) = reabrir/editar
+  idEmpleado: number;
+  idEmpleadoTecnico?: number; // filtrar el selector a empleados con rol === "TECNICO"
+  clienteNombre: string;
+  clienteTelefono?: string;
+  direccionTrabajo?: string;
+  descripcionTrabajo?: string;
+  estadoTrabajo?: string;     // "AGENDADO" | "EN_CURSO" | "COMPLETADO" — "COBRADO" lo fija el backend si cerrar=true
+  detalles?: { idProducto?: number; descripcion?: string; tipo?: string; cantidad: number; precioUnitario: number }[];
+  cerrar: boolean;            // true = "Cerrar y cobrar" (exige al menos un ítem); false = "Guardar borrador"
+}
+```
+A diferencia de `VentaRequest`, `detalles` **no es obligatorio**: se puede guardar un trabajo
+recién agendado sin artículos ni mano de obra todavía. Al reabrir un borrador (`PUT`), el backend
+primero devuelve el stock de las líneas viejas con producto y recién después descuenta las nuevas,
+para no descuadrar el inventario. Los artículos de catálogo sí descuentan stock real; una línea
+`tipo="SERVICIO"` (mano de obra, sin `idProducto`) no. `TrabajoDomicilio.tsx` (`/ventas/domicilio`)
+es la pantalla; `BuscadorProductoCarrito.tsx` (compartido con Cobros) es el buscador de artículos.
+
 ### Facturación fiscal (`/api/ventas/{idVenta}/factura`) — **solo ADMIN**, nuevo 2026-08-19
 
 | Método | Ruta | Body | Devuelve |
 |---|---|---|---|
-| POST | `/api/ventas/{idVenta}/factura` | `{clienteDocTipo, clienteDocNro?}` | `FacturaFiscalResponse` |
+| POST | `/api/ventas/{idVenta}/factura` | `{clienteDocTipo, clienteDocNro?, clienteNombre?}` | `FacturaFiscalResponse` |
 | GET | `/api/ventas/{idVenta}/factura` | — | `200 FacturaFiscalResponse` si ya se facturó, `204` si no |
+| GET | `/api/ventas/{idVenta}/factura/pdf` | — | PDF de la factura (requiere que ya exista, si no `400`) |
+| POST | `/api/ventas/{idVenta}/factura/enviar-email` | `{email}` | `204`, manda el mismo PDF por mail |
 
 `clienteDocTipo`: `80` (CUIT) \| `96` (DNI) \| `99` (Consumidor Final — en ese caso `clienteDocNro`
-va vacío, cualquier otro valor lo exige). `FacturaFiscalResponse`: `{idFactura, idVenta,
-puntoVenta, tipoComprobante, numero, clienteDocTipo, clienteDocNro, cae, caeVencimiento, importe,
-estado, errorDetalle}` (`estado`: `"PENDIENTE"` \| `"EMITIDA"` \| `"ERROR"` — con `ERROR`,
-`errorDetalle` trae el motivo que devolvió ARCA, reintentable llamando `POST` de nuevo).
+va vacío, cualquier otro valor lo exige). `clienteNombre` (nuevo, sesión 2026-09-12): obligatorio
+igual que `clienteDocNro` salvo que `clienteDocTipo` sea Consumidor Final — WSFEv1 no lo pide, pero
+toda factura real de ARCA lo muestra impreso. `FacturaFiscalResponse`: `{idFactura, idVenta,
+puntoVenta, tipoComprobante, numero, clienteDocTipo, clienteDocNro, clienteNombre, cae,
+caeVencimiento, importe, estado, errorDetalle}` (`estado`: `"PENDIENTE"` \| `"EMITIDA"` \|
+`"ERROR"` — con `ERROR`, `errorDetalle` trae el motivo que devolvió ARCA, reintentable llamando
+`POST` de nuevo).
 
 **Acción aparte del comprobante interno** (no lo reemplaza, no se dispara sola): D13 es Monotributo,
 así que siempre emite Factura C real contra ARCA de producción — **no hay ambiente de
@@ -144,7 +246,11 @@ abajo para de dónde sale `cotizacionManual`).
 
 `ResumenDiaResponse`: `{ventas: VentaResponse[], retiros: MovimientoCajaResponse[], montoInicial,
 ventasEfectivo, ventasTransferencia, ventasTarjeta, retirosEfectivo, retirosTransferencia,
-efectivoFinal, totalDigital, cajaTotalDelDia}` (todos los montos `number`).
+efectivoFinal, totalDigital, cajaTotalDelDia, ventasPagadasConSaldo}` (todos los montos `number`).
+`ventasPagadasConSaldo` (nuevo 2026-10-30) es informativo — no suma a `cajaTotalDelDia` — cuánto
+de las ventas del período se pagó con saldo de cuenta corriente en vez de dinero real. Una venta
+pagada parcialmente con saldo ya tiene su parte en efectivo/transferencia/tarjeta restada de los
+campos correspondientes (no hay que restarla de nuevo en el frontend).
 
 `ResumenRangoResponse`: `{desde, hasta, total: ResumenDiaResponse, sesiones: [{idSesion, fecha,
 estado, empleadoApertura, resumen: ResumenDiaResponse}]}` — el desglose por turno.
@@ -190,9 +296,13 @@ fila de hoy que este gate ya dejó creada.
 | GET | `/api/reportes/balance?desde=&hasta=` | `BalanceFinancieroResponse` |
 | GET | `/api/reportes/comisiones?desde=&hasta=` | `ComisionEmpleadoDTO[]` — `{idEmpleado, nombreEmpleado, comisionPorcentaje, gananciaGenerada, comisionCalculada, cantidadVentas}` |
 | GET | `/api/reportes/ventas-por-vendedor?desde=&hasta=&idEmpleado=` | `VentaResponse[]` |
+| GET | `/api/reportes/ventas-por-marca?desde=&hasta=` | `MarcaRankingDTO[]` — `{marca, cantidadVendida, totalFacturado}` |
+| GET | `/api/reportes/ventas-por-forma-pago?desde=&hasta=` | `FormaPagoResumenDTO[]` — `{medioPago, cantidadVentas, totalFacturado}` |
 
-`BalanceFinancieroResponse` (desde la sesión 2026-08-04) gana `comisionesPagadas`. La fórmula
-cambió: `gananciaNeta = ingresosPorVentas - costoMercaderia - gastosOperativos - comisionesPagadas`.
+`BalanceFinancieroResponse`: `{desde, hasta, ingresosPorVentas, costoMercaderia,
+gastosOperativos, comisionesPagadas, gananciaNeta}` (desde la sesión 2026-08-04 gana
+`comisionesPagadas`). La fórmula: `gananciaNeta = ingresosPorVentas - costoMercaderia -
+gastosOperativos - comisionesPagadas`.
 `gastosOperativos` ahora es la suma de la tabla `Gasto` (ver abajo), **no** los retiros de caja —
 esos quedan fuera del cálculo de ganancia (siguen existiendo como arqueo puro en `/api/caja/resumen*`).
 
@@ -219,6 +329,34 @@ código→nombre: escribe y muestra el nombre directamente.
 | POST | `/api/proveedores` | `{nombre, contacto?, telefono?, email?}` | `ProveedorResponse` |
 | PUT | `/api/proveedores/{id}` | igual que POST | `ProveedorResponse` |
 | DELETE | `/api/proveedores/{id}` | — | baja lógica, `204` |
+| GET | `/api/proveedores/{id}/cuenta-corriente` | — | `CuentaCorrienteProveedorResponse` — nuevo 2026-10-30 |
+| POST | `/api/proveedores/devoluciones` | `DevolucionProveedorRequest` (ver abajo) | `201 DevolucionProveedorResponse` — nuevo 2026-10-30 |
+| GET | `/api/proveedores/devoluciones?desde=&hasta=` | — | `DevolucionProveedorResponse[]` — nuevo 2026-10-30 |
+
+**Cuenta corriente de proveedor, nuevo 2026-10-30** (fase 4 de Notas de Crédito — ver
+`plan-migracion.md` sección 27.6): "cuánto le debemos". `CuentaCorrienteProveedorResponse`:
+`{idProveedor, nombreProveedor, saldoPendiente, movimientos: [{idMovimiento, fecha, tipo, monto,
+medioPago, descripcion, idCompra, idDevolucion}]}` (`tipo`: `"DEBE_COMPRA"` (suma deuda,
+al registrar una compra) \| `"HABER_PAGO"` \| `"HABER_DEVOLUCION"` (ambos restan)).
+`saldoPendiente` **negativo** significa que el proveedor nos debe a nosotros (devoluciones o
+pagos de más) — nunca se guarda como un número suelto, se recalcula siempre sumando el
+historial de movimientos.
+
+`DevolucionProveedorRequest`:
+```ts
+{
+  idProveedor: number;
+  idEmpleado: number;
+  idCompraOriginal?: number;  // puramente informativo — no earmarked contra el saldo de esa compra
+  motivo?: string;
+  detalles: { idProducto: number; cantidad: number; precioUnitario: number }[];  // siempre un producto real, nunca una línea manual
+}
+```
+Reduce stock real (igual que una venta) y acredita la cuenta corriente **general** del
+proveedor, sin AFIP — es B2B interno, espejo del lado compra de la Nota de Crédito del lado
+venta. `DevolucionProveedorResponse`: `{idDevolucion, idProveedor, nombreProveedor,
+idCompraOriginal, fecha, motivo, montoTotal, detalles: [{idDetalle, idProducto,
+descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 
 ### Gastos (`/api/gastos`) — ADMIN
 
@@ -237,6 +375,7 @@ código→nombre: escribe y muestra el nombre directamente.
 | GET | `/api/compras?desde=&hasta=` | — | `CompraResponse[]` |
 | GET | `/api/compras/pagos-proveedor?desde=&hasta=` | — | `PagoProveedorDTO[]` |
 | GET | `/api/compras/productos-mas-comprados?desde=&hasta=&limit=` | — | `ProductoComprasRankingDTO[]` |
+| POST | `/api/compras/{id}/pagos` | `{idEmpleado, monto, medioPago}` | `CompraResponse` — nuevo 2026-10-30 |
 
 `CompraRequest`:
 ```ts
@@ -254,10 +393,24 @@ código→nombre: escribe y muestra el nombre directamente.
     precioCompraUnitario: number;
     precioVentaUnitario?: number;      // si viene, actualiza Producto.precioVenta también
   }[];
+  // Cuenta corriente de proveedor, nuevo 2026-10-30: ausente = se paga todo de una
+  // (comportamiento de siempre). Un valor menor al total deja el resto como deuda pendiente,
+  // pagable después con POST /api/compras/{id}/pagos.
+  montoPagado?: number;
 }
 ```
 Cargar una compra **actualiza stock y precio** del producto (suma `cantidad` al stock, refresca
 `precioCompra` siempre y `precioVenta` si vino) — no es solo un asiento contable.
+
+`CompraResponse`: `{idCompra, fecha, idProveedor, nombreProveedor, medioPago, totalCompra,
+montoPagado, saldoPendiente, items: [{idItem, idProducto, descripcionProducto, marcaProducto,
+cantidad, precioCompraUnitario, precioVentaUnitario, subtotal}]}`. `saldoPendiente` es calculado
+(`totalCompra - montoPagado`), no se puede escribir directo.
+
+`POST /api/compras/{id}/pagos` (nuevo 2026-10-30): pago posterior contra **esa compra puntual**
+— rechaza (`409`) si `monto` supera su `saldoPendiente` actual. No confundir con
+`POST /api/proveedores/devoluciones` (abajo): un pago siempre apunta a una compra específica, una
+devolución acredita la cuenta corriente **general** del proveedor.
 
 **`precioCompraUnitario`/`precioVentaUnitario` siempre viajan en pesos** — el contrato no cambió.
 `ComprasNueva.tsx` (2026-08-14) agregó un `<select>` ARS/USD por renglón para cada uno de los dos
@@ -278,6 +431,123 @@ precios más una columna "% Ganancia" (recargo sobre el costo: `precioVenta = pr
 `comision` es el % sobre la **ganancia** (no el total facturado) que se lleva ese vendedor —
 columna nueva en `empleados`. Un empleado con `activo=false` no puede loguearse (`AuthService.login()`
 lo rechaza con el mismo mensaje genérico que credenciales inválidas).
+
+### Presupuestos (`/api/presupuestos`) — ADMIN y VENDEDOR, nuevo 2026-08-10
+
+Cotización de productos de catálogo que **no** descuenta stock ni genera una `Venta` — modelo
+espejo de Ventas pero sin OTP ni caja.
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| POST | `/api/presupuestos` | `PresupuestoRequest` (ver abajo) | `PresupuestoResponse` |
+| GET | `/api/presupuestos?desde=&hasta=` | — | `PresupuestoResponse[]` |
+| GET | `/api/presupuestos/{id}` | — | `PresupuestoResponse` |
+| POST | `/api/presupuestos/{id}/enviar-email` | — | `PresupuestoResponse` (manda el PDF al `clienteEmail` del presupuesto, marca `enviadoPorEmail=true`) |
+| GET | `/api/presupuestos/{id}/pdf` | — | PDF del presupuesto |
+
+`PresupuestoRequest`:
+```ts
+{
+  idEmpleado: number;
+  clienteNombre: string;
+  clienteEmail?: string;
+  clienteTelefono?: string;
+  detalles: {
+    idProducto?: number;   // línea de catálogo
+    descripcion?: string;  // O ESTO: ítem manual (ej. "Apertura de cerradura") — uno de los dos es obligatorio
+    cantidad: number;
+    precioUnitario: number;
+  }[];
+}
+```
+
+`PresupuestoResponse`: `{idPresupuesto, fecha, idEmpleado, nombreEmpleado, clienteNombre,
+clienteEmail, clienteTelefono, totalPresupuesto, enviadoPorEmail, detalles:
+[{idProducto, descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
+
+### Clientes (`/api/clientes`) — ADMIN, nuevo 2026-10-30
+
+Catálogo nuevo, identificado por CUIT/DNI — antes las ventas solo guardaban nombre/email/
+teléfono como texto libre, sin forma de acumular saldo de forma confiable para la misma persona.
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/clientes` | — | `ClienteResponse[]` |
+| GET | `/api/clientes/buscar?q=` | — | `ClienteResponse[]` (nombre o documento, contains case-insensitive) |
+| GET | `/api/clientes/{id}` | — | `ClienteResponse` |
+| POST | `/api/clientes` | `ClienteRequest` | `201 ClienteResponse` |
+| PUT | `/api/clientes/{id}` | `ClienteRequest` | `ClienteResponse` |
+| DELETE | `/api/clientes/{id}` | — | baja lógica, `204` |
+| GET | `/api/clientes/{id}/cuenta-corriente` | — | `CuentaCorrienteClienteResponse` |
+
+`ClienteRequest`: `{nombre, docTipo, docNro?, telefono?, email?, direccion?}` (`docTipo`: `80`
+CUIT \| `96` DNI \| `99` sin documento, misma convención que `ClienteDocTipo` de Factura).
+`ClienteResponse` agrega `idCliente, activo`.
+
+`CuentaCorrienteClienteResponse`: `{idCliente, nombreCliente, saldoActual, movimientos:
+[{idMovimiento, fecha, tipo, monto, descripcion, idNotaCredito, idVentaAplicacion}]}`
+(`tipo`: `"CREDITO"` \| `"DEBITO"`). **El saldo nunca se guarda como un número suelto** — se
+recalcula siempre sumando el historial de movimientos (créditos menos débitos), para que la
+cuenta corriente quede auditable. Hoy el único origen de un `CREDITO` es una Nota de Crédito;
+todavía no hay ningún `DEBITO` real (eso es aplicar el saldo como medio de pago en Cobros,
+pendiente — ver sección de Notas de Crédito abajo).
+
+`Venta` ganó un campo `idCliente`/`cliente` nullable a nivel backend, pero **Cobros no lo pide
+todavía** — ninguna venta de hoy tiene cliente vinculado en la práctica, así que el flujo de
+Nota de Crédito siempre termina pidiendo elegir o crear un cliente a mano.
+
+### Notas de Crédito (`/api/notas-credito`) — ADMIN, nuevo 2026-10-30
+
+Documento nuevo vinculado a una `Venta` ya `CONFIRMADA` — **nunca la modifica**, es un apéndice
+(mismo espíritu que `FacturaFiscal` respecto de `Venta`). No hay endpoint nuevo para "buscar la
+venta original": se reusan `GET /api/ventas/{id}` (por número) y `GET /api/ventas?desde=&hasta=`
+(por rango, filtrando por nombre de cliente en el frontend).
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| POST | `/api/notas-credito` | `NotaCreditoRequest` | `201 NotaCreditoResponse` |
+| GET | `/api/notas-credito?desde=&hasta=` | — | `NotaCreditoResponse[]` |
+| GET | `/api/notas-credito/{id}` | — | `NotaCreditoResponse` |
+| GET | `/api/notas-credito/{id}/pdf` | — | PDF interno (siempre disponible, sin depender de ARCA) |
+| POST | `/api/notas-credito/{id}/emitir-fiscal` | — | `NotaCreditoResponse` (solo si `esFiscal`) |
+| GET | `/api/notas-credito/{id}/factura-pdf` | — | PDF fiscal con CAE+QR (solo si `estado="EMITIDA"` con CAE) |
+
+`NotaCreditoRequest`:
+```ts
+{
+  idVentaOriginal: number
+  idEmpleado: number
+  idCliente?: number       // obligatorio en la práctica hoy, ver nota de Clientes arriba
+  motivo: 'DEVOLUCION_MERCADERIA' | 'ERROR_TIPEO' | 'DESCUENTO_POSTERIOR' | 'ANULACION_TOTAL'
+  alcance: 'TOTAL' | 'PARCIAL'
+  // Solo si alcance=PARCIAL — con TOTAL el backend expande solo todas las líneas por su
+  // cantidad remanente (no reenviar detalles).
+  detalles?: { idDetalleVentaOriginal: number; cantidad: number }[]
+}
+```
+`DEVOLUCION_MERCADERIA`/`ANULACION_TOTAL` devuelven stock de las líneas con producto;
+`ERROR_TIPEO`/`DESCUENTO_POSTERIOR` no tocan stock. El backend rechaza (409) si se pide acreditar
+más que el remanente de una línea (protege contra doble acreditación entre notas parciales
+sucesivas sobre la misma línea).
+
+`NotaCreditoResponse`: `{idNotaCredito, idVentaOriginal, idCliente, nombreCliente, fecha, motivo,
+alcance, montoTotal, esFiscal, estado, puntoVenta, tipoComprobante, numero, cae,
+caeVencimiento, errorDetalle, detalles: [{idDetalle, idProducto, descripcionProducto, cantidad,
+precioUnitario, subtotal}]}`.
+
+- `esFiscal` es `true` si la venta original tenía `FacturaFiscal` con `estado="EMITIDA"` al
+  momento de crear la nota — se calcula solo, no se elige.
+- `estado`: `"EMITIDA"` (interna lista, o ya con CAE) \| `"PENDIENTE_FISCAL"` (`esFiscal=true`,
+  todavía no se llamó a `/emitir-fiscal`) \| `"ERROR"` (ARCA rechazó o falló la conexión —
+  reintentable llamando `/emitir-fiscal` de nuevo). Una nota interna (`esFiscal=false`) siempre
+  nace y queda en `"EMITIDA"` — no hay nada más que hacer con ella.
+- Nota de Crédito C = tipo de comprobante AFIP **13**, siempre asociada a la Factura C (11)
+  original vía `CbtesAsoc` — verificado contra el manual oficial de WSFEv1 antes de implementar
+  (detalle completo en `plan-migracion.md` sección 27.3).
+
+**Pendiente (fase 3, no implementado)**: aplicar el saldo a favor de la cuenta corriente como
+medio de pago en `POST /api/ventas` — hoy la cuenta corriente solo se puede consultar, no gastar
+desde el sistema.
 
 ### Caja — endpoint nuevo
 
@@ -305,7 +575,7 @@ tiene que ver el modal.
   desglose por turno).
 - Reportes: productos más vendidos, balance financiero.
 
-## Estructura de carpetas propuesta (`frontend/`)
+## Estructura de carpetas propuesta (`frontend/`) — primera versión, histórico (ver "Estado actual" para la lista real de páginas de hoy)
 
 ```
 frontend/
@@ -323,7 +593,47 @@ frontend/
     types/             # los DTOs de la sección "Contrato de API" de este documento
 ```
 
-## Estado actual (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % ganancia en alta + proveedor en Productos e Historial)
+## Estado actual (Actualizado al 2026-10-30, Notas de Crédito + catálogo de Clientes — las 4 fases completas)
+
+Pedido grande y nuevo del dueño (detalle técnico completo en `plan-migracion.md` sección 27):
+Notas de Crédito (buscar la venta original, motivo + alcance, impacto en stock, saldo a favor
+del cliente, validación fiscal ante ARCA) + cuenta corriente de clientes y proveedores. Se
+dividió en 4 fases, **las 4 completas en esta misma sesión**: 1 (Clientes + nota de crédito
+interna + cuenta corriente de cliente), 2 (emisión fiscal ante ARCA, nota de crédito C tipo 13
+asociada a la factura C original), 3 (saldo a favor aplicable como medio de pago en Cobros) y 4
+(cuenta corriente de Proveedores — pagos parciales de Compras + devoluciones de mercadería).
+
+**Pantallas nuevas**: `Clientes.tsx` (`/clientes`, ADMIN — ABM con CUIT/DNI),
+`CuentaCorrienteCliente.tsx` (`/clientes/:id/cuenta-corriente` — saldo + historial de
+movimientos), `NotaCredito.tsx` (`/notas-credito/nueva`, ADMIN — flujo de 3 pasos: buscar la
+venta por número o por fecha, motivo/alcance/líneas + elegir o crear cliente, confirmar; una vez
+creada, si la venta tenía factura fiscal, un botón "Emitir ante ARCA" dispara la fase 2). Nuevo
+componente `BuscadorClienteSelect.tsx` (buscador + alta rápida de cliente vía `<datalist>`
+nativo, mismo patrón que `BuscadorProductoCarrito.tsx`). `HistorialVentas.tsx` ganó un link
+"Nota de crédito" por cada fila `CONFIRMADA`.
+
+**Cobros (`RegistrarVenta.tsx`) ganó una sección "Cliente (opcional)"** con
+`BuscadorClienteSelect`: al elegir un cliente se consulta su saldo
+(`GET /api/clientes/{id}/cuenta-corriente`) y aparece un input "Pagar con saldo" (tope
+`min(saldoDisponible, total)`). Si el monto cubre el total completo, se avisa que el `<select>`
+de medio de pago no aplica — el backend lo va a ignorar y forzar
+`medioPago="SALDO_CUENTA_CORRIENTE"`. `Caja.tsx` muestra una línea nueva informativa
+("Pagado con saldo de cuenta corriente") cuando corresponde, sin sumarla a la caja total.
+
+**`CuentaCorrienteProveedores.tsx`** (`/proveedores/cuenta-corriente`, ADMIN, nuevo — fase 4):
+elegir un proveedor muestra su saldo ("le debemos" o, si es negativo, "nos debe") + historial;
+"Registrar pago" busca sus compras con saldo pendiente en un rango de fechas (filtra
+client-side sobre `GET /api/compras`, que ya existía) y paga una puntual; "Registrar devolución"
+reusa `BuscadorProductoCarrito`/`useCarrito` (mismo patrón que Cobros) para armar las líneas.
+Convive con `PagosProveedores.tsx` sin reemplazarla (esa sigue siendo un reporte de compras, no
+de pagos reales).
+
+Backend: **254 tests** verdes. Frontend: `tsc -b`, `npm run lint` y `npm run build` limpios.
+**No probado en un navegador real** (sin Chrome disponible en esta sesión) ni contra Supabase
+real (sin las variables de entorno de la máquina de desarrollo en este entorno) — pendiente de
+confirmación visual la próxima vez que se abra el sistema.
+
+## Estado anterior (Actualizado al 2026-09-17, código de colores de stock + fix de Compras + % ganancia en alta + proveedor en Productos e Historial)
 
 Pedido de seis partes del dueño, todo en la misma sesión (detalle técnico completo en
 `plan-migracion.md` sección 25):
