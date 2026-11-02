@@ -2,12 +2,11 @@ import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, getVentas } from '../api/ventas'
 import { getEmpleados } from '../api/empleados'
-import { facturarVenta, getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
+import { getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
 import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import type {
-  ClienteDocTipo,
   EmpleadoResponse,
   EstadoTrabajo,
   FacturaFiscalResponse,
@@ -43,10 +42,6 @@ export function HistorialVentas() {
   const [viendoId, setViendoId] = useState<number | null>(null)
 
   const [facturas, setFacturas] = useState<Record<number, FacturaFiscalResponse | null>>({})
-  const [docTipos, setDocTipos] = useState<Record<number, ClienteDocTipo>>({})
-  const [docNumeros, setDocNumeros] = useState<Record<number, string>>({})
-  const [docNombres, setDocNombres] = useState<Record<number, string>>({})
-  const [facturandoId, setFacturandoId] = useState<number | null>(null)
 
   useEffect(() => {
     getEmpleados().then(setEmpleados)
@@ -68,26 +63,6 @@ export function HistorialVentas() {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo cargar el historial')
     } finally {
       setCargando(false)
-    }
-  }
-
-  async function facturar(idVenta: number) {
-    const docTipo = docTipos[idVenta] ?? 99
-    const docNro = docNumeros[idVenta]
-    const docNombre = docNombres[idVenta]
-    setError(null)
-    setFacturandoId(idVenta)
-    try {
-      const factura = await facturarVenta(idVenta, {
-        clienteDocTipo: docTipo,
-        clienteDocNro: docNro,
-        clienteNombre: docNombre,
-      })
-      setFacturas((actual) => ({ ...actual, [idVenta]: factura }))
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'No se pudo facturar la venta')
-    } finally {
-      setFacturandoId(null)
     }
   }
 
@@ -321,23 +296,7 @@ export function HistorialVentas() {
                 </td>
                 <td>
                   {venta.estado === 'CONFIRMADA' && (
-                    <FacturaFiscalCelda
-                      factura={facturas[venta.idVenta]}
-                      docTipo={docTipos[venta.idVenta] ?? 99}
-                      docNro={docNumeros[venta.idVenta] ?? ''}
-                      docNombre={docNombres[venta.idVenta] ?? ''}
-                      facturando={facturandoId === venta.idVenta}
-                      onCambiarDocTipo={(docTipo) =>
-                        setDocTipos((actual) => ({ ...actual, [venta.idVenta]: docTipo }))
-                      }
-                      onCambiarDocNro={(docNro) =>
-                        setDocNumeros((actual) => ({ ...actual, [venta.idVenta]: docNro }))
-                      }
-                      onCambiarDocNombre={(docNombre) =>
-                        setDocNombres((actual) => ({ ...actual, [venta.idVenta]: docNombre }))
-                      }
-                      onFacturar={() => facturar(venta.idVenta)}
-                    />
+                    <FacturaFiscalCelda idVenta={venta.idVenta} factura={facturas[venta.idVenta]} />
                   )}
                 </td>
                 <td>
@@ -390,29 +349,13 @@ export function HistorialVentas() {
 }
 
 interface FacturaFiscalCeldaProps {
+  idVenta: number
   factura: FacturaFiscalResponse | null | undefined
-  docTipo: ClienteDocTipo
-  docNro: string
-  docNombre: string
-  facturando: boolean
-  onCambiarDocTipo: (docTipo: ClienteDocTipo) => void
-  onCambiarDocNro: (docNro: string) => void
-  onCambiarDocNombre: (docNombre: string) => void
-  onFacturar: () => void
 }
 
-// Acción aparte del comprobante interno (no lo reemplaza) — emite una Factura C real vía ARCA/WSFE.
-function FacturaFiscalCelda({
-  factura,
-  docTipo,
-  docNro,
-  docNombre,
-  facturando,
-  onCambiarDocTipo,
-  onCambiarDocNro,
-  onCambiarDocNombre,
-  onFacturar,
-}: FacturaFiscalCeldaProps) {
+// Acción aparte del comprobante interno (no lo reemplaza). La emisión vive solo en la pantalla
+// Facturar, con el autocompletado del cliente: acá se muestra el resultado y se lleva hasta ella.
+function FacturaFiscalCelda({ idVenta, factura }: FacturaFiscalCeldaProps) {
   // Estados locales para la descarga y envío de esta factura puntual
   const [descargando, setDescargando] = useState(false)
   const [enviandoMail, setEnviandoMail] = useState(false)
@@ -496,33 +439,7 @@ function FacturaFiscalCelda({
 
   return (
     <span className="confirmar-descuento">
-      <select value={docTipo} onChange={(e) => onCambiarDocTipo(Number(e.target.value) as ClienteDocTipo)}>
-        <option value={99}>Consumidor Final</option>
-        <option value={80}>CUIT</option>
-        <option value={96}>DNI</option>
-      </select>
-      {docTipo !== 99 && (
-        <>
-          <input
-            placeholder={docTipo === 80 ? 'CUIT' : 'DNI'}
-            value={docNro}
-            onChange={(e) => onCambiarDocNro(e.target.value)}
-          />
-          <input
-            placeholder="Nombre / Razón social"
-            value={docNombre}
-            onChange={(e) => onCambiarDocNombre(e.target.value)}
-          />
-        </>
-      )}
-      <button
-        type="button"
-        onClick={onFacturar}
-        disabled={facturando || (docTipo !== 99 && (!docNro || !docNombre))}
-      >
-        {facturando && <span className="spinner" />}
-        {facturando ? 'Facturando...' : factura?.estado === 'ERROR' ? 'Reintentar' : 'Facturar'}
-      </button>
+      <Link to={`/facturar?idVenta=${idVenta}`}>{factura?.estado === 'ERROR' ? 'Reintentar' : 'Facturar'}</Link>
       {factura?.estado === 'ERROR' && <p className="error">{factura.errorDetalle}</p>}
     </span>
   )

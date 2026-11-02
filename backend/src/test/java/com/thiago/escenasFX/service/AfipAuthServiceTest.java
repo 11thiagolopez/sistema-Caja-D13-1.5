@@ -24,12 +24,21 @@ class AfipAuthServiceTest {
     void construirLoginTicketRequestXml_incluyeHeaderYServicioWsfe() {
         ZonedDateTime ahora = ZonedDateTime.of(2026, 8, 19, 10, 0, 0, 0, ZoneId.of("America/Argentina/Buenos_Aires"));
 
-        String xml = service.construirLoginTicketRequestXml(ahora);
+        String xml = service.construirLoginTicketRequestXml(ahora, AfipAuthService.SERVICIO_WSFE);
 
         assertThat(xml).contains("<service>wsfe</service>");
         assertThat(xml).contains("<uniqueId>" + ahora.toEpochSecond() + "</uniqueId>");
         assertThat(xml).contains("<generationTime>2026-08-19T09:50:00-03:00</generationTime>");
         assertThat(xml).contains("<expirationTime>2026-08-19T10:10:00-03:00</expirationTime>");
+    }
+
+    @Test
+    void construirLoginTicketRequestXml_pideElServicioDelPadron() {
+        ZonedDateTime ahora = ZonedDateTime.of(2026, 8, 19, 10, 0, 0, 0, ZoneId.of("America/Argentina/Buenos_Aires"));
+
+        String xml = service.construirLoginTicketRequestXml(ahora, AfipAuthService.SERVICIO_PADRON);
+
+        assertThat(xml).contains("<service>ws_sr_constancia_inscripcion</service>");
     }
 
     @Test

@@ -15,7 +15,9 @@ import org.springframework.http.MediaType;
 
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.Producto;
+import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.repository.ProductoRepository;
+import com.thiago.escenasFX.repository.SesionCajaRepository;
 
 /**
  * Cuenta corriente de proveedores (fase 4): compra con pago parcial -> deuda pendiente -> pago
@@ -26,6 +28,9 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ProductoRepository productoRepo;
+
+    @Autowired
+    private SesionCajaRepository sesionRepo;
 
     private Producto crearProducto(int stockInicial) {
         Producto p = new Producto();
@@ -47,6 +52,7 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
                 "fecha": "%s",
                 "proveedorNombre": "Proveedor de prueba",
                 "medioPago": "EFECTIVO",
+                "origen": "EXTERNO",
                 "montoPagado": 30,
                 "items": [{"idProducto": %d, "cantidad": 1, "precioCompraUnitario": 100}]
             }
@@ -73,7 +79,7 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content("""
-                    {"idEmpleado": %d, "monto": 70, "medioPago": "TRANSFERENCIA"}
+                    {"idEmpleado": %d, "monto": 70, "medioPago": "TRANSFERENCIA", "origen": "EXTERNO"}
                     """.formatted(admin.getIdEmpleado())))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.saldoPendiente").value(0));
@@ -113,7 +119,7 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content("""
-                    {"idEmpleado": %d, "monto": 150, "medioPago": "EFECTIVO"}
+                    {"idEmpleado": %d, "monto": 150, "medioPago": "EFECTIVO", "origen": "EXTERNO"}
                     """.formatted(admin.getIdEmpleado())))
             .andExpect(status().isConflict());
     }
@@ -130,6 +136,7 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
                 "fecha": "%s",
                 "proveedorNombre": "Proveedor de prueba",
                 "medioPago": "EFECTIVO",
+                "origen": "EXTERNO",
                 "items": [{"idProducto": %d, "cantidad": 10, "precioCompraUnitario": 100}]
             }
             """.formatted(admin.getIdEmpleado(), java.time.LocalDate.now(), producto.getIdProducto());
@@ -163,6 +170,153 @@ class ProveedorControllerIntegrationTest extends AbstractIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.saldoPendiente").value(-300));
+    }
+
+    @Test
+    void compraEnCuentaCorriente_seSaldaConPagoParcialYLuegoTotal_descontandoDevoluciones() throws Exception {
+        Empleado admin = crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto(0);
+        String token = login("admin1", "clave123");
+
+        String compraResp = mockMvc.perform(post("/api/compras")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {
+                        "idEmpleado": %d,
+                        "fecha": "%s",
+                        "proveedorNombre": "Proveedor de prueba",
+                        "medioPago": "CUENTA_CORRIENTE",
+                        "items": [{"idProducto": %d, "cantidad": 10, "precioCompraUnitario": 100}]
+                    }
+                    """.formatted(admin.getIdEmpleado(), java.time.LocalDate.now(), producto.getIdProducto())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.medioPago").value("CUENTA_CORRIENTE"))
+            .andExpect(jsonPath("$.saldoPendiente").value(1000))
+            .andReturn().getResponse().getContentAsString();
+        int idProveedor = objectMapper.readTree(compraResp).get("idProveedor").asInt();
+
+        mockMvc.perform(post("/api/proveedores/devoluciones")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {
+                        "idProveedor": %d,
+                        "idEmpleado": %d,
+                        "detalles": [{"idProducto": %d, "cantidad": 3, "precioUnitario": 100}]
+                    }
+                    """.formatted(idProveedor, admin.getIdEmpleado(), producto.getIdProducto())))
+            .andExpect(status().isCreated());
+
+        String pago = """
+            {"idEmpleado": %d, "monto": %%d, "medioPago": "TRANSFERENCIA", "origen": "EXTERNO"}
+            """.formatted(admin.getIdEmpleado());
+
+        // La deuda real es 700: pagar los 1000 de la compra sería pagarle de más al proveedor.
+        mockMvc.perform(post("/api/proveedores/" + idProveedor + "/pagos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(pago.formatted(1000)))
+            .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/proveedores/" + idProveedor + "/pagos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(pago.formatted(200)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.saldoPendiente").value(500))
+            .andExpect(jsonPath("$.comprasPendientes[0].saldoPendiente").value(500));
+
+        mockMvc.perform(post("/api/proveedores/" + idProveedor + "/pagos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content(pago.formatted(500)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.saldoPendiente").value(0))
+            .andExpect(jsonPath("$.comprasPendientes.length()").value(0));
+    }
+
+    @Test
+    void arqueo_muestraTodosLosMovimientosPeroSoloRestaElEfectivoDeCaja() throws Exception {
+        Empleado admin = crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto(0);
+        String token = login("admin1", "clave123");
+
+        SesionCaja sesion = new SesionCaja();
+        sesion.setFecha(java.time.LocalDate.now());
+        sesion.setMontoInicial(new BigDecimal("1000"));
+        sesion.setEstado("ABIERTA");
+        sesionRepo.save(sesion);
+
+        String compra = """
+            {
+                "idEmpleado": %d,
+                "fecha": "%s",
+                "proveedorNombre": "Proveedor de prueba",
+                "medioPago": "%%s",
+                "origen": "%%s",
+                "items": [{"idProducto": %d, "cantidad": 1, "precioCompraUnitario": %%d}]
+            }
+            """.formatted(admin.getIdEmpleado(), java.time.LocalDate.now(), producto.getIdProducto());
+
+        for (String body : java.util.List.of(
+                compra.formatted("EFECTIVO", "CAJA", 100),
+                compra.formatted("EFECTIVO", "EXTERNO", 200),
+                compra.formatted("TRANSFERENCIA", "CAJA", 50),
+                compra.formatted("TRANSFERENCIA", "EXTERNO", 70),
+                compra.formatted("CUENTA_CORRIENTE", "CAJA", 900))) {
+            mockMvc.perform(post("/api/compras")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .content(body))
+                .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(get("/api/caja/resumen-dia")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.movimientosProveedor.length()").value(5))
+            .andExpect(jsonPath("$.pagosProveedorEfectivoCaja").value(100))
+            .andExpect(jsonPath("$.pagosProveedorTransferenciaCaja").value(50))
+            .andExpect(jsonPath("$.efectivoFinal").value(900))
+            .andExpect(jsonPath("$.totalDigital").value(-50))
+            .andExpect(jsonPath("$.movimientosProveedor[?(@.restaDelSaldoEsperado == true)].monto").value(100));
+    }
+
+    @Test
+    void compraPagadaDeCaja_sinCajaAbierta_devuelve409YNoRegistraNada() throws Exception {
+        Empleado admin = crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto(0);
+        String token = login("admin1", "clave123");
+
+        mockMvc.perform(post("/api/compras")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {
+                        "idEmpleado": %d,
+                        "fecha": "%s",
+                        "proveedorNombre": "Proveedor de prueba",
+                        "medioPago": "EFECTIVO",
+                        "origen": "CAJA",
+                        "items": [{"idProducto": %d, "cantidad": 1, "precioCompraUnitario": 100}]
+                    }
+                    """.formatted(admin.getIdEmpleado(), java.time.LocalDate.now(), producto.getIdProducto())))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void registrarPagoAProveedor_comoVendedor_devuelve403() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(post("/api/proveedores/1/pagos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("""
+                    {"idEmpleado": %d, "monto": 10, "medioPago": "EFECTIVO", "origen": "CAJA"}
+                    """.formatted(vendedor.getIdEmpleado())))
+            .andExpect(status().isForbidden());
     }
 
     @Test

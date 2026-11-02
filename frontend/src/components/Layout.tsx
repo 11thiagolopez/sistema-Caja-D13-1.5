@@ -60,6 +60,11 @@ const SECCIONES: NavSection[] = [
     items: [{ label: 'Clientes', to: '/clientes' }],
   },
   {
+    label: 'Facturación',
+    roles: ['ADMIN'],
+    items: [{ label: 'Facturar', to: '/facturar' }],
+  },
+  {
     label: 'Reportes',
     roles: ['ADMIN'],
     items: [

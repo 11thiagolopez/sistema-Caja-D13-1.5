@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.thiago.escenasFX.exception.AfipIntegracionException;
 import com.thiago.escenasFX.model.DetalleNotaCredito;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.FacturaFiscal;
@@ -33,14 +34,16 @@ public class NotaCreditoFiscalService {
     private final NotaCreditoRepository notaCreditoRepo;
     private final FacturaFiscalRepository facturaFiscalRepo;
     private final AfipFacturacionService afipFacturacionService;
+    private final AfipPadronService afipPadronService;
     private final int puntoVenta;
 
     public NotaCreditoFiscalService(NotaCreditoRepository notaCreditoRepo,
             FacturaFiscalRepository facturaFiscalRepo, AfipFacturacionService afipFacturacionService,
-            @Value("${afip.punto-venta}") int puntoVenta) {
+            AfipPadronService afipPadronService, @Value("${afip.punto-venta}") int puntoVenta) {
         this.notaCreditoRepo = notaCreditoRepo;
         this.facturaFiscalRepo = facturaFiscalRepo;
         this.afipFacturacionService = afipFacturacionService;
+        this.afipPadronService = afipPadronService;
         this.puntoVenta = puntoVenta;
     }
 
@@ -77,13 +80,14 @@ public class NotaCreditoFiscalService {
         Integer clienteDocTipo = facturaOriginal.getClienteDocTipo();
         String clienteDocNro = clienteDocTipo == 99 ? "0" : facturaOriginal.getClienteDocNro();
 
-        AfipFacturacionService.DatosFactura datos = new AfipFacturacionService.DatosFactura(
-            puntoVenta, TIPO_NOTA_CREDITO_C, concepto, clienteDocTipo, clienteDocNro,
-            nc.getMontoTotal(), fecha,
-            concepto != 1 ? fecha : null, concepto != 1 ? fecha : null, concepto != 1 ? fecha : null,
-            facturaOriginal.getTipoComprobante(), facturaOriginal.getPuntoVenta(), facturaOriginal.getNumero());
-
         try {
+            AfipFacturacionService.DatosFactura datos = new AfipFacturacionService.DatosFactura(
+                puntoVenta, TIPO_NOTA_CREDITO_C, concepto, clienteDocTipo, clienteDocNro,
+                nc.getMontoTotal(), fecha,
+                concepto != 1 ? fecha : null, concepto != 1 ? fecha : null, concepto != 1 ? fecha : null,
+                facturaOriginal.getTipoComprobante(), facturaOriginal.getPuntoVenta(), facturaOriginal.getNumero(),
+                condicionIvaReceptor(facturaOriginal));
+
             AfipFacturacionService.ResultadoCae resultado = afipFacturacionService.emitirFacturaC(datos);
             if (resultado.aprobado()) {
                 nc.setNumero(resultado.numero());
@@ -100,5 +104,22 @@ public class NotaCreditoFiscalService {
         }
 
         return notaCreditoRepo.save(nc);
+    }
+
+    // Las facturas anteriores a CondicionIVAReceptorId no la tienen guardada: con CUIT se le
+    // pregunta al padrón, porque ARCA la exige también en la nota de crédito.
+    private int condicionIvaReceptor(FacturaFiscal factura) {
+        if (factura.getCondicionIvaReceptor() != null) {
+            return factura.getCondicionIvaReceptor();
+        }
+        if (factura.getClienteDocTipo() != 80) {
+            return FacturaFiscalService.CONDICION_CONSUMIDOR_FINAL;
+        }
+        Integer condicion = afipPadronService.consultar(factura.getClienteDocNro()).condicionIva();
+        if (condicion == null) {
+            throw new AfipIntegracionException(
+                "No se pudo determinar la condición frente al IVA del CUIT " + factura.getClienteDocNro());
+        }
+        return condicion;
     }
 }

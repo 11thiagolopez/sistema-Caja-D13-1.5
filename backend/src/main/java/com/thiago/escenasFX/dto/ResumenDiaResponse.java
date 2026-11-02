@@ -25,4 +25,12 @@ public class ResumenDiaResponse {
     private BigDecimal totalDigital;
     private BigDecimal cajaTotalDelDia;
     private BigDecimal ventasPagadasConSaldo;
+
+    private List<MovimientoProveedorArqueoResponse> movimientosProveedor;
+    private BigDecimal pagosProveedorEfectivoCaja;
+    private BigDecimal pagosProveedorTransferenciaCaja;
+
+    private List<GastoArqueoResponse> gastos;
+    private BigDecimal gastosEfectivoCaja;
+    private BigDecimal gastosTransferenciaCaja;
 }

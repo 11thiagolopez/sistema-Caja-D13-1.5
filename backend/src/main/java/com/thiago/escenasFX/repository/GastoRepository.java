@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,4 +11,8 @@ import com.thiago.escenasFX.model.Gasto;
 public interface GastoRepository extends JpaRepository<Gasto, Integer> {
 
     List<Gasto> findByFechaBetweenOrderByFechaDesc(LocalDate desde, LocalDate hasta);
+
+    List<Gasto> findBySesion_IdSesion(Integer idSesion);
+
+    List<Gasto> findByCreadoEnBetween(LocalDateTime desde, LocalDateTime hasta);
 }

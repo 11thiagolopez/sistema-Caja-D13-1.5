@@ -71,7 +71,8 @@ public class CompraController {
             @Valid @RequestBody RegistrarPagoProveedorRequest request) {
         Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
             .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
-        Compra compra = compraService.registrarPago(id, request.getMonto(), request.getMedioPago(), empleado);
+        Compra compra = compraService.registrarPago(id, request.getMonto(), request.getMedioPago(),
+            request.getOrigen(), empleado);
         return CompraMapper.toResponse(compra);
     }
 }

@@ -18,6 +18,9 @@ public interface ClienteRepository extends JpaRepository<Cliente, Integer> {
 
     Optional<Cliente> findByDocTipoAndDocNro(Integer docTipo, String docNro);
 
+    // Nada impide cargar dos clientes con el mismo documento: el Optional de arriba explotaría.
+    Optional<Cliente> findFirstByDocTipoAndDocNroOrderByIdClienteAsc(Integer docTipo, String docNro);
+
     List<Cliente> findByActivoTrueAndNombreContainingIgnoreCaseOrActivoTrueAndDocNroContainingIgnoreCaseOrderByNombreAsc(
         String nombre, String docNro);
 

@@ -20,6 +20,7 @@ import com.thiago.escenasFX.dto.CuentaCorrienteClienteResponse;
 import com.thiago.escenasFX.dto.MovimientoCuentaCorrienteClienteResponse;
 import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.MovimientoCuentaCorrienteCliente;
+import com.thiago.escenasFX.service.AfipPadronService;
 import com.thiago.escenasFX.service.ClienteService;
 
 import jakarta.validation.Valid;
@@ -29,9 +30,16 @@ import jakarta.validation.Valid;
 public class ClienteController {
 
     private final ClienteService clienteService;
+    private final AfipPadronService afipPadronService;
 
-    public ClienteController(ClienteService clienteService) {
+    public ClienteController(ClienteService clienteService, AfipPadronService afipPadronService) {
         this.clienteService = clienteService;
+        this.afipPadronService = afipPadronService;
+    }
+
+    @GetMapping("/padron/{cuit}")
+    public AfipPadronService.Contribuyente consultarPadron(@PathVariable String cuit) {
+        return afipPadronService.consultar(cuit);
     }
 
     @GetMapping
@@ -77,7 +85,7 @@ public class ClienteController {
 
     private ClienteResponse toResponse(Cliente c) {
         return new ClienteResponse(c.getIdCliente(), c.getNombre(), c.getDocTipo(), c.getDocNro(),
-            c.getTelefono(), c.getEmail(), c.getDireccion(), c.isActivo());
+            c.getCondicionIva(), c.getTelefono(), c.getEmail(), c.getDireccion(), c.isActivo());
     }
 
     private MovimientoCuentaCorrienteClienteResponse toMovimientoResponse(MovimientoCuentaCorrienteCliente m) {

@@ -52,6 +52,6 @@ public class GastoController {
     private GastoResponse toResponse(Gasto g) {
         String empleadoNombre = g.getEmpleadoRegistro() != null ? g.getEmpleadoRegistro().getNombre() : null;
         return new GastoResponse(g.getIdGasto(), g.getNombre(), g.getImporte(), g.getFecha(), g.getCategoria(),
-            empleadoNombre, g.getCreadoEn());
+            g.getMedioPago(), g.getOrigen(), empleadoNombre, g.getCreadoEn());
     }
 }

@@ -2415,3 +2415,154 @@ probado en un navegador real ni contra Supabase real, mismos motivos que las fas
 **Con esto, las 4 fases del pedido original del dueño quedaron completas** en esta misma sesión
 (2026-10-30): Notas de Crédito (interna y fiscal ante ARCA), catálogo de Clientes, saldo a favor
 aplicable como medio de pago en Cobros, y cuenta corriente de Proveedores.
+
+### 27.7 Fix posterior (2026-11-02): comprar en cuenta corriente y saldar la deuda del proveedor
+
+**Reporte del dueño**: no se podía registrar una compra a cuenta corriente, y el botón "Buscar
+compras con saldo pendiente" no aportaba nada. Causa: el backend de la fase 4 ya aceptaba
+`montoPagado`, pero `ComprasNueva.tsx` nunca lo mandaba, así que toda compra quedaba pagada.
+
+**Medio de pago `CUENTA_CORRIENTE`, solo para compras**: `registrarCompra` fuerza
+`montoPagado = 0` sin mirar el request (el backend decide, como `SALDO_CUENTA_CORRIENTE` en
+ventas) y `registrarPago` lo rechaza con 400: una deuda no se paga con más deuda. `medio_pago` es
+texto libre, **no requiere SQL**.
+
+**`POST /api/proveedores/{id}/pagos`, nuevo** (`CompraService.registrarPagoAProveedor`): un único
+monto, total o parcial, aplicado de la compra más vieja a la más nueva. Inserta un `HABER_PAGO` por
+cada compra alcanzada, para que el historial siga diciendo a qué compra fue cada peso.
+
+**El tope es el saldo del ledger, no la suma de las compras** — decisión clave. Una devolución
+acredita la cuenta general sin tocar `Compra.montoPagado`, así que después de una devolución la
+suma de lo pendiente por compra queda por encima de la deuda real; usarla le pagaría de más al
+proveedor. Por lo mismo, `CuentaCorrienteProveedorResponse.comprasPendientes` descuenta el crédito
+de las compras más viejas al armar la lista (calculado, no se guarda), y su suma siempre coincide
+con `saldoPendiente`.
+
+**Sin filtro de fechas**: `CompraRepository.buscarConSaldoPendiente` trae toda la deuda. El filtro
+anterior (90 días por defecto) ocultaba compras impagas más viejas.
+
+`POST /api/compras/{id}/pagos` sigue existiendo en el backend pero la pantalla ya no lo usa.
+
+**Sin cambios, a propósito**: las compras y sus pagos siguen sin mover la Caja, ni siquiera en
+efectivo (ya era así); `PagosProveedores.tsx` sigue sumando compras, incluidas las impagas.
+
+**Verificación**: backend **261 tests** verdes (7 nuevos). Frontend: `tsc -b`, `oxlint` y
+`vite build` sin errores (2 warnings de `oxlint` en archivos que este fix no tocó). No probado en
+un navegador real ni contra Supabase real.
+
+### 27.8 Medio de pago y origen del dinero separados, y su efecto en el arqueo (2026-11-02)
+
+**Regla del dueño**: el medio de pago (efectivo, transferencia o cuenta corriente) y el origen
+(caja o externo) son dos datos distintos. En el arqueo figuran todos los movimientos, pero solo el
+efectivo de caja resta del saldo esperado.
+
+| Movimiento | Saldo esperado (`efectivoFinal`) | `totalDigital` |
+|---|---|---|
+| Efectivo + CAJA | resta | — |
+| Transferencia + CAJA | — | resta (mismo criterio que un retiro por transferencia) |
+| Efectivo o transferencia + EXTERNO | — | — |
+| Compra en cuenta corriente (sin origen) | — | — |
+
+Aplica a compras y a pagos posteriores. Tarjeta dejó de aceptarse en ambos (400); las compras
+viejas con tarjeta se siguen mostrando. **Que transferencia + CAJA reste de `totalDigital` es una
+interpretación**: el dueño pidió que el origen CAJA reste de la caja del día y que el saldo esperado
+solo baje con efectivo.
+
+**Modelo**: `Compra.origen`, `MovimientoCuentaCorrienteProveedor.origen` y `.sesion`. El arqueo lee
+el ledger (por turno en `calcularResumenDeSesion`, por fecha en el rango) y muestra los movimientos
+con `medioPago` no nulo. Por eso el `DEBE_COMPRA` de una compra en cuenta corriente ahora guarda
+`medioPago="CUENTA_CORRIENTE"`; el de una compra pagada sigue en null para no duplicar su pago.
+
+**Reglas**: `origen` es obligatorio si se paga algo, sin valor por defecto en la UI. Con origen CAJA
+sin caja abierta se rechaza con 409. Un movimiento impacta en el arqueo del momento en que se
+registra, no en `Compra.fecha`, para no alterar turnos ya cerrados. Los pagos anteriores a este
+cambio tienen origen null: se muestran pero no restan, así que los arqueos viejos no cambian de
+saldo. Los gastos operativos se sumaron después: ver 27.9.
+
+**SQL obligatorio antes de desplegar** (`ddl-auto=validate`, sin esto el backend no arranca):
+
+```sql
+ALTER TABLE compras ADD COLUMN origen text;
+ALTER TABLE movimientos_cuenta_corriente_proveedor
+  ADD COLUMN origen text,
+  ADD COLUMN id_sesion integer REFERENCES sesiones_caja(id_sesion);
+```
+
+**Verificación**: backend **269 tests** verdes (8 nuevos), incluido uno de integración que combina
+los 5 casos contra `GET /api/caja/resumen-dia`. Frontend: `tsc -b`, `oxlint` y `vite build` sin
+errores. No probado en un navegador real ni contra Supabase real, y el SQL no se corrió.
+
+### 27.9 Gastos operativos con medio de pago y origen (2026-11-02)
+
+**Pedido del dueño**: los gastos operativos también llevan origen. Para aplicar la regla de 27.8
+hace falta además el medio de pago, que `Gasto` no tenía: un origen solo no distingue efectivo de
+transferencia. La transferencia + CAJA se confirmó con el dueño: resta de `totalDigital`.
+
+**Modelo**: `Gasto.medioPago` (EFECTIVO | TRANSFERENCIA), `.origen` (CAJA | EXTERNO) y `.sesion`.
+Ambos son obligatorios al crear, sin valor por defecto en la UI. Cuenta corriente no aplica a gastos.
+
+**Reglas**: mismo efecto que la tabla de 27.8. Con origen CAJA sin caja abierta se rechaza con 409.
+El gasto figura en el arqueo del momento en que se registra (`sesion` por turno, `creadoEn` por
+rango), no en `Gasto.fecha`, para no alterar turnos cerrados. Los gastos anteriores tienen medio y
+origen null: en el rango se muestran con "—" y no restan. El balance de Reportes no cambia: sigue
+restando todos los gastos por `Gasto.fecha`.
+
+**Riesgo de doble descuento**: un retiro de caja ya resta del saldo esperado. Si un gasto se pagó con
+la plata de un retiro, hay que cargarlo con origen EXTERNO.
+
+**SQL obligatorio antes de desplegar**, además del de 27.8:
+
+```sql
+ALTER TABLE gastos
+  ADD COLUMN medio_pago text,
+  ADD COLUMN origen text,
+  ADD COLUMN id_sesion integer REFERENCES sesiones_caja(id_sesion);
+```
+
+**Verificación**: backend **276 tests** verdes (7 nuevos). Frontend: `tsc -b`, `oxlint` y `vite build`
+sin errores. No probado en un navegador real ni contra Supabase real, y el SQL no se corrió.
+
+### 27.10 Facturar a un cliente con autocompletado desde ARCA (2026-11-02)
+
+**Pedido del dueño**: guardar el CUIT en los clientes, elegir cliente y venta y facturar a su nombre,
+con el nombre autocompletado desde el CUIT como en la web de ARCA.
+
+**Padrón (`AfipPadronService`)**: `getPersona_v2` de `ws_sr_constancia_inscripcion`, en
+`https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5` (manual oficial v3.4 leído antes de
+escribir código). Expuesto en `GET /api/clientes/padron/{cuit}`. `AfipAuthService` pasó a cachear un
+ticket por servicio. **Requiere que el dueño autorice este servicio para el certificado en ARCA**;
+sin eso la consulta falla, la pantalla lo avisa y los datos se pueden cargar a mano. El padrón solo
+acepta CUIT: un DNI se autocompleta únicamente desde el catálogo. No hay homologación, así que el
+servicio real recién se ejercita en producción. El manual no documenta el SOAP fault de un CUIT
+inexistente en `getPersona_v2`: se maneja por `faultstring` y por `errorConstancia`. Los ID de impuesto
+30 (IVA) y 20 (monotributo) salen de ejemplos del manual; el 32 (IVA exento) no aparece ahí. Por eso la
+condición deducida es una sugerencia editable.
+
+**`CondicionIVAReceptorId` (RG 5616), no pedido pero bloqueante**: el manual v4.7 de WSFEv1 lo anuncia
+como obligatorio; el v4.8 fija el 1/12/2026 según Thomson Reuters y otras fuentes secundarias (no se
+pudo descargar el PDF v4.8). El sistema no lo enviaba, así que desde esa fecha ARCA rechazaría toda
+factura y nota de crédito. Ahora: `FacturaFiscal.condicionIvaReceptor`, `Cliente.condicionIva`.
+Consumidor Final siempre 5, DNI 5 por defecto, CUIT obligatorio. La nota de crédito usa la de la factura
+original; si es vieja, 5 sin CUIT o consulta al padrón con CUIT. Los códigos válidos para clase C no se
+verificaron contra `FEParamGetCondicionIvaReceptor`: un valor no admitido lo rechaza ARCA sin emitir.
+
+**Orden del sobre `FECAESolicitar`**: se alineó al esquema del manual (`ImpTrib` antes de `ImpIVA`,
+fechas de servicio antes de `MonId`). Un servicio no se probó aún contra ARCA real con este orden.
+
+**Cliente**: `FacturaFiscalController` llama a `ClienteService.registrarDesdeFactura` después del commit
+y sin propagar errores, porque un CAE obtenido es irreversible. Crea el cliente si el documento es nuevo,
+no pisa los datos de uno existente y vincula la venta solo si no tenía cliente.
+
+**Frontend**: pantalla nueva `Facturar.tsx` (`/facturar`): cliente → venta → emitir, con confirmación.
+Es el único lugar donde se emite: `HistorialVentas.tsx` muestra el resultado y enlaza a ella.
+
+**SQL obligatorio antes de desplegar**, además del de 27.8 y 27.9:
+
+```sql
+ALTER TABLE clientes ADD COLUMN condicion_iva integer;
+ALTER TABLE facturas_fiscales ADD COLUMN condicion_iva_receptor integer;
+```
+
+**Verificación**: backend **304 tests** verdes (28 nuevos), ARCA mockeado. Frontend: `tsc -b`, `oxlint` y
+`vite build` sin errores. No probado en un navegador real ni contra ARCA o Supabase reales, y el SQL no
+se corrió.

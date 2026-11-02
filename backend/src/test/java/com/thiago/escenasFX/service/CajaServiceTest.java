@@ -28,11 +28,15 @@ import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.exception.CotizacionNoDisponibleException;
 import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.Gasto;
 import com.thiago.escenasFX.model.MovimientoCaja;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.model.Venta;
+import com.thiago.escenasFX.repository.GastoRepository;
 import com.thiago.escenasFX.repository.MovimientoCajaRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.SolicitudRetiroRepository;
@@ -57,6 +61,10 @@ class CajaServiceTest {
     private CotizacionService cotizacionService;
     @Mock
     private ProductoRepository productoRepo;
+    @Mock
+    private MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
+    @Mock
+    private GastoRepository gastoRepo;
     // abrirSesion() maneja su propia transacción a mano (TransactionTemplate) para poder tenerla
     // bajo el mismo "synchronized" que serializa aperturas concurrentes — ver CajaService. Un
     // PlatformTransactionManager mockeado alcanza: sus getTransaction/commit/rollback son no-ops
@@ -195,6 +203,95 @@ class CajaServiceTest {
         // totalDigital = ventasTransferencia - retirosTransferencia + ventasTarjeta = 500 - 0 + 200
         assertThat(resumen.getTotalDigital()).isEqualByComparingTo("700");
         assertThat(resumen.getCajaTotalDelDia()).isEqualByComparingTo("1900");
+    }
+
+    private MovimientoCuentaCorrienteProveedor movimientoProveedor(String tipo, String medioPago, String origen,
+            String monto) {
+        MovimientoCuentaCorrienteProveedor m = new MovimientoCuentaCorrienteProveedor();
+        m.setTipo(tipo);
+        m.setMedioPago(medioPago);
+        m.setOrigen(origen);
+        m.setMonto(new BigDecimal(monto));
+        return m;
+    }
+
+    @Test
+    void calcularResumenDeSesion_soloElEfectivoDeCajaRestaDelSaldoEsperado() {
+        SesionCaja sesion = new SesionCaja();
+        sesion.setIdSesion(10);
+        sesion.setMontoInicial(new BigDecimal("1000"));
+        when(sesionRepo.findById(10)).thenReturn(Optional.of(sesion));
+        when(ventaRepo.findBySesion_IdSesionAndEstado(10, "CONFIRMADA")).thenReturn(List.of(
+            ventaConfirmada("EFECTIVO", "300"),
+            ventaConfirmada("TRANSFERENCIA", "500")));
+        when(movRepo.findBySesion_IdSesion(10)).thenReturn(List.of());
+        when(movimientoProveedorRepo.findBySesion_IdSesion(10)).thenReturn(List.of(
+            movimientoProveedor("HABER_PAGO", "EFECTIVO", "CAJA", "100"),
+            movimientoProveedor("HABER_PAGO", "EFECTIVO", "EXTERNO", "200"),
+            movimientoProveedor("HABER_PAGO", "TRANSFERENCIA", "CAJA", "50"),
+            movimientoProveedor("HABER_PAGO", "TRANSFERENCIA", "EXTERNO", "70"),
+            movimientoProveedor("HABER_PAGO", "EFECTIVO", null, "40"), // anterior al campo origen
+            movimientoProveedor("DEBE_COMPRA", "CUENTA_CORRIENTE", null, "900"),
+            movimientoProveedor("DEBE_COMPRA", null, null, "100"), // compra ya pagada: no se muestra
+            movimientoProveedor("HABER_DEVOLUCION", null, null, "30"))); // no movió plata
+
+        ResumenDiaDTO resumen = cajaService.calcularResumenDeSesion(10);
+
+        assertThat(resumen.getEfectivoFinal()).isEqualByComparingTo("1200"); // 1000 + 300 - 100
+        assertThat(resumen.getTotalDigital()).isEqualByComparingTo("450"); // 500 - 50
+        assertThat(resumen.getCajaTotalDelDia()).isEqualByComparingTo("1650");
+        assertThat(resumen.getPagosProveedorEfectivoCaja()).isEqualByComparingTo("100");
+        assertThat(resumen.getPagosProveedorTransferenciaCaja()).isEqualByComparingTo("50");
+        assertThat(resumen.getMovimientosProveedor()).hasSize(6);
+        assertThat(resumen.getMovimientosProveedor().stream().filter(CajaService::restaDelSaldoEsperado)).hasSize(1);
+    }
+
+    private Gasto gasto(String medioPago, String origen, String importe) {
+        Gasto g = new Gasto();
+        g.setMedioPago(medioPago);
+        g.setOrigen(origen);
+        g.setImporte(new BigDecimal(importe));
+        return g;
+    }
+
+    @Test
+    void calcularResumenDeSesion_gastos_soloElEfectivoDeCajaRestaDelSaldoEsperado() {
+        SesionCaja sesion = new SesionCaja();
+        sesion.setIdSesion(10);
+        sesion.setMontoInicial(new BigDecimal("1000"));
+        when(sesionRepo.findById(10)).thenReturn(Optional.of(sesion));
+        when(ventaRepo.findBySesion_IdSesionAndEstado(10, "CONFIRMADA")).thenReturn(List.of(
+            ventaConfirmada("TRANSFERENCIA", "500")));
+        when(movRepo.findBySesion_IdSesion(10)).thenReturn(List.of());
+        when(gastoRepo.findBySesion_IdSesion(10)).thenReturn(List.of(
+            gasto("EFECTIVO", "CAJA", "100"),
+            gasto("EFECTIVO", "EXTERNO", "200"),
+            gasto("TRANSFERENCIA", "CAJA", "50"),
+            gasto("TRANSFERENCIA", "EXTERNO", "70"),
+            gasto(null, null, "40"))); // anterior a estos campos
+
+        ResumenDiaDTO resumen = cajaService.calcularResumenDeSesion(10);
+
+        assertThat(resumen.getEfectivoFinal()).isEqualByComparingTo("900"); // 1000 - 100
+        assertThat(resumen.getTotalDigital()).isEqualByComparingTo("450"); // 500 - 50
+        assertThat(resumen.getCajaTotalDelDia()).isEqualByComparingTo("1350");
+        assertThat(resumen.getGastosEfectivoCaja()).isEqualByComparingTo("100");
+        assertThat(resumen.getGastosTransferenciaCaja()).isEqualByComparingTo("50");
+        assertThat(resumen.getGastos()).hasSize(5);
+        assertThat(resumen.getGastos().stream().filter(CajaService::restaDelSaldoEsperado)).hasSize(1);
+    }
+
+    @Test
+    void calcularResumenPorRango_buscaLosGastosPorCuandoSeRegistraron() {
+        LocalDate hoy = LocalDate.now();
+        when(sesionRepo.findByFechaBetweenOrderByFechaAscIdSesionAsc(hoy, hoy)).thenReturn(List.of());
+        when(gastoRepo.findByCreadoEnBetween(any(LocalDateTime.class), any(LocalDateTime.class)))
+            .thenReturn(List.of(gasto("EFECTIVO", "CAJA", "100")));
+
+        ResumenDiaDTO total = cajaService.calcularResumenPorRango(hoy, hoy).getTotal();
+
+        assertThat(total.getEfectivoFinal()).isEqualByComparingTo("-100");
+        assertThat(total.getGastos()).hasSize(1);
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.thiago.escenasFX.controller;
 import com.thiago.escenasFX.service.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.FacturaFiscalResponse;
 import com.thiago.escenasFX.dto.FacturarVentaRequest;
 import com.thiago.escenasFX.model.FacturaFiscal;
+import com.thiago.escenasFX.service.ClienteService;
 import com.thiago.escenasFX.service.FacturaFiscalService;
 import com.thiago.escenasFX.service.FacturaPdfService;
 
@@ -23,21 +26,39 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/ventas/{idVenta}/factura")
 public class FacturaFiscalController {
 
+    private static final Logger log = LoggerFactory.getLogger(FacturaFiscalController.class);
+
     private final FacturaFiscalService facturaFiscalService;
     private final FacturaPdfService facturaPdfService;
-    private final EmailService emailService; 
+    private final EmailService emailService;
+    private final ClienteService clienteService;
 
-    public FacturaFiscalController(FacturaFiscalService facturaFiscalService, FacturaPdfService facturaPdfService, EmailService emailService) {
+    public FacturaFiscalController(FacturaFiscalService facturaFiscalService, FacturaPdfService facturaPdfService, EmailService emailService,
+            ClienteService clienteService) {
         this.facturaFiscalService = facturaFiscalService;
         this.facturaPdfService = facturaPdfService;
         this.emailService = emailService;
+        this.clienteService = clienteService;
     }
 
     @PostMapping
     public FacturaFiscalResponse facturar(@PathVariable Integer idVenta, @Valid @RequestBody FacturarVentaRequest request) {
         FacturaFiscal factura = facturaFiscalService.facturar(idVenta, request.getClienteDocTipo(),
-            request.getClienteDocNro(), request.getClienteNombre());
+            request.getClienteDocNro(), request.getClienteNombre(), request.getCondicionIvaReceptor());
+        if ("EMITIDA".equals(factura.getEstado())) {
+            registrarCliente(factura);
+        }
         return toResponse(factura);
+    }
+
+    // Después del commit de la factura y sin propagar errores: un CAE ya obtenido es irreversible,
+    // así que una falla al guardar el cliente no puede deshacer el registro del comprobante.
+    private void registrarCliente(FacturaFiscal factura) {
+        try {
+            clienteService.registrarDesdeFactura(factura);
+        } catch (RuntimeException e) {
+            log.error("Factura {} emitida, pero no se pudo guardar su cliente", factura.getIdFactura(), e);
+        }
     }
 
     @GetMapping
@@ -68,7 +89,7 @@ public class FacturaFiscalController {
     private FacturaFiscalResponse toResponse(FacturaFiscal f) {
         return new FacturaFiscalResponse(f.getIdFactura(), f.getVenta().getIdVenta(), f.getPuntoVenta(),
             f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getClienteNombre(),
-            f.getCae(), f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
+            f.getCondicionIvaReceptor(), f.getCae(), f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
     }
     // Antes tomaba el email como @RequestParam sin validar (a diferencia de
     // VentaController.enviarComprobante, la operación equivalente para el comprobante interno,

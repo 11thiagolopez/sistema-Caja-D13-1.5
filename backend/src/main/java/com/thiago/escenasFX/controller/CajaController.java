@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.AbrirCajaRequest;
 import com.thiago.escenasFX.dto.ConfirmarRetiroRequest;
+import com.thiago.escenasFX.dto.GastoArqueoResponse;
 import com.thiago.escenasFX.dto.MovimientoCajaResponse;
+import com.thiago.escenasFX.dto.MovimientoProveedorArqueoResponse;
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenDiaResponse;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
@@ -27,7 +29,9 @@ import com.thiago.escenasFX.dto.SesionCajaResponse;
 import com.thiago.escenasFX.dto.SolicitudRetiroResponse;
 import com.thiago.escenasFX.dto.VentaResponse;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.Gasto;
 import com.thiago.escenasFX.model.MovimientoCaja;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
@@ -132,7 +136,23 @@ public class CajaController {
             resumen.getEfectivoFinal(),
             resumen.getTotalDigital(),
             resumen.getCajaTotalDelDia(),
-            resumen.getVentasPagadasConSaldo());
+            resumen.getVentasPagadasConSaldo(),
+            resumen.getMovimientosProveedor().stream().map(this::toResponse).toList(),
+            resumen.getPagosProveedorEfectivoCaja(),
+            resumen.getPagosProveedorTransferenciaCaja(),
+            resumen.getGastos().stream().map(this::toResponse).toList(),
+            resumen.getGastosEfectivoCaja(),
+            resumen.getGastosTransferenciaCaja());
+    }
+
+    private GastoArqueoResponse toResponse(Gasto g) {
+        return new GastoArqueoResponse(g.getIdGasto(), g.getCreadoEn(), g.getNombre(), g.getCategoria(),
+            g.getMedioPago(), g.getOrigen(), g.getImporte(), CajaService.restaDelSaldoEsperado(g));
+    }
+
+    private MovimientoProveedorArqueoResponse toResponse(MovimientoCuentaCorrienteProveedor m) {
+        return new MovimientoProveedorArqueoResponse(m.getIdMovimiento(), m.getFecha(), m.getProveedor().getNombre(),
+            m.getDescripcion(), m.getMedioPago(), m.getOrigen(), m.getMonto(), CajaService.restaDelSaldoEsperado(m));
     }
 
     private SesionCajaResponse toResponse(SesionCaja sesion) {

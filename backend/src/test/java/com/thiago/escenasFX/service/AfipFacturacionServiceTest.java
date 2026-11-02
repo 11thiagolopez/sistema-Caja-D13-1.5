@@ -84,6 +84,18 @@ class AfipFacturacionServiceTest {
     }
 
     @Test
+    void construirEnvelope_respetaElOrdenDelEsquemaConCondicionIvaYFechasDeServicio() {
+        LocalDate fecha = LocalDate.of(2026, 8, 19);
+        DatosFactura datos = new DatosFactura(1, 13, 3, 80, "20300238379", new BigDecimal("2000"),
+            fecha, fecha, fecha, fecha, 11, 1, 42, 6);
+
+        String envelope = service.construirEnvelopeFECAESolicitar(cred, datos, 6);
+
+        assertThat(envelope).containsSubsequence("<ar:ImpTrib>", "<ar:ImpIVA>", "<ar:FchServDesde>", "<ar:FchVtoPago>",
+            "<ar:MonId>", "<ar:MonCotiz>", "<ar:CondicionIVAReceptorId>6</ar:CondicionIVAReceptorId>", "<ar:CbtesAsoc>");
+    }
+
+    @Test
     void parsearResultadoCae_aprobado_extraeCaeYVencimiento() {
         String respuesta = respuestaFecaeSolicitar("A", "5", "70012345678901", "20260829", null, null);
 

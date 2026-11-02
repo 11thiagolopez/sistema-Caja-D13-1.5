@@ -29,8 +29,12 @@ export function Caja() {
         <li>Ventas tarjeta: {resumen.ventasTarjeta.toFixed(2)}</li>
         <li>Retiros efectivo: {resumen.retirosEfectivo.toFixed(2)}</li>
         <li>Retiros transferencia: {resumen.retirosTransferencia.toFixed(2)}</li>
+        <li>Pagos a proveedores en efectivo de caja: {resumen.pagosProveedorEfectivoCaja.toFixed(2)}</li>
+        <li>Pagos a proveedores por transferencia de caja: {resumen.pagosProveedorTransferenciaCaja.toFixed(2)}</li>
+        <li>Gastos en efectivo de caja: {resumen.gastosEfectivoCaja.toFixed(2)}</li>
+        <li>Gastos por transferencia de caja: {resumen.gastosTransferenciaCaja.toFixed(2)}</li>
         <li>
-          <strong>Efectivo final: {resumen.efectivoFinal.toFixed(2)}</strong>
+          <strong>Saldo esperado en efectivo: {resumen.efectivoFinal.toFixed(2)}</strong>
         </li>
         <li>Total digital: {resumen.totalDigital.toFixed(2)}</li>
         <li>
@@ -43,6 +47,72 @@ export function Caja() {
           </li>
         )}
       </ul>
+
+      <h3>Compras y pagos a proveedores</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Proveedor</th>
+            <th>Descripción</th>
+            <th>Medio de pago</th>
+            <th>Origen</th>
+            <th>Monto</th>
+            <th>Resta del saldo esperado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resumen.movimientosProveedor.length === 0 && (
+            <tr>
+              <td colSpan={7}>Sin movimientos hoy.</td>
+            </tr>
+          )}
+          {resumen.movimientosProveedor.map((m) => (
+            <tr key={m.idMovimiento}>
+              <td>{new Date(m.fecha).toLocaleString()}</td>
+              <td>{m.nombreProveedor}</td>
+              <td>{m.descripcion ?? '—'}</td>
+              <td>{m.medioPago}</td>
+              <td>{m.origen ?? '—'}</td>
+              <td>${m.monto.toFixed(2)}</td>
+              <td>{m.restaDelSaldoEsperado ? 'Sí' : 'No'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3>Gastos operativos</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Registrado</th>
+            <th>Nombre</th>
+            <th>Categoría</th>
+            <th>Medio de pago</th>
+            <th>Origen</th>
+            <th>Importe</th>
+            <th>Resta del saldo esperado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resumen.gastos.length === 0 && (
+            <tr>
+              <td colSpan={7}>Sin gastos hoy.</td>
+            </tr>
+          )}
+          {resumen.gastos.map((g) => (
+            <tr key={g.idGasto}>
+              <td>{new Date(g.fecha).toLocaleString()}</td>
+              <td>{g.nombre}</td>
+              <td>{g.categoria ?? '—'}</td>
+              <td>{g.medioPago ?? '—'}</td>
+              <td>{g.origen ?? '—'}</td>
+              <td>${g.importe.toFixed(2)}</td>
+              <td>{g.restaDelSaldoEsperado ? 'Sí' : 'No'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -1,5 +1,10 @@
 import { request } from './client'
-import type { ClienteRequest, ClienteResponse, CuentaCorrienteClienteResponse } from '../types/api'
+import type {
+  ClienteRequest,
+  ClienteResponse,
+  ContribuyenteResponse,
+  CuentaCorrienteClienteResponse,
+} from '../types/api'
 
 export function getClientes(): Promise<ClienteResponse[]> {
   return request<ClienteResponse[]>('/api/clientes')
@@ -7,6 +12,10 @@ export function getClientes(): Promise<ClienteResponse[]> {
 
 export function buscarClientes(q: string): Promise<ClienteResponse[]> {
   return request<ClienteResponse[]>(`/api/clientes/buscar?q=${encodeURIComponent(q)}`)
+}
+
+export function consultarPadron(cuit: string): Promise<ContribuyenteResponse> {
+  return request<ContribuyenteResponse>(`/api/clientes/padron/${cuit}`)
 }
 
 export function getCliente(id: number): Promise<ClienteResponse> {

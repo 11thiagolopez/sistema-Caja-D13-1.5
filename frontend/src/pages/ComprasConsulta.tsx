@@ -95,6 +95,7 @@ export function ComprasConsulta() {
                 <th>Fecha</th>
                 <th>Proveedor</th>
                 <th>Medio de pago</th>
+                <th>Origen</th>
                 <th>Items</th>
                 <th>Total</th>
               </tr>
@@ -105,6 +106,7 @@ export function ComprasConsulta() {
                   <td>{c.fecha}</td>
                   <td>{c.nombreProveedor}</td>
                   <td>{c.medioPago}</td>
+                  <td>{c.origen ?? '—'}</td>
                   <td>{c.items.map((i) => `${i.descripcionProducto} (x${i.cantidad})`).join(', ')}</td>
                   <td>{c.totalCompra.toFixed(2)}</td>
                 </tr>

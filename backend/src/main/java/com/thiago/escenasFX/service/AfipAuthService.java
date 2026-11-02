@@ -16,6 +16,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -57,7 +59,8 @@ import com.thiago.escenasFX.exception.AfipIntegracionException;
 public class AfipAuthService {
 
     private static final String WSAA_URL = "https://wsaa.afip.gov.ar/ws/services/LoginCms";
-    private static final String SERVICIO = "wsfe";
+    static final String SERVICIO_WSFE = "wsfe";
+    static final String SERVICIO_PADRON = "ws_sr_constancia_inscripcion";
     private static final String WSAA_NAMESPACE = "http://wsaa.view.sua.dvadac.afip.gov.ar/";
 
     static {
@@ -72,8 +75,8 @@ public class AfipAuthService {
 
     private PrivateKey clavePrivadaCache;
     private X509Certificate certificadoCache;
-    private Credenciales credencialesCache;
-    private Instant credencialesVencenEn;
+    // Un ticket por servicio: el de wsfe no sirve para consultar el padrón, y viceversa.
+    private final Map<String, TicketAcceso> ticketsPorServicio = new HashMap<>();
 
     public AfipAuthService(RestClient.Builder builder,
             @Value("${afip.cert.key-base64:}") String keyBase64,
@@ -90,20 +93,29 @@ public class AfipAuthService {
     public record Credenciales(String token, String sign) {
     }
 
-    public synchronized Credenciales obtenerCredenciales() {
-        if (credencialesCache != null && Instant.now().isBefore(credencialesVencenEn)) {
-            return credencialesCache;
-        }
-
-        String cms = firmarLoginTicketRequest();
-        String respuestaSoap = llamarLoginCms(cms);
-        credencialesCache = parsearCredenciales(respuestaSoap);
-        // Margen de seguridad: se vuelve a pedir 5 minutos antes de que WSAA lo dé por vencido.
-        credencialesVencenEn = parsearVencimiento(respuestaSoap).minusSeconds(300);
-        return credencialesCache;
+    private record TicketAcceso(Credenciales credenciales, Instant vencimiento) {
     }
 
-    String construirLoginTicketRequestXml(ZonedDateTime ahora) {
+    public Credenciales obtenerCredenciales() {
+        return obtenerCredenciales(SERVICIO_WSFE);
+    }
+
+    public synchronized Credenciales obtenerCredenciales(String servicio) {
+        TicketAcceso ticket = ticketsPorServicio.get(servicio);
+        if (ticket != null && Instant.now().isBefore(ticket.vencimiento())) {
+            return ticket.credenciales();
+        }
+
+        String cms = firmarLoginTicketRequest(servicio);
+        String respuestaSoap = llamarLoginCms(cms);
+        Credenciales credenciales = parsearCredenciales(respuestaSoap);
+        // Margen de seguridad: se vuelve a pedir 5 minutos antes de que WSAA lo dé por vencido.
+        ticketsPorServicio.put(servicio,
+            new TicketAcceso(credenciales, parsearVencimiento(respuestaSoap).minusSeconds(300)));
+        return credenciales;
+    }
+
+    String construirLoginTicketRequestXml(ZonedDateTime ahora, String servicio) {
         DateTimeFormatter iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
         String generacion = ahora.minusMinutes(10).format(iso);
         String expiracion = ahora.plusMinutes(10).format(iso);
@@ -114,12 +126,13 @@ public class AfipAuthService {
             + "<generationTime>" + generacion + "</generationTime>"
             + "<expirationTime>" + expiracion + "</expirationTime>"
             + "</header>"
-            + "<service>" + SERVICIO + "</service>"
+            + "<service>" + servicio + "</service>"
             + "</loginTicketRequest>";
     }
 
-    private String firmarLoginTicketRequest() {
-        String xml = construirLoginTicketRequestXml(ZonedDateTime.now(ZoneId.of("America/Argentina/Buenos_Aires")));
+    private String firmarLoginTicketRequest(String servicio) {
+        String xml = construirLoginTicketRequestXml(
+            ZonedDateTime.now(ZoneId.of("America/Argentina/Buenos_Aires")), servicio);
         return firmarCms(xml);
     }
 

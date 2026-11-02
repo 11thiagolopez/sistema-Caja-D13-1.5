@@ -3,9 +3,16 @@ import { useAuth } from '../auth/AuthContext'
 import { crearGasto, getGastos } from '../api/gastos'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
-import type { GastoRequest, GastoResponse } from '../types/api'
+import type { GastoRequest, GastoResponse, MedioPagoProveedor, OrigenPago } from '../types/api'
 
-const GASTO_VACIO = { nombre: '', importe: '', fecha: hoyIso(), categoria: '' }
+const GASTO_VACIO = {
+  nombre: '',
+  importe: '',
+  fecha: hoyIso(),
+  categoria: '',
+  medioPago: '' as MedioPagoProveedor | '',
+  origen: '' as OrigenPago | '',
+}
 
 export function Gastos() {
   const { sesion } = useAuth()
@@ -39,7 +46,7 @@ export function Gastos() {
 
   async function onAgregar(e: FormEvent) {
     e.preventDefault()
-    if (!sesion || !form.nombre || !form.importe || !form.fecha) return
+    if (!sesion || !form.nombre || !form.importe || !form.fecha || !form.medioPago || !form.origen) return
     setErrorAlta(null)
     setAgregando(true)
     try {
@@ -49,6 +56,8 @@ export function Gastos() {
         importe: Number(form.importe),
         fecha: form.fecha,
         categoria: form.categoria || undefined,
+        medioPago: form.medioPago,
+        origen: form.origen,
       }
       await crearGasto(req)
       setForm(GASTO_VACIO)
@@ -103,6 +112,30 @@ export function Gastos() {
             Categoría (opcional)
             <input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} />
           </label>
+          <label>
+            Medio de pago
+            <select
+              required
+              value={form.medioPago}
+              onChange={(e) => setForm({ ...form, medioPago: e.target.value as MedioPagoProveedor })}
+            >
+              <option value="">Elegí...</option>
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+            </select>
+          </label>
+          <label>
+            Origen del dinero
+            <select
+              required
+              value={form.origen}
+              onChange={(e) => setForm({ ...form, origen: e.target.value as OrigenPago })}
+            >
+              <option value="">Elegí...</option>
+              <option value="CAJA">Caja</option>
+              <option value="EXTERNO">Externo</option>
+            </select>
+          </label>
           {errorAlta && <p className="error">{errorAlta}</p>}
           <button type="submit" disabled={agregando}>
             {agregando && <span className="spinner" />}
@@ -136,6 +169,8 @@ export function Gastos() {
                   <th>Fecha</th>
                   <th>Nombre</th>
                   <th>Categoría</th>
+                  <th>Medio de pago</th>
+                  <th>Origen</th>
                   <th>Importe</th>
                   <th>Registrado por</th>
                 </tr>
@@ -146,6 +181,8 @@ export function Gastos() {
                     <td>{g.fecha}</td>
                     <td>{g.nombre}</td>
                     <td>{g.categoria}</td>
+                    <td>{g.medioPago ?? '—'}</td>
+                    <td>{g.origen ?? '—'}</td>
                     <td>{g.importe.toFixed(2)}</td>
                     <td>{g.empleadoRegistroNombre}</td>
                   </tr>

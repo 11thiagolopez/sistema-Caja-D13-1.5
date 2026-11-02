@@ -10,6 +10,7 @@ public class ClienteResponse {
     private String nombre;
     private Integer docTipo;
     private String docNro;
+    private Integer condicionIva;
     private String telefono;
     private String email;
     private String direccion;

@@ -31,10 +31,12 @@ import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Proveedor;
+import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.repository.CompraRepository;
 import com.thiago.escenasFX.repository.DevolucionProveedorRepository;
 import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
+import com.thiago.escenasFX.repository.SesionCajaRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CompraServiceTest {
@@ -51,6 +53,8 @@ class CompraServiceTest {
     private MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
     @Mock
     private DevolucionProveedorRepository devolucionProveedorRepo;
+    @Mock
+    private SesionCajaRepository sesionRepo;
 
     @InjectMocks
     private CompraService compraService;
@@ -94,6 +98,7 @@ class CompraServiceTest {
         req.setFecha(LocalDate.now());
         req.setProveedorNombre("Proveedor SA");
         req.setMedioPago("EFECTIVO");
+        req.setOrigen("EXTERNO");
         req.setItems(List.of(item));
 
         compraService.registrarCompra(req, new Empleado());
@@ -114,6 +119,7 @@ class CompraServiceTest {
         req.setFecha(LocalDate.now());
         req.setProveedorNombre("Proveedor de prueba");
         req.setMedioPago("EFECTIVO");
+        req.setOrigen("EXTERNO");
         req.setItems(List.of(item));
         req.setMontoPagado(montoPagado);
         return req;
@@ -178,7 +184,7 @@ class CompraServiceTest {
         compra.setMontoPagado(new BigDecimal("30"));
         when(compraRepo.findById(10)).thenReturn(Optional.of(compra));
 
-        Compra guardada = compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", new Empleado());
+        Compra guardada = compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", "EXTERNO", new Empleado());
 
         assertThat(guardada.getMontoPagado()).isEqualByComparingTo("80");
         ArgumentCaptor<MovimientoCuentaCorrienteProveedor> captor =
@@ -197,11 +203,160 @@ class CompraServiceTest {
         compra.setMontoPagado(new BigDecimal("80"));
         when(compraRepo.findById(10)).thenReturn(Optional.of(compra));
 
-        assertThatThrownBy(() -> compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", new Empleado()))
+        assertThatThrownBy(() -> compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", "EXTERNO", new Empleado()))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("supera el saldo pendiente");
 
         verify(movimientoProveedorRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarCompra_conCuentaCorriente_dejaTodoComoDeudaAunqueVengaMontoPagado() {
+        Producto producto = producto(3, 0);
+        when(productoRepo.findById(3)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(proveedorService.resolverOCrear("Proveedor de prueba")).thenReturn(proveedor(1));
+
+        CompraRequest req = compraReq(3, "100", new BigDecimal("100"));
+        req.setMedioPago("CUENTA_CORRIENTE");
+
+        Compra guardada = compraService.registrarCompra(req, new Empleado());
+
+        assertThat(guardada.getMontoPagado()).isEqualByComparingTo("0");
+        ArgumentCaptor<MovimientoCuentaCorrienteProveedor> captor =
+            ArgumentCaptor.forClass(MovimientoCuentaCorrienteProveedor.class);
+        verify(movimientoProveedorRepo).save(captor.capture());
+        assertThat(captor.getValue().getTipo()).isEqualTo("DEBE_COMPRA");
+        assertThat(captor.getValue().getMedioPago()).isEqualTo("CUENTA_CORRIENTE");
+        assertThat(captor.getValue().getOrigen()).isNull();
+        assertThat(guardada.getOrigen()).isNull();
+    }
+
+    @Test
+    void registrarPago_conMedioQueNoEsEfectivoNiTransferencia_lanzaExcepcion() {
+        for (String medio : List.of("CUENTA_CORRIENTE", "TARJETA")) {
+            assertThatThrownBy(() -> compraService.registrarPago(10, new BigDecimal("50"), medio, "EXTERNO", new Empleado()))
+                .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        verify(movimientoProveedorRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarPago_sinOrigenValido_lanzaExcepcion() {
+        assertThatThrownBy(() -> compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", null, new Empleado()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("origen");
+
+        verify(movimientoProveedorRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarPago_deCajaSinCajaAbierta_lanzaExcepcion() {
+        compraPendiente(10, "100", "0");
+        when(sesionRepo.findByEstado("ABIERTA")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", "CAJA", new Empleado()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("caja abierta");
+
+        verify(movimientoProveedorRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarPago_deCaja_quedaAsociadoAlTurnoAbierto() {
+        compraPendiente(10, "100", "0");
+        SesionCaja sesion = new SesionCaja();
+        when(sesionRepo.findByEstado("ABIERTA")).thenReturn(Optional.of(sesion));
+
+        compraService.registrarPago(10, new BigDecimal("50"), "EFECTIVO", "CAJA", new Empleado());
+
+        ArgumentCaptor<MovimientoCuentaCorrienteProveedor> captor =
+            ArgumentCaptor.forClass(MovimientoCuentaCorrienteProveedor.class);
+        verify(movimientoProveedorRepo).save(captor.capture());
+        assertThat(captor.getValue().getOrigen()).isEqualTo("CAJA");
+        assertThat(captor.getValue().getSesion()).isSameAs(sesion);
+    }
+
+    @Test
+    void registrarCompra_pagandoSinOrigen_lanzaExcepcion() {
+        Producto producto = producto(3, 0);
+        when(productoRepo.findById(3)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(proveedorService.resolverOCrear("Proveedor de prueba")).thenReturn(proveedor(1));
+
+        CompraRequest req = compraReq(3, "100", null);
+        req.setOrigen(null);
+
+        assertThatThrownBy(() -> compraService.registrarCompra(req, new Empleado()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("origen");
+
+        verify(compraRepo, never()).save(any());
+    }
+
+    @Test
+    void registrarCompra_conTarjeta_lanzaExcepcion() {
+        CompraRequest req = compraReq(3, "100", null);
+        req.setMedioPago("TARJETA");
+
+        assertThatThrownBy(() -> compraService.registrarCompra(req, new Empleado()))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(compraRepo, never()).save(any());
+    }
+
+    private Compra compraPendiente(int id, String total, String pagado) {
+        Compra compra = new Compra();
+        compra.setIdCompra(id);
+        compra.setProveedor(proveedor(1));
+        compra.setFecha(LocalDate.now());
+        compra.setTotalCompra(new BigDecimal(total));
+        compra.setMontoPagado(new BigDecimal(pagado));
+        lenient().when(compraRepo.findById(id)).thenReturn(Optional.of(compra));
+        return compra;
+    }
+
+    @Test
+    void registrarPagoAProveedor_parcial_seAplicaDeLaCompraMasViejaALaMasNueva() {
+        Compra vieja = compraPendiente(1, "100", "0");
+        Compra nueva = compraPendiente(2, "200", "0");
+        when(compraRepo.buscarConSaldoPendiente(1)).thenReturn(List.of(vieja, nueva));
+        when(movimientoProveedorRepo.findByProveedorIdProveedorOrderByFechaDesc(1))
+            .thenReturn(List.of(movimiento("DEBE_COMPRA", "100"), movimiento("DEBE_COMPRA", "200")));
+
+        compraService.registrarPagoAProveedor(1, new BigDecimal("150"), "EFECTIVO", "EXTERNO", new Empleado());
+
+        assertThat(vieja.getMontoPagado()).isEqualByComparingTo("100");
+        assertThat(nueva.getMontoPagado()).isEqualByComparingTo("50");
+        verify(movimientoProveedorRepo, times(2)).save(any());
+    }
+
+    @Test
+    void registrarPagoAProveedor_superaLaDeudaNetaDeDevoluciones_lanzaExcepcion() {
+        when(movimientoProveedorRepo.findByProveedorIdProveedorOrderByFechaDesc(1))
+            .thenReturn(List.of(movimiento("DEBE_COMPRA", "100"), movimiento("HABER_DEVOLUCION", "30")));
+
+        assertThatThrownBy(() -> compraService.registrarPagoAProveedor(1, new BigDecimal("100"), "EFECTIVO", "EXTERNO", new Empleado()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("supera la deuda");
+
+        verify(movimientoProveedorRepo, never()).save(any());
+    }
+
+    @Test
+    void comprasPendientes_descuentaElCreditoDeDevolucionesDeLasMasViejas() {
+        List<Compra> compras = List.of(compraPendiente(1, "100", "0"), compraPendiente(2, "200", "0"));
+        when(compraRepo.buscarConSaldoPendiente(1)).thenReturn(compras);
+        when(movimientoProveedorRepo.findByProveedorIdProveedorOrderByFechaDesc(1)).thenReturn(List.of(
+            movimiento("DEBE_COMPRA", "100"), movimiento("DEBE_COMPRA", "200"), movimiento("HABER_DEVOLUCION", "130")));
+
+        var pendientes = compraService.comprasPendientes(1);
+
+        // La devolución de 130 cubre toda la compra 1 (100) y 30 de la compra 2.
+        assertThat(pendientes).hasSize(1);
+        assertThat(pendientes.get(0).getIdCompra()).isEqualTo(2);
+        assertThat(pendientes.get(0).getSaldoPendiente()).isEqualByComparingTo("170");
     }
 
     @Test

@@ -35,9 +35,19 @@ public class Gasto {
 
     private String categoria;
 
+    @Column(name = "medio_pago")
+    private String medioPago; // EFECTIVO | TRANSFERENCIA; null en gastos anteriores a este campo
+
+    private String origen; // CAJA | EXTERNO; null en gastos anteriores a este campo
+
     @ManyToOne
     @JoinColumn(name = "id_empleado_registro")
     private Empleado empleadoRegistro;
+
+    // La caja abierta cuando se registró el gasto: es el turno en cuyo arqueo figura.
+    @ManyToOne
+    @JoinColumn(name = "id_sesion")
+    private SesionCaja sesion;
 
     @Column(name = "creado_en")
     private LocalDateTime creadoEn = LocalDateTime.now();

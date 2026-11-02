@@ -22,6 +22,7 @@ import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.service.AfipFacturacionService;
 import com.thiago.escenasFX.service.AfipFacturacionService.ResultadoCae;
+import com.thiago.escenasFX.service.AfipPadronService;
 
 /**
  * Ejercita FacturaFiscalController de punta a punta (controller -> FacturaFiscalService ->
@@ -152,11 +153,90 @@ class FacturaFiscalControllerIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
                 .content("{\"clienteDocTipo\": 80, \"clienteDocNro\": \"20300238379\", "
-                    + "\"clienteNombre\": \"Juan Perez\"}"))
+                    + "\"clienteNombre\": \"Juan Perez\", \"condicionIvaReceptor\": 6}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.estado").value("EMITIDA"))
             .andExpect(jsonPath("$.clienteNombre").value("Juan Perez"))
             .andExpect(jsonPath("$.clienteDocNro").value("20300238379"));
+    }
+
+    @Test
+    void facturar_conCuitNuevo_guardaElClienteYLoVinculaALaVenta() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto();
+        String tokenVendedor = login("vendedor1", "clave123");
+        Integer idVenta = crearVentaConfirmada(tokenVendedor, vendedor, producto);
+        String tokenAdmin = login("admin1", "clave123");
+
+        mockMvc.perform(post("/api/ventas/" + idVenta + "/factura")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
+                .content("{\"clienteDocTipo\": 80, \"clienteDocNro\": \"20300238379\", "
+                    + "\"clienteNombre\": \"Juan Perez\", \"condicionIvaReceptor\": 6}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.condicionIvaReceptor").value(6));
+
+        mockMvc.perform(get("/api/clientes/buscar?q=20300238379")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].nombre").value("Juan Perez"))
+            .andExpect(jsonPath("$[0].docTipo").value(80))
+            .andExpect(jsonPath("$[0].condicionIva").value(6));
+
+        mockMvc.perform(get("/api/ventas/" + idVenta)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.idCliente").isNumber());
+    }
+
+    @Test
+    void facturar_arcaRechaza_noGuardaElCliente() throws Exception {
+        Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        Producto producto = crearProducto();
+        String tokenVendedor = login("vendedor1", "clave123");
+        Integer idVenta = crearVentaConfirmada(tokenVendedor, vendedor, producto);
+        String tokenAdmin = login("admin1", "clave123");
+        org.mockito.Mockito.when(afipFacturacionService.emitirFacturaC(any()))
+            .thenReturn(new ResultadoCae(false, null, null, null, "10247 - CUIT inactiva"));
+
+        mockMvc.perform(post("/api/ventas/" + idVenta + "/factura")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
+                .content("{\"clienteDocTipo\": 80, \"clienteDocNro\": \"20300238379\", "
+                    + "\"clienteNombre\": \"Juan Perez\", \"condicionIvaReceptor\": 6}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("ERROR"));
+
+        mockMvc.perform(get("/api/clientes/buscar?q=20300238379")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void consultarPadron_comoAdmin_devuelveElContribuyente() throws Exception {
+        crearEmpleado("admin1", "clave123", "ADMIN", "admin1@test.com");
+        String tokenAdmin = login("admin1", "clave123");
+        org.mockito.Mockito.when(afipPadronService.consultar("20300238379"))
+            .thenReturn(new AfipPadronService.Contribuyente("20300238379", "PEREZ JUAN", "FISICA",
+                "ALEM 5982, BANFIELD, BUENOS AIRES", "ACTIVO", 6, null));
+
+        mockMvc.perform(get("/api/clientes/padron/20300238379")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.nombre").value("PEREZ JUAN"))
+            .andExpect(jsonPath("$.condicionIva").value(6));
+    }
+
+    @Test
+    void consultarPadron_comoVendedor_devuelve403() throws Exception {
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String tokenVendedor = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/clientes/padron/20300238379")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
+            .andExpect(status().isForbidden());
     }
 
     @Test

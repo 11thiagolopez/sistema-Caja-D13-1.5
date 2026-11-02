@@ -50,9 +50,19 @@ public class MovimientoCuentaCorrienteProveedor {
     @Column(precision = 12, scale = 2, nullable = false)
     private BigDecimal monto; // siempre positivo; el signo lo da "tipo"
 
-    // Solo tiene sentido en HABER_PAGO.
+    // Set en HABER_PAGO y en el DEBE_COMPRA de una compra en CUENTA_CORRIENTE. Null en el resto:
+    // el arqueo usa esto para mostrar solo lo que fue un pago o una compra a crédito.
     @Column(name = "medio_pago")
     private String medioPago;
+
+    // De dónde salió la plata de un HABER_PAGO: CAJA | EXTERNO. Null en pagos anteriores a este
+    // campo y en lo que no movió plata; en el arqueo cuenta como que no salió de la caja.
+    private String origen;
+
+    // Turno de caja abierto al registrar el movimiento, si había uno. Es obligatorio si origen=CAJA.
+    @ManyToOne
+    @JoinColumn(name = "id_sesion")
+    private SesionCaja sesion;
 
     // Set en HABER_DEVOLUCION.
     @ManyToOne

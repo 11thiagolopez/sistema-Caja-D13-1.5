@@ -41,6 +41,10 @@ public class Compra {
     @Column(name = "medio_pago")
     private String medioPago;
 
+    // De dónde salió lo pagado al registrar la compra: CAJA | EXTERNO. Null si no se pagó nada en
+    // ese momento (ej. CUENTA_CORRIENTE) y en compras anteriores a este campo.
+    private String origen;
+
     @Column(name = "total_compra", precision = 12, scale = 2)
     private BigDecimal totalCompra = BigDecimal.ZERO;
 

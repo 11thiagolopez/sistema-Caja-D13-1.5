@@ -23,6 +23,7 @@ import com.thiago.escenasFX.dto.DevolucionProveedorResponse;
 import com.thiago.escenasFX.dto.MovimientoCuentaCorrienteProveedorResponse;
 import com.thiago.escenasFX.dto.ProveedorRequest;
 import com.thiago.escenasFX.dto.ProveedorResponse;
+import com.thiago.escenasFX.dto.RegistrarPagoProveedorRequest;
 import com.thiago.escenasFX.model.DetalleDevolucionProveedor;
 import com.thiago.escenasFX.model.DevolucionProveedor;
 import com.thiago.escenasFX.model.Empleado;
@@ -78,7 +79,17 @@ public class ProveedorController {
             .map(this::toMovimientoResponse)
             .toList();
         return new CuentaCorrienteProveedorResponse(proveedor.getIdProveedor(), proveedor.getNombre(),
-            compraService.calcularSaldoProveedor(id), movimientos);
+            compraService.calcularSaldoProveedor(id), compraService.comprasPendientes(id), movimientos);
+    }
+
+    @PostMapping("/{id}/pagos")
+    public CuentaCorrienteProveedorResponse registrarPago(@PathVariable Integer id,
+            @Valid @RequestBody RegistrarPagoProveedorRequest request) {
+        Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
+            .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
+        compraService.registrarPagoAProveedor(id, request.getMonto(), request.getMedioPago(), request.getOrigen(),
+            empleado);
+        return cuentaCorriente(id);
     }
 
     @PostMapping("/devoluciones")
@@ -111,6 +122,7 @@ public class ProveedorController {
             m.getTipo(),
             m.getMonto(),
             m.getMedioPago(),
+            m.getOrigen(),
             m.getDescripcion(),
             m.getCompra() != null ? m.getCompra().getIdCompra() : null,
             m.getDevolucion() != null ? m.getDevolucion().getIdDevolucion() : null);

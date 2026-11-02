@@ -17,11 +17,15 @@ import com.thiago.escenasFX.dto.ResumenSesionDTO;
 import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.Gasto;
 import com.thiago.escenasFX.model.MovimientoCaja;
+import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.model.Venta;
+import com.thiago.escenasFX.repository.GastoRepository;
 import com.thiago.escenasFX.repository.MovimientoCajaRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.SolicitudRetiroRepository;
@@ -31,6 +35,7 @@ import com.thiago.escenasFX.repository.VentaRepository;
 public class CajaService {
 
     private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
+    private static final String ORIGEN_CAJA = "CAJA";
 
     // JVM lock que serializa abrirSesion() de punta a punta, incluido el commit — ver el
     // comentario en ese método. Esto asume un solo proceso de backend corriendo a la vez (el
@@ -45,11 +50,14 @@ public class CajaService {
     private final EmailService emailService;
     private final CotizacionService cotizacionService;
     private final ProductoRepository productoRepo;
+    private final MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
+    private final GastoRepository gastoRepo;
     private final TransactionTemplate transactionTemplate;
 
     public CajaService(VentaRepository ventaRepo, MovimientoCajaRepository movRepo, SesionCajaRepository sesionRepo,
             SolicitudRetiroRepository solicitudRetiroRepo, OtpService otpService, EmailService emailService,
             CotizacionService cotizacionService, ProductoRepository productoRepo,
+            MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo, GastoRepository gastoRepo,
             PlatformTransactionManager transactionManager) {
         this.ventaRepo = ventaRepo;
         this.movRepo = movRepo;
@@ -59,6 +67,8 @@ public class CajaService {
         this.emailService = emailService;
         this.cotizacionService = cotizacionService;
         this.productoRepo = productoRepo;
+        this.movimientoProveedorRepo = movimientoProveedorRepo;
+        this.gastoRepo = gastoRepo;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -223,8 +233,11 @@ public class CajaService {
 
         List<Venta> ventas = ventaRepo.findBySesion_IdSesionAndEstado(idSesion, ESTADO_CONFIRMADA);
         List<MovimientoCaja> retiros = movRepo.findBySesion_IdSesion(idSesion);
+        List<MovimientoCuentaCorrienteProveedor> movimientosProveedor =
+            movimientoProveedorRepo.findBySesion_IdSesion(idSesion);
+        List<Gasto> gastos = gastoRepo.findBySesion_IdSesion(idSesion);
 
-        return armarResumen(ventas, retiros, sesion.getMontoInicial());
+        return armarResumen(ventas, retiros, movimientosProveedor, gastos, sesion.getMontoInicial());
     }
 
     /**
@@ -251,13 +264,18 @@ public class CajaService {
         // haya tenido una caja abierta al momento de registrarse.
         List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desdeDT, hastaDT, ESTADO_CONFIRMADA);
         List<MovimientoCaja> retiros = movRepo.findByFechaBetween(desdeDT, hastaDT);
+        List<MovimientoCuentaCorrienteProveedor> movimientosProveedor =
+            movimientoProveedorRepo.findByFechaBetween(desdeDT, hastaDT);
+        // Por cuándo se registró, no por Gasto.fecha: cargar un gasto atrasado no altera turnos cerrados.
+        List<Gasto> gastos = gastoRepo.findByCreadoEnBetween(desdeDT, hastaDT);
 
-        ResumenDiaDTO total = armarResumen(ventas, retiros, montoInicialTotal);
+        ResumenDiaDTO total = armarResumen(ventas, retiros, movimientosProveedor, gastos, montoInicialTotal);
 
         return new ResumenRangoDTO(desde, hasta, total, resumenesPorSesion);
     }
 
-    private ResumenDiaDTO armarResumen(List<Venta> ventas, List<MovimientoCaja> retiros, BigDecimal montoInicial) {
+    private ResumenDiaDTO armarResumen(List<Venta> ventas, List<MovimientoCaja> retiros,
+            List<MovimientoCuentaCorrienteProveedor> movimientosLedger, List<Gasto> gastos, BigDecimal montoInicial) {
         BigDecimal ventasEfectivo = sumarVentasPorMedio(ventas, "EFECTIVO");
         BigDecimal ventasTransferencia = sumarVentasPorMedio(ventas, "TRANSFERENCIA");
         BigDecimal ventasTarjeta = sumarVentasPorMedio(ventas, "TARJETA");
@@ -272,12 +290,49 @@ public class CajaService {
         BigDecimal retirosEfectivo = sumarRetirosPorMedio(retiros, "EFECTIVO");
         BigDecimal retirosTransferencia = sumarRetirosPorMedio(retiros, "TRANSFERENCIA");
 
-        BigDecimal efectivoFinal = montoInicial.add(ventasEfectivo).subtract(retirosEfectivo);
-        BigDecimal totalDigital = ventasTransferencia.subtract(retirosTransferencia).add(ventasTarjeta);
+        // Se muestran todos; solo restan los que salieron de la caja. Los que traen medioPago son
+        // los pagos y las compras a crédito: el DEBE de una compra pagada duplicaría su pago.
+        List<MovimientoCuentaCorrienteProveedor> movimientosProveedor = movimientosLedger.stream()
+            .filter(m -> m.getMedioPago() != null)
+            .toList();
+        BigDecimal pagosProveedorEfectivoCaja = sumarPagosProveedorDeCaja(movimientosProveedor, "EFECTIVO");
+        BigDecimal pagosProveedorTransferenciaCaja = sumarPagosProveedorDeCaja(movimientosProveedor, "TRANSFERENCIA");
+
+        BigDecimal gastosEfectivoCaja = sumarGastosDeCaja(gastos, "EFECTIVO");
+        BigDecimal gastosTransferenciaCaja = sumarGastosDeCaja(gastos, "TRANSFERENCIA");
+
+        BigDecimal efectivoFinal = montoInicial.add(ventasEfectivo).subtract(retirosEfectivo)
+            .subtract(pagosProveedorEfectivoCaja).subtract(gastosEfectivoCaja);
+        BigDecimal totalDigital = ventasTransferencia.subtract(retirosTransferencia)
+            .subtract(pagosProveedorTransferenciaCaja).subtract(gastosTransferenciaCaja).add(ventasTarjeta);
         BigDecimal cajaTotal = efectivoFinal.add(totalDigital);
 
         return new ResumenDiaDTO(ventas, retiros, montoInicial, ventasEfectivo, ventasTransferencia, ventasTarjeta,
-            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal, ventasPagadasConSaldo);
+            retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal, ventasPagadasConSaldo,
+            movimientosProveedor, pagosProveedorEfectivoCaja, pagosProveedorTransferenciaCaja,
+            gastos, gastosEfectivoCaja, gastosTransferenciaCaja);
+    }
+
+    public static boolean restaDelSaldoEsperado(MovimientoCuentaCorrienteProveedor m) {
+        return "EFECTIVO".equals(m.getMedioPago()) && ORIGEN_CAJA.equals(m.getOrigen());
+    }
+
+    public static boolean restaDelSaldoEsperado(Gasto g) {
+        return "EFECTIVO".equals(g.getMedioPago()) && ORIGEN_CAJA.equals(g.getOrigen());
+    }
+
+    private BigDecimal sumarGastosDeCaja(List<Gasto> gastos, String medioPago) {
+        return gastos.stream()
+            .filter(g -> medioPago.equals(g.getMedioPago()) && ORIGEN_CAJA.equals(g.getOrigen()))
+            .map(Gasto::getImporte)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal sumarPagosProveedorDeCaja(List<MovimientoCuentaCorrienteProveedor> movimientos, String medioPago) {
+        return movimientos.stream()
+            .filter(m -> medioPago.equals(m.getMedioPago()) && ORIGEN_CAJA.equals(m.getOrigen()))
+            .map(MovimientoCuentaCorrienteProveedor::getMonto)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     // Una venta con pago parcial en saldo sigue teniendo medioPago="EFECTIVO"/etc. por el resto,

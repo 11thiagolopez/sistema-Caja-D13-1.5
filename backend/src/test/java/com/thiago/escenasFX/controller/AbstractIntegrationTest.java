@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.service.AfipFacturacionService;
+import com.thiago.escenasFX.service.AfipPadronService;
 import com.thiago.escenasFX.service.CotizacionApiClient;
 import com.thiago.escenasFX.service.EmailService;
 
@@ -66,6 +67,9 @@ abstract class AbstractIntegrationTest {
     // real de todos modos.
     @MockBean
     protected AfipFacturacionService afipFacturacionService;
+
+    @MockBean
+    protected AfipPadronService afipPadronService;
 
     @BeforeEach
     void configurarCotizacionPorDefecto() {

@@ -18,6 +18,8 @@ public class ClienteRequest {
 
     private String docNro;
 
+    private Integer condicionIva;
+
     private String telefono;
     private String email;
     private String direccion;

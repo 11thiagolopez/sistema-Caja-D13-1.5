@@ -52,18 +52,27 @@ public class AfipFacturacionService {
      * una Nota de Crédito para referenciar la factura original (WSFEv1 exige esto para poder
      * "para 12 o 13 pueden asociarse 11, 12, 13 y 15", confirmado contra el manual oficial de
      * WSFEv1). null en los 3 para una Factura, que no referencia nada.
+     *
+     * condicionIvaReceptor: CondicionIVAReceptorId (RG 5616), obligatorio para ARCA desde el
+     * 1/12/2026 en todo comprobante.
      */
     public record DatosFactura(int puntoVenta, int cbteTipo, int concepto, int docTipo, String docNro,
             BigDecimal importe, LocalDate fecha, LocalDate fchServDesde, LocalDate fchServHasta,
-            LocalDate fchVtoPago, Integer cbteAsocTipo, Integer cbteAsocPtoVta, Integer cbteAsocNro) {
+            LocalDate fchVtoPago, Integer cbteAsocTipo, Integer cbteAsocPtoVta, Integer cbteAsocNro,
+            Integer condicionIvaReceptor) {
 
-        // Constructor de compatibilidad: Factura (sin comprobante asociado) sigue llamando con
-        // los mismos 10 argumentos de siempre — FacturaFiscalService no necesita cambiar.
+        public DatosFactura(int puntoVenta, int cbteTipo, int concepto, int docTipo, String docNro,
+                BigDecimal importe, LocalDate fecha, LocalDate fchServDesde, LocalDate fchServHasta,
+                LocalDate fchVtoPago, Integer cbteAsocTipo, Integer cbteAsocPtoVta, Integer cbteAsocNro) {
+            this(puntoVenta, cbteTipo, concepto, docTipo, docNro, importe, fecha, fchServDesde, fchServHasta,
+                fchVtoPago, cbteAsocTipo, cbteAsocPtoVta, cbteAsocNro, null);
+        }
+
         public DatosFactura(int puntoVenta, int cbteTipo, int concepto, int docTipo, String docNro,
                 BigDecimal importe, LocalDate fecha, LocalDate fchServDesde, LocalDate fchServHasta,
                 LocalDate fchVtoPago) {
             this(puntoVenta, cbteTipo, concepto, docTipo, docNro, importe, fecha, fchServDesde, fchServHasta,
-                fchVtoPago, null, null, null);
+                fchVtoPago, null, null, null, null);
         }
     }
 
@@ -119,19 +128,24 @@ public class AfipFacturacionService {
             .append("<ar:ImpTotConc>0.00</ar:ImpTotConc>")
             .append("<ar:ImpNeto>").append(importe).append("</ar:ImpNeto>")
             .append("<ar:ImpOpEx>0.00</ar:ImpOpEx>")
-            .append("<ar:ImpIVA>0.00</ar:ImpIVA>")
             .append("<ar:ImpTrib>0.00</ar:ImpTrib>")
-            .append("<ar:MonId>PES</ar:MonId>")
-            .append("<ar:MonCotiz>1</ar:MonCotiz>");
+            .append("<ar:ImpIVA>0.00</ar:ImpIVA>");
+        // Orden del esquema del manual de WSFEv1 v4.7: las fechas de servicio van antes de MonId.
         if (datos.concepto() != 1) {
             detalle.append("<ar:FchServDesde>").append(datos.fchServDesde().format(FECHA_AFIP)).append("</ar:FchServDesde>")
                 .append("<ar:FchServHasta>").append(datos.fchServHasta().format(FECHA_AFIP)).append("</ar:FchServHasta>")
                 .append("<ar:FchVtoPago>").append(datos.fchVtoPago().format(FECHA_AFIP)).append("</ar:FchVtoPago>");
         }
+        detalle.append("<ar:MonId>PES</ar:MonId>")
+            .append("<ar:MonCotiz>1</ar:MonCotiz>");
+        if (datos.condicionIvaReceptor() != null) {
+            detalle.append("<ar:CondicionIVAReceptorId>").append(datos.condicionIvaReceptor())
+                .append("</ar:CondicionIVAReceptorId>");
+        }
         // CbtesAsoc (comprobante asociado): solo lo manda una Nota de Crédito, para referenciar
         // la factura original. Posición verificada contra el manual oficial de WSFEv1 (después de
-        // MonCotiz/FchServDesde-Hasta-VtoPago, antes de Tributos/Iva/Opcionales, que este sistema
-        // no usa).
+        // MonCotiz/CondicionIVAReceptorId, antes de Tributos/Iva/Opcionales, que este sistema no
+        // usa).
         if (datos.cbteAsocTipo() != null) {
             detalle.append("<ar:CbtesAsoc><ar:CbteAsoc>")
                 .append("<ar:Tipo>").append(datos.cbteAsocTipo()).append("</ar:Tipo>")

@@ -329,7 +329,8 @@ código→nombre: escribe y muestra el nombre directamente.
 | POST | `/api/proveedores` | `{nombre, contacto?, telefono?, email?}` | `ProveedorResponse` |
 | PUT | `/api/proveedores/{id}` | igual que POST | `ProveedorResponse` |
 | DELETE | `/api/proveedores/{id}` | — | baja lógica, `204` |
-| GET | `/api/proveedores/{id}/cuenta-corriente` | — | `CuentaCorrienteProveedorResponse` — nuevo 2026-10-30 |
+| GET | `/api/proveedores/{id}/cuenta-corriente` | — | `CuentaCorrienteProveedorResponse` — nuevo 2026-10-30; desde 2026-11-02 incluye `comprasPendientes: [{idCompra, fecha, totalCompra, saldoPendiente}]`, de la más vieja a la más nueva y sin el crédito de devoluciones |
+| POST | `/api/proveedores/{id}/pagos` | `{idEmpleado, monto, medioPago, origen}` | `CuentaCorrienteProveedorResponse` — nuevo 2026-11-02: pago total o parcial, se aplica desde la compra más vieja; `medioPago`: `EFECTIVO`\|`TRANSFERENCIA`, `origen`: `CAJA`\|`EXTERNO`; `409` si `monto` supera el saldo de la cuenta o si es de `CAJA` sin caja abierta |
 | POST | `/api/proveedores/devoluciones` | `DevolucionProveedorRequest` (ver abajo) | `201 DevolucionProveedorResponse` — nuevo 2026-10-30 |
 | GET | `/api/proveedores/devoluciones?desde=&hasta=` | — | `DevolucionProveedorResponse[]` — nuevo 2026-10-30 |
 
@@ -358,14 +359,28 @@ venta. `DevolucionProveedorResponse`: `{idDevolucion, idProveedor, nombreProveed
 idCompraOriginal, fecha, motivo, montoTotal, detalles: [{idDetalle, idProducto,
 descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 
+### Facturación con padrón — ADMIN (nuevo 2026-11-02)
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/clientes/padron/{cuit}` | — | `{cuit, nombre, tipoPersona, domicilio, estadoClave, condicionIva, advertencia}`; `400` si el CUIT es inválido o no existe, `502` si ARCA falla |
+| POST | `/api/ventas/{id}/factura` | `{clienteDocTipo, clienteDocNro?, clienteNombre?, condicionIvaReceptor?}` | `FacturaFiscalResponse` |
+
+`condicionIvaReceptor` es obligatorio con CUIT; con DNI o Consumidor Final se asume 5. `ClienteRequest`
+y `ClienteResponse` suman `condicionIva`. La emisión vive solo en `/facturar` (ver `plan-migracion.md`
+sección 27.10).
+
 ### Gastos (`/api/gastos`) — ADMIN
 
 | Método | Ruta | Body | Devuelve |
 |---|---|---|---|
 | GET | `/api/gastos?desde=&hasta=` | — | `GastoResponse[]` |
-| POST | `/api/gastos` | `{idEmpleado, nombre, importe, fecha, categoria?}` | `GastoResponse` |
+| POST | `/api/gastos` | `{idEmpleado, nombre, importe, fecha, categoria?, medioPago, origen}` | `GastoResponse` |
 
 `fecha` no puede ser futura (validado en el backend con `IllegalArgumentException` → 400).
+Desde 2026-11-02, `medioPago` (`EFECTIVO`\|`TRANSFERENCIA`) y `origen` (`CAJA`\|`EXTERNO`) son
+obligatorios y vuelven en `GastoResponse` (null en gastos viejos); `409` si es de `CAJA` sin caja
+abierta.
 
 ### Compras (`/api/compras`) — ADMIN
 
@@ -375,7 +390,7 @@ descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 | GET | `/api/compras?desde=&hasta=` | — | `CompraResponse[]` |
 | GET | `/api/compras/pagos-proveedor?desde=&hasta=` | — | `PagoProveedorDTO[]` |
 | GET | `/api/compras/productos-mas-comprados?desde=&hasta=&limit=` | — | `ProductoComprasRankingDTO[]` |
-| POST | `/api/compras/{id}/pagos` | `{idEmpleado, monto, medioPago}` | `CompraResponse` — nuevo 2026-10-30 |
+| POST | `/api/compras/{id}/pagos` | `{idEmpleado, monto, medioPago, origen}` | `CompraResponse` — nuevo 2026-10-30 |
 
 `CompraRequest`:
 ```ts
@@ -383,7 +398,8 @@ descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
   idEmpleado: number;
   fecha: string;              // no puede ser futura
   proveedorNombre: string;    // resuelve o crea el proveedor por nombre
-  medioPago: string;
+  medioPago: string;          // EFECTIVO | TRANSFERENCIA | CUENTA_CORRIENTE (deja todo como deuda, ignora montoPagado)
+  origen?: string;            // CAJA | EXTERNO: obligatorio si se paga algo; solo CAJA descuenta de la caja
   items: {
     idProducto?: number;               // repone stock/precio de un producto existente
     nuevoProducto?: {                  // O ESTO, si el producto todavía no existe
@@ -402,12 +418,20 @@ descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 Cargar una compra **actualiza stock y precio** del producto (suma `cantidad` al stock, refresca
 `precioCompra` siempre y `precioVenta` si vino) — no es solo un asiento contable.
 
-`CompraResponse`: `{idCompra, fecha, idProveedor, nombreProveedor, medioPago, totalCompra,
+`ResumenDiaResponse` ganó el 2026-11-02 `movimientosProveedor` (todos los pagos y compras a crédito,
+cada uno con `restaDelSaldoEsperado`), `pagosProveedorEfectivoCaja` y
+`pagosProveedorTransferenciaCaja`. Solo efectivo + `CAJA` baja `efectivoFinal`; transferencia +
+`CAJA` baja `totalDigital` (ver `plan-migracion.md` sección 27.8). Con la misma regla sumó `gastos`
+(cada uno con `restaDelSaldoEsperado`), `gastosEfectivoCaja` y `gastosTransferenciaCaja` (sección
+27.9).
+
+`CompraResponse`: `{idCompra, fecha, idProveedor, nombreProveedor, medioPago, origen, totalCompra,
 montoPagado, saldoPendiente, items: [{idItem, idProducto, descripcionProducto, marcaProducto,
 cantidad, precioCompraUnitario, precioVentaUnitario, subtotal}]}`. `saldoPendiente` es calculado
 (`totalCompra - montoPagado`), no se puede escribir directo.
 
-`POST /api/compras/{id}/pagos` (nuevo 2026-10-30): pago posterior contra **esa compra puntual**
+`POST /api/compras/{id}/pagos` (nuevo 2026-10-30, la pantalla ya no lo usa desde 2026-11-02: usa
+`POST /api/proveedores/{id}/pagos`): pago posterior contra **esa compra puntual**
 — rechaza (`409`) si `monto` supera su `saldoPendiente` actual. No confundir con
 `POST /api/proveedores/devoluciones` (abajo): un pago siempre apunta a una compra específica, una
 devolución acredita la cuenta corriente **general** del proveedor.
@@ -622,9 +646,9 @@ de medio de pago no aplica — el backend lo va a ignorar y forzar
 
 **`CuentaCorrienteProveedores.tsx`** (`/proveedores/cuenta-corriente`, ADMIN, nuevo — fase 4):
 elegir un proveedor muestra su saldo ("le debemos" o, si es negativo, "nos debe") + historial;
-"Registrar pago" busca sus compras con saldo pendiente en un rango de fechas (filtra
-client-side sobre `GET /api/compras`, que ya existía) y paga una puntual; "Registrar devolución"
-reusa `BuscadorProductoCarrito`/`useCarrito` (mismo patrón que Cobros) para armar las líneas.
+"Saldar deuda" (2026-11-02, reemplaza al buscador por fechas) lista sola toda la deuda y registra
+un pago total o parcial, aplicado desde la compra más vieja; `ComprasNueva.tsx` ganó la opción
+"Cuenta corriente" en medio de pago; "Registrar devolución" reusa `BuscadorProductoCarrito`/`useCarrito` (mismo patrón que Cobros) para armar las líneas.
 Convive con `PagosProveedores.tsx` sin reemplazarla (esa sigue siendo un reporte de compras, no
 de pagos reales).
 

@@ -29,6 +29,7 @@ final class CompraMapper {
             compra.getProveedor() != null ? compra.getProveedor().getIdProveedor() : null,
             compra.getProveedor() != null ? compra.getProveedor().getNombre() : null,
             compra.getMedioPago(),
+            compra.getOrigen(),
             compra.getTotalCompra(),
             montoPagado,
             compra.getTotalCompra().subtract(montoPagado),

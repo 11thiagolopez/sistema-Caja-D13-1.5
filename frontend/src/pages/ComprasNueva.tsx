@@ -8,7 +8,14 @@ import { getCotizacionActual } from '../api/cotizacion'
 import { ApiRequestError } from '../api/client'
 import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
 import { hoyIso } from '../utils/date'
-import type { CompraItemRequest, MarcaResponse, MedioPago, Producto, ProveedorResponse } from '../types/api'
+import type {
+  CompraItemRequest,
+  MarcaResponse,
+  MedioPagoCompra,
+  OrigenPago,
+  Producto,
+  ProveedorResponse,
+} from '../types/api'
 
 type Moneda = 'ARS' | 'USD'
 
@@ -71,7 +78,9 @@ export function ComprasNueva() {
 
   const [fecha, setFecha] = useState(hoyIso())
   const [proveedorNombre, setProveedorNombre] = useState('')
-  const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
+  const [medioPago, setMedioPago] = useState<MedioPagoCompra>('EFECTIVO')
+  // Sin valor por defecto: un origen elegido sin querer descuadraría el arqueo de caja.
+  const [origen, setOrigen] = useState<OrigenPago | ''>('')
   const [filas, setFilas] = useState<FilaCompra[]>([filaVacia()])
 
   const [error, setError] = useState<string | null>(null)
@@ -204,10 +213,23 @@ export function ComprasNueva() {
 
     setEnviando(true)
     try {
-      const compra = await registrarCompra({ idEmpleado: sesion.idEmpleado, fecha, proveedorNombre, medioPago, items })
-      setMensaje(`Compra #${compra.idCompra} registrada. Total: ${compra.totalCompra.toFixed(2)}`)
+      const compra = await registrarCompra({
+        idEmpleado: sesion.idEmpleado,
+        fecha,
+        proveedorNombre,
+        medioPago,
+        origen: medioPago === 'CUENTA_CORRIENTE' || !origen ? undefined : origen,
+        items,
+      })
+      setMensaje(
+        `Compra #${compra.idCompra} registrada. Total: ${compra.totalCompra.toFixed(2)}` +
+          (compra.saldoPendiente > 0
+            ? `. Quedó como deuda con ${compra.nombreProveedor}: se salda en Cuenta corriente de proveedores.`
+            : ''),
+      )
       setFilas([filaVacia()])
       setProveedorNombre('')
+      setOrigen('')
       getProductos().then(setProductos)
       getMarcas().then(setMarcas)
       getProveedores().then(setProveedores)
@@ -254,12 +276,22 @@ export function ComprasNueva() {
         </label>
         <label>
           Medio de pago
-          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPagoCompra)}>
             <option value="EFECTIVO">Efectivo</option>
             <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA">Tarjeta</option>
+            <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
           </select>
         </label>
+        {medioPago !== 'CUENTA_CORRIENTE' && (
+          <label>
+            Origen del dinero
+            <select required value={origen} onChange={(e) => setOrigen(e.target.value as OrigenPago | '')}>
+              <option value="">Elegir...</option>
+              <option value="CAJA">Caja</option>
+              <option value="EXTERNO">Externo</option>
+            </select>
+          </label>
+        )}
 
         <table>
           <thead>

@@ -31,6 +31,10 @@ public class Cliente {
     @Column(name = "doc_nro")
     private String docNro;
 
+    // Condición frente al IVA, con los códigos de ARCA (CondicionIVAReceptorId). Null si no se sabe.
+    @Column(name = "condicion_iva")
+    private Integer condicionIva;
+
     private String telefono;
     private String email;
     private String direccion;

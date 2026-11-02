@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.CompraItemRequest;
+import com.thiago.escenasFX.dto.CompraPendienteResponse;
 import com.thiago.escenasFX.dto.CompraRequest;
 import com.thiago.escenasFX.dto.DetalleDevolucionProveedorRequest;
 import com.thiago.escenasFX.dto.DevolucionProveedorRequest;
@@ -26,13 +27,20 @@ import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.MovimientoCuentaCorrienteProveedor;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Proveedor;
+import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.repository.CompraRepository;
 import com.thiago.escenasFX.repository.DevolucionProveedorRepository;
 import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
+import com.thiago.escenasFX.repository.SesionCajaRepository;
 
 @Service
 public class CompraService {
+
+    private static final String MEDIO_PAGO_CUENTA_CORRIENTE = "CUENTA_CORRIENTE";
+    private static final List<String> MEDIOS_DE_PAGO_REAL = List.of("EFECTIVO", "TRANSFERENCIA");
+    private static final String ORIGEN_CAJA = "CAJA";
+    private static final List<String> ORIGENES = List.of(ORIGEN_CAJA, "EXTERNO");
 
     private final CompraRepository compraRepo;
     private final ProductoRepository productoRepo;
@@ -40,23 +48,29 @@ public class CompraService {
     private final ProveedorService proveedorService;
     private final MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
     private final DevolucionProveedorRepository devolucionProveedorRepo;
+    private final SesionCajaRepository sesionRepo;
 
     public CompraService(CompraRepository compraRepo, ProductoRepository productoRepo,
             ProductoService productoService, ProveedorService proveedorService,
             MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo,
-            DevolucionProveedorRepository devolucionProveedorRepo) {
+            DevolucionProveedorRepository devolucionProveedorRepo, SesionCajaRepository sesionRepo) {
         this.compraRepo = compraRepo;
         this.productoRepo = productoRepo;
         this.productoService = productoService;
         this.proveedorService = proveedorService;
         this.movimientoProveedorRepo = movimientoProveedorRepo;
         this.devolucionProveedorRepo = devolucionProveedorRepo;
+        this.sesionRepo = sesionRepo;
     }
 
     @Transactional
     public Compra registrarCompra(CompraRequest req, Empleado empleado) {
         if (req.getFecha().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha de la compra no puede ser futura");
+        }
+        boolean enCuentaCorriente = MEDIO_PAGO_CUENTA_CORRIENTE.equals(req.getMedioPago());
+        if (!enCuentaCorriente && !MEDIOS_DE_PAGO_REAL.contains(req.getMedioPago())) {
+            throw new IllegalArgumentException("El medio de pago de una compra debe ser efectivo, transferencia o cuenta corriente");
         }
 
         Proveedor proveedor = proveedorService.resolverOCrear(req.getProveedorNombre());
@@ -98,20 +112,33 @@ public class CompraService {
 
         // Cuenta corriente de proveedor: ausente = se paga todo de una (comportamiento de
         // siempre, cero cambio de conducta para quien no usa esto). Un valor menor deja el resto
-        // como deuda pendiente, pagable después con registrarPago.
-        BigDecimal montoPagado = req.getMontoPagado() != null ? req.getMontoPagado() : total;
+        // como deuda pendiente, pagable después con registrarPago. CUENTA_CORRIENTE es siempre
+        // deuda por el total: acá el backend decide, igual que con SALDO_CUENTA_CORRIENTE en ventas.
+        BigDecimal montoPagado;
+        if (enCuentaCorriente) {
+            montoPagado = BigDecimal.ZERO;
+        } else {
+            montoPagado = req.getMontoPagado() != null ? req.getMontoPagado() : total;
+        }
         if (montoPagado.compareTo(BigDecimal.ZERO) < 0 || montoPagado.compareTo(total) > 0) {
             throw new IllegalArgumentException("El monto pagado no puede ser negativo ni mayor al total de la compra");
         }
         compra.setMontoPagado(montoPagado);
 
+        boolean pagaAlgo = montoPagado.compareTo(BigDecimal.ZERO) > 0;
+        if (pagaAlgo) {
+            validarOrigen(req.getOrigen());
+            compra.setOrigen(req.getOrigen());
+        }
+
         Compra guardada = compraRepo.save(compra);
 
-        registrarMovimientoProveedor(proveedor, "DEBE_COMPRA", total, guardada, null, null, empleado,
+        registrarMovimientoProveedor(proveedor, "DEBE_COMPRA", total, guardada,
+            enCuentaCorriente ? MEDIO_PAGO_CUENTA_CORRIENTE : null, null, null, empleado,
             "Compra #" + guardada.getIdCompra());
-        if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
-            registrarMovimientoProveedor(proveedor, "HABER_PAGO", montoPagado, guardada, req.getMedioPago(), null,
-                empleado, "Pago al registrar la compra #" + guardada.getIdCompra());
+        if (pagaAlgo) {
+            registrarMovimientoProveedor(proveedor, "HABER_PAGO", montoPagado, guardada, req.getMedioPago(),
+                req.getOrigen(), null, empleado, "Pago al registrar la compra #" + guardada.getIdCompra());
         }
 
         return guardada;
@@ -124,7 +151,13 @@ public class CompraService {
      * NotaCreditoService documenta para su guarda de doble acreditación.
      */
     @Transactional
-    public Compra registrarPago(Integer idCompra, BigDecimal monto, String medioPago, Empleado empleado) {
+    public Compra registrarPago(Integer idCompra, BigDecimal monto, String medioPago, String origen,
+            Empleado empleado) {
+        if (!MEDIOS_DE_PAGO_REAL.contains(medioPago)) {
+            throw new IllegalArgumentException("Un pago a proveedor solo puede ser en efectivo o transferencia");
+        }
+        validarOrigen(origen);
+
         Compra compra = compraRepo.findById(idCompra)
             .orElseThrow(() -> new IllegalArgumentException("Compra no existe: " + idCompra));
 
@@ -138,15 +171,83 @@ public class CompraService {
         compra.setMontoPagado(montoPagadoActual.add(monto));
         Compra guardada = compraRepo.save(compra);
 
-        registrarMovimientoProveedor(compra.getProveedor(), "HABER_PAGO", monto, guardada, medioPago, null,
+        registrarMovimientoProveedor(compra.getProveedor(), "HABER_PAGO", monto, guardada, medioPago, origen, null,
             empleado, "Pago contra la compra #" + idCompra);
 
         return guardada;
     }
 
+    /**
+     * Pago total o parcial de la deuda de un proveedor: se aplica de la compra más vieja a la más
+     * nueva. El tope es el saldo del ledger, no la suma de las compras, porque una devolución
+     * acredita la cuenta general: si no, "saldar todo" le pagaría de más al proveedor.
+     */
+    @Transactional
+    public void registrarPagoAProveedor(Integer idProveedor, BigDecimal monto, String medioPago, String origen,
+            Empleado empleado) {
+        BigDecimal deuda = calcularSaldoProveedor(idProveedor);
+        if (monto.compareTo(deuda) > 0) {
+            throw new IllegalStateException("El pago ($" + monto + ") supera la deuda con el proveedor ($" + deuda + ")");
+        }
+
+        BigDecimal restante = monto;
+        for (Compra compra : compraRepo.buscarConSaldoPendiente(idProveedor)) {
+            if (restante.signum() == 0) {
+                break;
+            }
+            BigDecimal aplicado = restante.min(saldoPendiente(compra));
+            registrarPago(compra.getIdCompra(), aplicado, medioPago, origen, empleado);
+            restante = restante.subtract(aplicado);
+        }
+        if (restante.signum() > 0) {
+            throw new IllegalStateException("No hay compras pendientes suficientes para aplicar el pago completo");
+        }
+    }
+
+    /**
+     * Compras que todavía se deben, con el crédito de devoluciones ya descontado de las más viejas
+     * — el mismo orden que usa registrarPagoAProveedor, para que la suma de esta lista siempre
+     * coincida con el saldo de la cuenta. No guarda nada: el crédito sigue siendo general.
+     */
+    public List<CompraPendienteResponse> comprasPendientes(Integer idProveedor) {
+        List<Compra> compras = compraRepo.buscarConSaldoPendiente(idProveedor);
+        BigDecimal sumaPendiente = compras.stream().map(this::saldoPendiente).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal credito = sumaPendiente.subtract(calcularSaldoProveedor(idProveedor)).max(BigDecimal.ZERO);
+
+        List<CompraPendienteResponse> pendientes = new ArrayList<>();
+        for (Compra compra : compras) {
+            BigDecimal pendiente = saldoPendiente(compra);
+            BigDecimal acreditado = credito.min(pendiente);
+            credito = credito.subtract(acreditado);
+            if (pendiente.compareTo(acreditado) > 0) {
+                pendientes.add(new CompraPendienteResponse(compra.getIdCompra(), compra.getFecha(),
+                    compra.getTotalCompra(), pendiente.subtract(acreditado)));
+            }
+        }
+        return pendientes;
+    }
+
+    private BigDecimal saldoPendiente(Compra compra) {
+        BigDecimal pagado = compra.getMontoPagado() != null ? compra.getMontoPagado() : BigDecimal.ZERO;
+        return compra.getTotalCompra().subtract(pagado);
+    }
+
+    private void validarOrigen(String origen) {
+        if (origen == null || !ORIGENES.contains(origen)) {
+            throw new IllegalArgumentException("Hay que indicar el origen del pago: caja o externo");
+        }
+    }
+
     private void registrarMovimientoProveedor(Proveedor proveedor, String tipo, BigDecimal monto, Compra compra,
-            String medioPago, DevolucionProveedor devolucion, Empleado empleado, String descripcion) {
+            String medioPago, String origen, DevolucionProveedor devolucion, Empleado empleado, String descripcion) {
+        SesionCaja sesion = sesionRepo.findByEstado("ABIERTA").orElse(null);
+        if (ORIGEN_CAJA.equals(origen) && sesion == null) {
+            throw new IllegalStateException("No hay una caja abierta de la que pueda salir este pago");
+        }
+
         MovimientoCuentaCorrienteProveedor movimiento = new MovimientoCuentaCorrienteProveedor();
+        movimiento.setOrigen(origen);
+        movimiento.setSesion(sesion);
         movimiento.setProveedor(proveedor);
         movimiento.setTipo(tipo);
         movimiento.setMonto(monto);
@@ -288,7 +389,7 @@ public class CompraService {
 
         DevolucionProveedor guardada = devolucionProveedorRepo.save(devolucion);
 
-        registrarMovimientoProveedor(proveedor, "HABER_DEVOLUCION", montoTotal, null, null, guardada, empleado,
+        registrarMovimientoProveedor(proveedor, "HABER_DEVOLUCION", montoTotal, null, null, null, guardada, empleado,
             "Devolución #" + guardada.getIdDevolucion()
                 + (req.getMotivo() != null && !req.getMotivo().isBlank() ? " (" + req.getMotivo() + ")" : ""));
 

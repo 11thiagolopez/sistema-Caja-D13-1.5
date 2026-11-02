@@ -9,7 +9,33 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-10-30, Notas de Crédito + catálogo de Clientes — las 4 fases
+Estado Actual (Actualizado al 2026-11-02, medio de pago y origen separados + compras en cuenta
+corriente y pago de deuda a proveedores):
+
+**Facturar con autocompletado desde ARCA (detalle y SQL en `plan-migracion.md` sección 27.10)**:
+pantalla `/facturar` (cliente → venta → emitir), padrón `ws_sr_constancia_inscripcion` y envío de
+`CondicionIVAReceptorId`, obligatorio para ARCA desde el **1/12/2026**. **Pendiente del dueño**: correr
+el SQL (`clientes.condicion_iva`, `facturas_fiscales.condicion_iva_receptor`) y autorizar el servicio del
+padrón para el certificado en ARCA. Backend: **304 tests** verdes. No probado contra ARCA real.
+
+**Medio de pago y origen separados (detalle y SQL en `plan-migracion.md` secciones 27.8 y 27.9)**:
+compras, pagos a proveedores y gastos operativos piden medio (efectivo o transferencia; las compras
+también admiten cuenta corriente) y origen (caja o externo). El arqueo
+muestra todos los movimientos, pero solo efectivo + caja resta del saldo esperado; transferencia +
+caja resta de `totalDigital`. **SQL pendiente del dueño, y sin él el backend no arranca**
+(`ddl-auto=validate`): `compras.origen`, `movimientos_cuenta_corriente_proveedor.origen` e
+`.id_sesion`, `gastos.medio_pago`, `.origen` e `.id_sesion`. No probado en un navegador real ni contra
+Supabase real.
+
+**Fix pedido por el dueño (detalle en `plan-migracion.md` sección 27.7)**: Compras ganó el medio de
+pago "Cuenta corriente" (`CUENTA_CORRIENTE`, deja el total como deuda) y Cuenta corriente de
+proveedores lista toda la deuda sin filtro de fechas y permite un pago total o parcial, aplicado
+de la compra más vieja a la más nueva (`POST /api/proveedores/{id}/pagos`). El tope es el saldo del
+ledger porque las devoluciones acreditan la cuenta general. Sin SQL nuevo. Backend: **261 tests**
+verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. Node no aparece instalado en este
+equipo (se usó el runtime de VS Code para verificar). No probado en un navegador real.
+
+Estado Anterior (Actualizado al 2026-10-30, Notas de Crédito + catálogo de Clientes — las 4 fases
 completas, sin AFIP homologación):
 
 **Fase 4, misma sesión, última de las 4 (detalle completo en `plan-migracion.md` sección 27.6)**:

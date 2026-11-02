@@ -27,6 +27,9 @@ public class CompraRequest {
     @NotBlank
     private String medioPago;
 
+    // CAJA | EXTERNO. Obligatorio si se paga algo al registrar la compra; se ignora si no.
+    private String origen;
+
     @NotEmpty
     @Valid
     private List<CompraItemRequest> items;

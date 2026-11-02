@@ -23,6 +23,8 @@ import com.thiago.escenasFX.repository.VentaRepository;
 public class FacturaFiscalService {
 
     private static final int TIPO_FACTURA_C = 11;
+    static final int CONDICION_CONSUMIDOR_FINAL = 5;
+    private static final List<Integer> CONDICIONES_IVA = List.of(1, 4, 5, 6, 7, 8, 9, 10, 13, 15, 16);
 
     private final FacturaFiscalRepository facturaRepo;
     private final VentaRepository ventaRepo;
@@ -38,7 +40,8 @@ public class FacturaFiscalService {
     }
 
     @Transactional
-    public FacturaFiscal facturar(Integer idVenta, Integer clienteDocTipo, String clienteDocNro, String clienteNombre) {
+    public FacturaFiscal facturar(Integer idVenta, Integer clienteDocTipo, String clienteDocNro, String clienteNombre,
+            Integer condicionIvaReceptor) {
         Venta venta = ventaRepo.findById(idVenta)
             .orElseThrow(() -> new IllegalArgumentException("Venta no existe: " + idVenta));
 
@@ -58,6 +61,7 @@ public class FacturaFiscalService {
         if (clienteDocTipo != 99 && (clienteNombre == null || clienteNombre.isBlank())) {
             throw new IllegalArgumentException("Falta el nombre o razón social del cliente");
         }
+        int condicionIva = resolverCondicionIva(clienteDocTipo, condicionIvaReceptor);
 
         FacturaFiscal factura = facturaRepo.findByVentaIdVenta(idVenta).orElseGet(FacturaFiscal::new);
         factura.setVenta(venta);
@@ -66,6 +70,7 @@ public class FacturaFiscalService {
         factura.setClienteDocTipo(clienteDocTipo);
         factura.setClienteDocNro(clienteDocTipo == 99 ? null : clienteDocNro);
         factura.setClienteNombre(clienteDocTipo == 99 ? null : clienteNombre);
+        factura.setCondicionIvaReceptor(condicionIva);
         factura.setImporte(venta.getTotalVenta());
         factura.setEstado("PENDIENTE");
         factura.setErrorDetalle(null);
@@ -75,7 +80,8 @@ public class FacturaFiscalService {
         AfipFacturacionService.DatosFactura datos = new AfipFacturacionService.DatosFactura(
             puntoVenta, TIPO_FACTURA_C, concepto, clienteDocTipo, clienteDocTipo == 99 ? "0" : clienteDocNro,
             venta.getTotalVenta(), fecha,
-            concepto != 1 ? fecha : null, concepto != 1 ? fecha : null, concepto != 1 ? fecha : null);
+            concepto != 1 ? fecha : null, concepto != 1 ? fecha : null, concepto != 1 ? fecha : null,
+            null, null, null, condicionIva);
 
         try {
             AfipFacturacionService.ResultadoCae resultado = afipFacturacionService.emitirFacturaC(datos);
@@ -94,6 +100,22 @@ public class FacturaFiscalService {
         }
 
         return facturaRepo.save(factura);
+    }
+
+    private int resolverCondicionIva(Integer clienteDocTipo, Integer condicionIvaReceptor) {
+        if (clienteDocTipo == 99) {
+            return CONDICION_CONSUMIDOR_FINAL;
+        }
+        if (condicionIvaReceptor == null) {
+            if (clienteDocTipo == 80) {
+                throw new IllegalArgumentException("Falta la condición frente al IVA del cliente");
+            }
+            return CONDICION_CONSUMIDOR_FINAL;
+        }
+        if (!CONDICIONES_IVA.contains(condicionIvaReceptor)) {
+            throw new IllegalArgumentException("Condición frente al IVA inválida: " + condicionIvaReceptor);
+        }
+        return condicionIvaReceptor;
     }
 
     public java.util.Optional<FacturaFiscal> obtenerPorVenta(Integer idVenta) {

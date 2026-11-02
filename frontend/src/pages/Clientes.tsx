@@ -1,13 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { actualizarCliente, crearCliente, eliminarCliente, getClientes } from '../api/clientes'
+import { actualizarCliente, consultarPadron, crearCliente, eliminarCliente, getClientes } from '../api/clientes'
 import { ApiRequestError } from '../api/client'
+import { CONDICIONES_IVA, esCuitValido } from '../utils/cuit'
 import type { ClienteDocTipo, ClienteRequest, ClienteResponse } from '../types/api'
 
 const CLIENTE_VACIO: ClienteRequest = {
   nombre: '',
   docTipo: 99,
   docNro: '',
+  condicionIva: null,
   telefono: '',
   email: '',
   direccion: '',
@@ -21,6 +23,7 @@ export function Clientes() {
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [form, setForm] = useState<ClienteRequest>(CLIENTE_VACIO)
   const [errorForm, setErrorForm] = useState<string | null>(null)
+  const [avisoPadron, setAvisoPadron] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [eliminandoId, setEliminandoId] = useState<number | null>(null)
 
@@ -35,12 +38,42 @@ export function Clientes() {
     cargar().finally(() => setCargando(false))
   }, [])
 
+  // Solo al dar de alta: al editar no se pisa lo que ya estaba cargado.
+  const cuitParaConsultar = editandoId == null && form.docTipo === 80 && esCuitValido(form.docNro ?? '') ? form.docNro : null
+
+  useEffect(() => {
+    if (!cuitParaConsultar) return
+    let cancelado = false
+    setAvisoPadron('Consultando ARCA...')
+    consultarPadron(cuitParaConsultar)
+      .then((contribuyente) => {
+        if (cancelado) return
+        setForm((actual) => ({
+          ...actual,
+          nombre: actual.nombre || contribuyente.nombre,
+          direccion: actual.direccion || (contribuyente.domicilio ?? ''),
+          condicionIva: actual.condicionIva ?? contribuyente.condicionIva,
+        }))
+        setAvisoPadron(contribuyente.advertencia ? `ARCA informa: ${contribuyente.advertencia}` : null)
+      })
+      .catch((err) => {
+        if (cancelado) return
+        const motivo = err instanceof ApiRequestError ? err.message : 'No se pudo consultar ARCA'
+        setAvisoPadron(`${motivo}. Podés cargar los datos a mano.`)
+      })
+    return () => {
+      cancelado = true
+      setAvisoPadron(null)
+    }
+  }, [cuitParaConsultar])
+
   function onEditar(cliente: ClienteResponse) {
     setEditandoId(cliente.idCliente)
     setForm({
       nombre: cliente.nombre,
       docTipo: cliente.docTipo,
       docNro: cliente.docNro ?? '',
+      condicionIva: cliente.condicionIva,
       telefono: cliente.telefono ?? '',
       email: cliente.email ?? '',
       direccion: cliente.direccion ?? '',
@@ -129,10 +162,6 @@ export function Clientes() {
         <h3>{editandoId != null ? 'Editar cliente' : 'Agregar cliente'}</h3>
         <form onSubmit={onGuardar}>
           <label>
-            Nombre
-            <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          </label>
-          <label>
             Tipo de documento
             <select
               value={form.docTipo}
@@ -149,10 +178,31 @@ export function Clientes() {
               <input
                 required
                 value={form.docNro ?? ''}
-                onChange={(e) => setForm({ ...form, docNro: e.target.value })}
+                onChange={(e) => setForm({ ...form, docNro: e.target.value.replace(/\D/g, '') })}
               />
             </label>
           )}
+          {avisoPadron && <p>{avisoPadron}</p>}
+          <label>
+            Nombre
+            <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          </label>
+          <label>
+            Condición frente al IVA
+            <select
+              value={form.condicionIva ?? ''}
+              onChange={(e) =>
+                setForm({ ...form, condicionIva: e.target.value === '' ? null : Number(e.target.value) })
+              }
+            >
+              <option value="">Sin indicar</option>
+              {CONDICIONES_IVA.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Teléfono
             <input value={form.telefono ?? ''} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />

@@ -15,6 +15,7 @@ public class CompraResponse {
     private Integer idProveedor;
     private String nombreProveedor;
     private String medioPago;
+    private String origen;
     private BigDecimal totalCompra;
     private BigDecimal montoPagado;
     private BigDecimal saldoPendiente;

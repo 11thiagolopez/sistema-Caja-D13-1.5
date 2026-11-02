@@ -1,29 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { getCuentaCorrienteProveedor, getProveedores, registrarDevolucionProveedor } from '../api/proveedores'
-import { getCompras, registrarPagoProveedor } from '../api/compras'
+import {
+  getCuentaCorrienteProveedor,
+  getProveedores,
+  registrarDevolucionProveedor,
+  registrarPagoAProveedor,
+} from '../api/proveedores'
 import { getProductos } from '../api/productos'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { useCarrito } from '../hooks/useCarrito'
-import { hoyIso } from '../utils/date'
 import type {
-  CompraResponse,
   CuentaCorrienteProveedorResponse,
   DetalleDevolucionProveedorRequest,
-  MedioPago,
+  MedioPagoProveedor,
+  OrigenPago,
   Producto,
   ProveedorResponse,
 } from '../types/api'
 
 interface ItemDevolucion extends DetalleDevolucionProveedorRequest {
   descripcionProducto: string
-}
-
-function haceNoventaDiasIso(): string {
-  const fecha = new Date()
-  fecha.setDate(fecha.getDate() - 90)
-  return fecha.toISOString().slice(0, 10)
 }
 
 export function CuentaCorrienteProveedores() {
@@ -33,12 +30,12 @@ export function CuentaCorrienteProveedores() {
   const [cuenta, setCuenta] = useState<CuentaCorrienteProveedorResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [desde, setDesde] = useState(haceNoventaDiasIso())
-  const [hasta, setHasta] = useState(hoyIso())
-  const [compras, setCompras] = useState<CompraResponse[]>([])
-  const [montosPago, setMontosPago] = useState<Record<number, string>>({})
-  const [medioPagoPago, setMedioPagoPago] = useState<MedioPago>('EFECTIVO')
-  const [pagandoId, setPagandoId] = useState<number | null>(null)
+  const [montoPago, setMontoPago] = useState('')
+  const [medioPagoPago, setMedioPagoPago] = useState<MedioPagoProveedor>('EFECTIVO')
+  // Sin valor por defecto: un origen elegido sin querer descuadraría el arqueo de caja.
+  const [origenPago, setOrigenPago] = useState<OrigenPago | ''>('')
+  const [pagando, setPagando] = useState(false)
+  const [mensajePago, setMensajePago] = useState<string | null>(null)
 
   const [productos, setProductos] = useState<Producto[]>([])
   const { carrito, agregarOFusionar, quitar, vaciar, total } = useCarrito<ItemDevolucion>()
@@ -59,38 +56,36 @@ export function CuentaCorrienteProveedores() {
       .catch((err) => setError(err instanceof ApiRequestError ? err.message : 'No se pudo cargar la cuenta corriente'))
   }
 
-  function cargarCompras(id: number) {
-    getCompras(desde, hasta)
-      .then((todas) => setCompras(todas.filter((c) => c.idProveedor === id && c.saldoPendiente > 0)))
-      .catch(() => setCompras([]))
-  }
-
   function onElegirProveedor(id: number) {
     setIdProveedor(id)
+    setMontoPago('')
+    setOrigenPago('')
+    setMensajePago(null)
     cargarCuenta(id)
-    cargarCompras(id)
   }
 
-  async function onPagar(compra: CompraResponse) {
-    const monto = Number(montosPago[compra.idCompra] ?? 0)
-    if (!sesion || !monto) return
+  async function onPagar(e: FormEvent) {
+    e.preventDefault()
+    const monto = Number(montoPago)
+    if (!sesion || typeof idProveedor !== 'number' || !monto || !origenPago) return
     setError(null)
-    setPagandoId(compra.idCompra)
+    setMensajePago(null)
+    setPagando(true)
     try {
-      await registrarPagoProveedor(compra.idCompra, {
+      const actualizada = await registrarPagoAProveedor(idProveedor, {
         idEmpleado: sesion.idEmpleado,
         monto,
         medioPago: medioPagoPago,
+        origen: origenPago,
       })
-      setMontosPago((actual) => ({ ...actual, [compra.idCompra]: '' }))
-      if (typeof idProveedor === 'number') {
-        cargarCuenta(idProveedor)
-        cargarCompras(idProveedor)
-      }
+      setCuenta(actualizada)
+      setMontoPago('')
+      setOrigenPago('')
+      setMensajePago(`Pago de $${monto.toFixed(2)} registrado.`)
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar el pago')
     } finally {
-      setPagandoId(null)
+      setPagando(false)
     }
   }
 
@@ -174,13 +169,15 @@ export function CuentaCorrienteProveedores() {
                 <th>Fecha</th>
                 <th>Tipo</th>
                 <th>Monto</th>
+                <th>Medio de pago</th>
+                <th>Origen</th>
                 <th>Descripción</th>
               </tr>
             </thead>
             <tbody>
               {cuenta.movimientos.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Sin movimientos todavía.</td>
+                  <td colSpan={6}>Sin movimientos todavía.</td>
                 </tr>
               )}
               {cuenta.movimientos.map((m) => (
@@ -188,6 +185,8 @@ export function CuentaCorrienteProveedores() {
                   <td>{new Date(m.fecha).toLocaleString()}</td>
                   <td>{m.tipo}</td>
                   <td>${m.monto.toFixed(2)}</td>
+                  <td>{m.medioPago ?? '—'}</td>
+                  <td>{m.origen ?? '—'}</td>
                   <td>{m.descripcion ?? '—'}</td>
                 </tr>
               ))}
@@ -195,70 +194,77 @@ export function CuentaCorrienteProveedores() {
           </table>
 
           <section>
-            <h3>Registrar pago contra una compra</h3>
-            <label>
-              Desde
-              <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-            </label>
-            <label>
-              Hasta
-              <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-            </label>
-            <button type="button" onClick={() => onElegirProveedor(idProveedor as number)}>
-              Buscar compras con saldo pendiente
-            </button>
-
-            {compras.length > 0 && (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Compra #</th>
-                    <th>Fecha</th>
-                    <th>Total</th>
-                    <th>Pagado</th>
-                    <th>Pendiente</th>
-                    <th>Monto a pagar</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {compras.map((c) => (
-                    <tr key={c.idCompra}>
-                      <td>{c.idCompra}</td>
-                      <td>{c.fecha}</td>
-                      <td>${c.totalCompra.toFixed(2)}</td>
-                      <td>${c.montoPagado.toFixed(2)}</td>
-                      <td>${c.saldoPendiente.toFixed(2)}</td>
-                      <td>
-                        <input
-                          type="number"
-                          min={0}
-                          max={c.saldoPendiente}
-                          step="0.01"
-                          value={montosPago[c.idCompra] ?? ''}
-                          onChange={(e) =>
-                            setMontosPago((actual) => ({ ...actual, [c.idCompra]: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button type="button" onClick={() => onPagar(c)} disabled={pagandoId === c.idCompra}>
-                          {pagandoId === c.idCompra ? 'Pagando...' : 'Pagar'}
-                        </button>
-                      </td>
+            <h3>Saldar deuda</h3>
+            {mensajePago && <p className="resultado">{mensajePago}</p>}
+            {cuenta.saldoPendiente <= 0 ? (
+              <p>No hay deuda pendiente con este proveedor.</p>
+            ) : (
+              <>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Compra #</th>
+                      <th>Fecha</th>
+                      <th>Total</th>
+                      <th>Pendiente</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {cuenta.comprasPendientes.map((c) => (
+                      <tr key={c.idCompra}>
+                        <td>{c.idCompra}</td>
+                        <td>{c.fecha}</td>
+                        <td>${c.totalCompra.toFixed(2)}</td>
+                        <td>${c.saldoPendiente.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <form onSubmit={onPagar}>
+                  <label>
+                    Monto a pagar (se aplica primero a la compra más vieja)
+                    <input
+                      type="number"
+                      required
+                      min={0.01}
+                      max={cuenta.saldoPendiente}
+                      step="0.01"
+                      value={montoPago}
+                      onChange={(e) => setMontoPago(e.target.value)}
+                    />
+                  </label>
+                  <button type="button" onClick={() => setMontoPago(cuenta.saldoPendiente.toFixed(2))}>
+                    Completar deuda total
+                  </button>
+                  <label>
+                    Medio de pago
+                    <select
+                      value={medioPagoPago}
+                      onChange={(e) => setMedioPagoPago(e.target.value as MedioPagoProveedor)}
+                    >
+                      <option value="EFECTIVO">Efectivo</option>
+                      <option value="TRANSFERENCIA">Transferencia</option>
+                    </select>
+                  </label>
+                  <label>
+                    Origen del dinero
+                    <select
+                      required
+                      value={origenPago}
+                      onChange={(e) => setOrigenPago(e.target.value as OrigenPago | '')}
+                    >
+                      <option value="">Elegir...</option>
+                      <option value="CAJA">Caja</option>
+                      <option value="EXTERNO">Externo</option>
+                    </select>
+                  </label>
+                  <button type="submit" disabled={pagando}>
+                    {pagando && <span className="spinner" />}
+                    {pagando ? 'Registrando...' : 'Registrar pago'}
+                  </button>
+                </form>
+              </>
             )}
-            <label>
-              Medio de pago
-              <select value={medioPagoPago} onChange={(e) => setMedioPagoPago(e.target.value as MedioPago)}>
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="TARJETA">Tarjeta</option>
-              </select>
-            </label>
           </section>
 
           <section>

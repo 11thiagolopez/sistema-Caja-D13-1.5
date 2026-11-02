@@ -14,6 +14,7 @@ public class MovimientoCuentaCorrienteProveedorResponse {
     private String tipo;
     private BigDecimal monto;
     private String medioPago;
+    private String origen;
     private String descripcion;
     private Integer idCompra;
     private Integer idDevolucion;

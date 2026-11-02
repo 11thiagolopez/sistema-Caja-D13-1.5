@@ -61,6 +61,10 @@ public class FacturaFiscal {
     @Column(name = "cliente_nombre")
     private String clienteNombre;
 
+    // CondicionIVAReceptorId informado a ARCA (RG 5616). Null en facturas anteriores a este campo.
+    @Column(name = "condicion_iva_receptor")
+    private Integer condicionIvaReceptor;
+
     private String cae;
 
     @Column(name = "cae_vencimiento")

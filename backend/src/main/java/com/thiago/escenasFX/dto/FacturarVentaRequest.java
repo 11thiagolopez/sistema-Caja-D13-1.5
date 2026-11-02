@@ -22,4 +22,8 @@ public class FacturarVentaRequest {
     // DocTipo/DocNro), pero toda factura real de ARCA lo muestra impreso — FacturaFiscalService
     // exige este dato igual que clienteDocNro cuando clienteDocTipo no es Consumidor Final (99).
     private String clienteNombre;
+
+    // CondicionIVAReceptorId de ARCA. Obligatorio con CUIT; con DNI o Consumidor Final se asume 5
+    // (Consumidor Final) si no viene.
+    private Integer condicionIvaReceptor;
 }

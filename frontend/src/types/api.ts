@@ -109,6 +109,7 @@ export interface ClienteRequest {
   nombre: string
   docTipo: ClienteDocTipo
   docNro?: string
+  condicionIva?: number | null
   telefono?: string
   email?: string
   direccion?: string
@@ -119,6 +120,7 @@ export interface ClienteResponse {
   nombre: string
   docTipo: ClienteDocTipo
   docNro: string | null
+  condicionIva: number | null
   telefono: string | null
   email: string | null
   direccion: string | null
@@ -287,6 +289,19 @@ export interface FacturarVentaRequest {
   // Nombre/razón social del cliente: WSFEv1 no lo pide, pero toda factura real de ARCA lo
   // imprime — el backend lo exige junto con clienteDocNro cuando clienteDocTipo no es 99.
   clienteNombre?: string
+  // CondicionIVAReceptorId de ARCA: obligatorio con CUIT, con DNI o Consumidor Final se asume 5.
+  condicionIvaReceptor?: number
+}
+
+// Datos del padrón de ARCA. condicionIva es una sugerencia deducida de los impuestos inscriptos.
+export interface ContribuyenteResponse {
+  cuit: string
+  nombre: string
+  tipoPersona: string | null
+  domicilio: string | null
+  estadoClave: string | null
+  condicionIva: number | null
+  advertencia: string | null
 }
 
 // estado: PENDIENTE (creada, todavía sin CAE) | EMITIDA | ERROR.
@@ -299,6 +314,7 @@ export interface FacturaFiscalResponse {
   clienteDocTipo: number
   clienteDocNro: string | null
   clienteNombre: string | null
+  condicionIvaReceptor: number | null
   cae: string | null
   caeVencimiento: string | null
   importe: number
@@ -386,6 +402,28 @@ export interface MovimientoCajaResponse {
   motivo: string
 }
 
+export interface GastoArqueoResponse {
+  idGasto: number
+  fecha: string
+  nombre: string
+  categoria: string | null
+  medioPago: MedioPagoProveedor | null
+  origen: OrigenPago | null
+  importe: number
+  restaDelSaldoEsperado: boolean
+}
+
+export interface MovimientoProveedorArqueoResponse {
+  idMovimiento: number
+  fecha: string
+  nombreProveedor: string
+  descripcion: string | null
+  medioPago: string
+  origen: OrigenPago | null
+  monto: number
+  restaDelSaldoEsperado: boolean
+}
+
 export interface ResumenDiaResponse {
   ventas: VentaResponse[]
   retiros: MovimientoCajaResponse[]
@@ -401,6 +439,13 @@ export interface ResumenDiaResponse {
   // Informativo, no suma a cajaTotalDelDia: ventas pagadas (total o parcialmente) con saldo de
   // cuenta corriente en vez de dinero real.
   ventasPagadasConSaldo: number
+  // Todo pago a proveedor y compra a crédito del período, salgan o no de la caja.
+  movimientosProveedor: MovimientoProveedorArqueoResponse[]
+  pagosProveedorEfectivoCaja: number
+  pagosProveedorTransferenciaCaja: number
+  gastos: GastoArqueoResponse[]
+  gastosEfectivoCaja: number
+  gastosTransferenciaCaja: number
 }
 
 export interface ResumenSesionResponse {
@@ -441,6 +486,8 @@ export interface GastoRequest {
   importe: number
   fecha: string
   categoria?: string
+  medioPago: MedioPagoProveedor
+  origen: OrigenPago
 }
 
 export interface GastoResponse {
@@ -449,6 +496,8 @@ export interface GastoResponse {
   importe: number
   fecha: string
   categoria: string | null
+  medioPago: MedioPagoProveedor | null
+  origen: OrigenPago | null
   empleadoRegistroNombre: string | null
   creadoEn: string
 }
@@ -469,11 +518,23 @@ export interface CompraItemRequest {
   precioVentaUnitario?: number
 }
 
+export type MedioPagoProveedor = 'EFECTIVO' | 'TRANSFERENCIA'
+
+// CUENTA_CORRIENTE: solo existe para compras — deja el total como deuda con el proveedor, sin
+// importar montoPagado (lo decide el backend). No sirve para pagar esa deuda.
+export type MedioPagoCompra = MedioPagoProveedor | 'CUENTA_CORRIENTE'
+
+// De dónde sale la plata de un pago a proveedor. Es independiente del medio de pago: solo CAJA
+// descuenta de la caja del día, y el saldo esperado solo baja con EFECTIVO + CAJA.
+export type OrigenPago = 'CAJA' | 'EXTERNO'
+
 export interface CompraRequest {
   idEmpleado: number
   fecha: string
   proveedorNombre: string
-  medioPago: MedioPago
+  medioPago: MedioPagoCompra
+  // Obligatorio salvo en CUENTA_CORRIENTE, donde no se paga nada al registrar la compra.
+  origen?: OrigenPago
   items: CompraItemRequest[]
   // Cuenta corriente de proveedor, nuevo: ausente = se paga todo de una (comportamiento de
   // siempre); un valor menor al total deja el resto como deuda pendiente.
@@ -496,7 +557,10 @@ export interface CompraResponse {
   fecha: string
   idProveedor: number | null
   nombreProveedor: string | null
-  medioPago: MedioPago
+  // string y no MedioPagoCompra: las compras viejas pueden traer TARJETA.
+  medioPago: string
+  // Null si no se pagó nada al registrar la compra o si es anterior a este campo.
+  origen: OrigenPago | null
   totalCompra: number
   montoPagado: number
   saldoPendiente: number
@@ -506,7 +570,8 @@ export interface CompraResponse {
 export interface RegistrarPagoProveedorRequest {
   idEmpleado: number
   monto: number
-  medioPago: MedioPago
+  medioPago: MedioPagoProveedor
+  origen: OrigenPago
 }
 
 export interface DetalleDevolucionProveedorRequest {
@@ -552,9 +617,18 @@ export interface MovimientoCuentaCorrienteProveedorResponse {
   tipo: TipoMovimientoCuentaCorrienteProveedor
   monto: number
   medioPago: string | null
+  origen: OrigenPago | null
   descripcion: string | null
   idCompra: number | null
   idDevolucion: number | null
+}
+
+export interface CompraPendienteResponse {
+  idCompra: number
+  fecha: string
+  totalCompra: number
+  // Lo que falta pagar de esta compra, ya descontado el crédito general de devoluciones.
+  saldoPendiente: number
 }
 
 export interface CuentaCorrienteProveedorResponse {
@@ -562,6 +636,8 @@ export interface CuentaCorrienteProveedorResponse {
   nombreProveedor: string
   // Cuánto le debemos al proveedor hoy. Negativo = el proveedor nos debe a nosotros.
   saldoPendiente: number
+  // De la más vieja a la más nueva: es el orden en que se les aplica un pago.
+  comprasPendientes: CompraPendienteResponse[]
   movimientos: MovimientoCuentaCorrienteProveedorResponse[]
 }
 

@@ -41,12 +41,14 @@ class NotaCreditoFiscalServiceTest {
     private FacturaFiscalRepository facturaFiscalRepo;
     @Mock
     private AfipFacturacionService afipFacturacionService;
+    @Mock
+    private AfipPadronService afipPadronService;
 
     private NotaCreditoFiscalService service;
 
     @BeforeEach
     void setUp() {
-        service = new NotaCreditoFiscalService(notaCreditoRepo, facturaFiscalRepo, afipFacturacionService, 1);
+        service = new NotaCreditoFiscalService(notaCreditoRepo, facturaFiscalRepo, afipFacturacionService, afipPadronService, 1);
         lenient().when(notaCreditoRepo.save(any(NotaCredito.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -122,6 +124,64 @@ class NotaCreditoFiscalServiceTest {
         assertThat(datos.cbteAsocPtoVta()).isEqualTo(1);
         assertThat(datos.cbteAsocNro()).isEqualTo(55);
         assertThat(datos.concepto()).isEqualTo(1); // la única línea es ARTICULO
+    }
+
+    private DatosFactura emitirYCapturar(FacturaFiscal factura) {
+        NotaCredito nc = notaCreditoFiscal(venta(10));
+        when(notaCreditoRepo.findById(1)).thenReturn(Optional.of(nc));
+        when(facturaFiscalRepo.findByVentaIdVenta(10)).thenReturn(Optional.of(factura));
+        when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
+            new ResultadoCae(true, 8, "cae", LocalDate.now(), null));
+
+        service.emitir(1);
+
+        ArgumentCaptor<DatosFactura> captor = ArgumentCaptor.forClass(DatosFactura.class);
+        verify(afipFacturacionService).emitirFacturaC(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void emitir_usaLaCondicionIvaGuardadaEnLaFactura() {
+        FacturaFiscal factura = facturaEmitida();
+        factura.setClienteDocTipo(80);
+        factura.setClienteDocNro("20300238379");
+        factura.setCondicionIvaReceptor(1);
+
+        assertThat(emitirYCapturar(factura).condicionIvaReceptor()).isEqualTo(1);
+        verify(afipPadronService, never()).consultar(any());
+    }
+
+    @Test
+    void emitir_facturaViejaConsumidorFinal_informaConsumidorFinal() {
+        assertThat(emitirYCapturar(facturaEmitida()).condicionIvaReceptor()).isEqualTo(5);
+    }
+
+    @Test
+    void emitir_facturaViejaConCuit_leConsultaLaCondicionAlPadron() {
+        FacturaFiscal factura = facturaEmitida();
+        factura.setClienteDocTipo(80);
+        factura.setClienteDocNro("20300238379");
+        when(afipPadronService.consultar("20300238379")).thenReturn(new AfipPadronService.Contribuyente(
+            "20300238379", "Juan", "FISICA", null, "ACTIVO", 6, null));
+
+        assertThat(emitirYCapturar(factura).condicionIvaReceptor()).isEqualTo(6);
+    }
+
+    @Test
+    void emitir_padronFalla_quedaEnErrorSinLlamarAWsfe() {
+        FacturaFiscal factura = facturaEmitida();
+        factura.setClienteDocTipo(80);
+        factura.setClienteDocNro("20300238379");
+        NotaCredito nc = notaCreditoFiscal(venta(10));
+        when(notaCreditoRepo.findById(1)).thenReturn(Optional.of(nc));
+        when(facturaFiscalRepo.findByVentaIdVenta(10)).thenReturn(Optional.of(factura));
+        when(afipPadronService.consultar("20300238379")).thenThrow(new RuntimeException("sin autorización"));
+
+        NotaCredito resultado = service.emitir(1);
+
+        assertThat(resultado.getEstado()).isEqualTo("ERROR");
+        assertThat(resultado.getErrorDetalle()).isEqualTo("sin autorización");
+        verify(afipFacturacionService, never()).emitirFacturaC(any());
     }
 
     @Test

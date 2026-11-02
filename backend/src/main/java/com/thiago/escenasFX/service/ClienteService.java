@@ -4,22 +4,60 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.ClienteRequest;
 import com.thiago.escenasFX.model.Cliente;
+import com.thiago.escenasFX.model.FacturaFiscal;
 import com.thiago.escenasFX.model.MovimientoCuentaCorrienteCliente;
 import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteClienteRepository;
+import com.thiago.escenasFX.repository.VentaRepository;
 
 @Service
 public class ClienteService {
 
     private final ClienteRepository clienteRepo;
     private final MovimientoCuentaCorrienteClienteRepository movimientoRepo;
+    private final VentaRepository ventaRepo;
 
-    public ClienteService(ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoRepo) {
+    public ClienteService(ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoRepo,
+            VentaRepository ventaRepo) {
         this.clienteRepo = clienteRepo;
         this.movimientoRepo = movimientoRepo;
+        this.ventaRepo = ventaRepo;
+    }
+
+    /**
+     * Guarda en el catálogo al cliente de una factura emitida, si es nuevo, y lo vincula a la venta
+     * si no tenía uno (la Nota de Crédito lo toma de ahí). La factura conserva su propia copia del
+     * nombre y documento: editar el cliente después no altera un comprobante ya emitido.
+     */
+    @Transactional
+    public void registrarDesdeFactura(FacturaFiscal factura) {
+        if (factura.getClienteDocTipo() == 99) {
+            return;
+        }
+        Cliente cliente = clienteRepo
+            .findFirstByDocTipoAndDocNroOrderByIdClienteAsc(factura.getClienteDocTipo(), factura.getClienteDocNro())
+            .orElseGet(() -> {
+                Cliente nuevo = new Cliente();
+                nuevo.setNombre(factura.getClienteNombre());
+                nuevo.setDocTipo(factura.getClienteDocTipo());
+                nuevo.setDocNro(factura.getClienteDocNro());
+                return nuevo;
+            });
+        if (cliente.getCondicionIva() == null) {
+            cliente.setCondicionIva(factura.getCondicionIvaReceptor());
+        }
+        Cliente guardado = clienteRepo.save(cliente);
+
+        ventaRepo.findById(factura.getVenta().getIdVenta())
+            .filter(venta -> venta.getCliente() == null)
+            .ifPresent(venta -> {
+                venta.setCliente(guardado);
+                ventaRepo.save(venta);
+            });
     }
 
     public List<Cliente> listar() {
@@ -73,6 +111,7 @@ public class ClienteService {
         cliente.setNombre(req.getNombre());
         cliente.setDocTipo(req.getDocTipo());
         cliente.setDocNro(req.getDocNro());
+        cliente.setCondicionIva(req.getCondicionIva());
         cliente.setTelefono(req.getTelefono());
         cliente.setEmail(req.getEmail());
         cliente.setDireccion(req.getDireccion());

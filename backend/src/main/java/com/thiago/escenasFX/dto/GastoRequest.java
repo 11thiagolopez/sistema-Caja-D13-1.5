@@ -27,4 +27,10 @@ public class GastoRequest {
     private LocalDate fecha;
 
     private String categoria;
+
+    @NotBlank
+    private String medioPago;
+
+    @NotBlank
+    private String origen;
 }

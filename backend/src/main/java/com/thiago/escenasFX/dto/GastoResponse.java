@@ -15,6 +15,8 @@ public class GastoResponse {
     private BigDecimal importe;
     private LocalDate fecha;
     private String categoria;
+    private String medioPago;
+    private String origen;
     private String empleadoRegistroNombre;
     private LocalDateTime creadoEn;
 }

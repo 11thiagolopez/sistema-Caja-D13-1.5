@@ -65,7 +65,7 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
-        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null);
+        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null, null);
 
         assertThat(factura.getEstado()).isEqualTo("EMITIDA");
         assertThat(factura.getCae()).isEqualTo("70099998887776");
@@ -80,7 +80,7 @@ class FacturaFiscalServiceTest {
         venta.setEstado("PENDIENTE_AUTORIZACION");
         when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
 
-        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 99, null, null))
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 99, null, null, null))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -92,7 +92,7 @@ class FacturaFiscalServiceTest {
         existente.setEstado("EMITIDA");
         when(facturaRepo.findByVentaIdVenta(10)).thenReturn(Optional.of(existente));
 
-        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 99, null, null))
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 99, null, null, null))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -101,7 +101,7 @@ class FacturaFiscalServiceTest {
         Venta venta = ventaConfirmada("ARTICULO");
         when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
 
-        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, null, "Juan Pérez"))
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, null, "Juan Pérez", 6))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -110,7 +110,7 @@ class FacturaFiscalServiceTest {
         Venta venta = ventaConfirmada("ARTICULO");
         when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
 
-        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", null))
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", null, 6))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -121,7 +121,7 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
-        FacturaFiscal factura = facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez");
+        FacturaFiscal factura = facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez", 6);
 
         assertThat(factura.getClienteNombre()).isEqualTo("Juan Pérez");
         assertThat(factura.getClienteDocNro()).isEqualTo("20300238379");
@@ -134,7 +134,7 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
-        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, "Nombre que no debería guardarse");
+        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, "Nombre que no debería guardarse", null);
 
         assertThat(factura.getClienteNombre()).isNull();
     }
@@ -146,7 +146,7 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(false, null, null, null, "10015 - Observación de ARCA"));
 
-        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null);
+        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null, null);
 
         assertThat(factura.getEstado()).isEqualTo("ERROR");
         assertThat(factura.getErrorDetalle()).contains("10015");
@@ -160,7 +160,7 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any()))
             .thenThrow(new com.thiago.escenasFX.exception.AfipIntegracionException("timeout"));
 
-        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null);
+        FacturaFiscal factura = facturaFiscalService.facturar(10, 99, null, null, null);
 
         assertThat(factura.getEstado()).isEqualTo("ERROR");
         assertThat(factura.getErrorDetalle()).isEqualTo("timeout");
@@ -173,11 +173,73 @@ class FacturaFiscalServiceTest {
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 1, "cae", LocalDate.now(), null));
 
-        facturaFiscalService.facturar(10, 99, null, null);
+        facturaFiscalService.facturar(10, 99, null, null, null);
 
         var captor = org.mockito.ArgumentCaptor.forClass(AfipFacturacionService.DatosFactura.class);
         org.mockito.Mockito.verify(afipFacturacionService).emitirFacturaC(captor.capture());
         assertThat(captor.getValue().concepto()).isEqualTo(2);
         assertThat(captor.getValue().fchServDesde()).isNotNull();
+    }
+
+    private AfipFacturacionService.DatosFactura facturarYCapturar(Integer docTipo, String docNro, String nombre,
+            Integer condicion, FacturaFiscal[] resultado) {
+        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+        when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
+            new ResultadoCae(true, 1, "cae", LocalDate.now(), null));
+
+        resultado[0] = facturaFiscalService.facturar(10, docTipo, docNro, nombre, condicion);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AfipFacturacionService.DatosFactura.class);
+        org.mockito.Mockito.verify(afipFacturacionService).emitirFacturaC(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void facturar_consumidorFinal_informaCondicionCincoAunqueVengaOtra() {
+        FacturaFiscal[] factura = new FacturaFiscal[1];
+
+        var datos = facturarYCapturar(99, null, null, 1, factura);
+
+        assertThat(datos.condicionIvaReceptor()).isEqualTo(5);
+        assertThat(factura[0].getCondicionIvaReceptor()).isEqualTo(5);
+    }
+
+    @Test
+    void facturar_dniSinCondicion_asumeConsumidorFinal() {
+        var datos = facturarYCapturar(96, "30023837", "Juan Pérez", null, new FacturaFiscal[1]);
+
+        assertThat(datos.condicionIvaReceptor()).isEqualTo(5);
+    }
+
+    @Test
+    void facturar_cuitConCondicion_laInformaYLaGuarda() {
+        FacturaFiscal[] factura = new FacturaFiscal[1];
+
+        var datos = facturarYCapturar(80, "20300238379", "Juan Pérez", 6, factura);
+
+        assertThat(datos.condicionIvaReceptor()).isEqualTo(6);
+        assertThat(factura[0].getCondicionIvaReceptor()).isEqualTo(6);
+    }
+
+    @Test
+    void facturar_cuitSinCondicion_rechazaSinLlamarAArca() {
+        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("condición frente al IVA");
+
+        org.mockito.Mockito.verifyNoInteractions(afipFacturacionService);
+    }
+
+    @Test
+    void facturar_condicionInexistente_rechazaSinLlamarAArca() {
+        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+
+        assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez", 2))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("inválida");
+
+        org.mockito.Mockito.verifyNoInteractions(afipFacturacionService);
     }
 }

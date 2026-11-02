@@ -21,4 +21,8 @@ public class RegistrarPagoProveedorRequest {
 
     @NotBlank
     private String medioPago;
+
+    // CAJA | EXTERNO.
+    @NotBlank
+    private String origen;
 }

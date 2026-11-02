@@ -5,6 +5,7 @@ import type {
   DevolucionProveedorResponse,
   ProveedorRequest,
   ProveedorResponse,
+  RegistrarPagoProveedorRequest,
 } from '../types/api'
 
 export function getProveedores(): Promise<ProveedorResponse[]> {
@@ -25,6 +26,16 @@ export function eliminarProveedor(id: number): Promise<void> {
 
 export function getCuentaCorrienteProveedor(id: number): Promise<CuentaCorrienteProveedorResponse> {
   return request<CuentaCorrienteProveedorResponse>(`/api/proveedores/${id}/cuenta-corriente`)
+}
+
+export function registrarPagoAProveedor(
+  id: number,
+  pago: RegistrarPagoProveedorRequest,
+): Promise<CuentaCorrienteProveedorResponse> {
+  return request<CuentaCorrienteProveedorResponse>(`/api/proveedores/${id}/pagos`, {
+    method: 'POST',
+    body: JSON.stringify(pago),
+  })
 }
 
 export function registrarDevolucionProveedor(
