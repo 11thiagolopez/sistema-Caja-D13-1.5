@@ -12,6 +12,7 @@ import { ApiRequestError } from '../api/client'
 import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import { BuscadorClienteSelect } from '../components/BuscadorClienteSelect'
 import { hoyIso } from '../utils/date'
+import { formatoFechaHora } from '../utils/formato'
 import type { AlcanceNotaCredito, ClienteResponse, MotivoNotaCredito, NotaCreditoResponse, VentaResponse } from '../types/api'
 
 const MOTIVOS: { value: MotivoNotaCredito; label: string }[] = [
@@ -254,7 +255,7 @@ export function NotaCredito() {
                 {resultadosRango.map((v) => (
                   <tr key={v.idVenta}>
                     <td>{v.idVenta}</td>
-                    <td>{v.fecha}</td>
+                    <td>{formatoFechaHora(v.fecha)}</td>
                     <td>{v.clienteNombre ?? '—'}</td>
                     <td>${v.totalVenta.toFixed(2)}</td>
                     <td>

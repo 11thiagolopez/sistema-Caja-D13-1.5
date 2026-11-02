@@ -7,6 +7,7 @@ import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
 import { claseFilaStock } from '../utils/stockColor'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
+import { formatoFechaHora } from '../utils/formato'
 import { descargarBlob } from '../utils/descargarBlob'
 import type { DetallePresupuestoRequest, Producto, PresupuestoResponse } from '../types/api'
 
@@ -393,7 +394,7 @@ function ConsultarPresupuestos() {
                       #{p.idPresupuesto}
                     </button>
                   </td>
-                  <td>{new Date(p.fecha).toLocaleString('es-AR')}</td>
+                  <td>{formatoFechaHora(p.fecha)}</td>
                   <td>{p.clienteNombre}</td>
                   <td>{p.nombreEmpleado}</td>
                   <td>{p.totalPresupuesto.toFixed(2)}</td>

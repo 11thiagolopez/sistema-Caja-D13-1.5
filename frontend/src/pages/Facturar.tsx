@@ -6,6 +6,7 @@ import { descargarPdfFactura, facturarVenta, getFactura } from '../api/facturas'
 import { getVenta, getVentas } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
+import { formatoFechaHora } from '../utils/formato'
 import { CONDICIONES_IVA, CONSUMIDOR_FINAL, esCuitValido } from '../utils/cuit'
 import type { ClienteDocTipo, ClienteResponse, FacturaFiscalResponse, VentaResponse } from '../types/api'
 
@@ -281,7 +282,7 @@ export function Facturar() {
                   />
                 </td>
                 <td>{venta.idVenta}</td>
-                <td>{venta.fecha}</td>
+                <td>{formatoFechaHora(venta.fecha)}</td>
                 <td>{venta.medioPago}</td>
                 <td>{venta.totalVenta.toFixed(2)}</td>
                 <td>{factura?.estado === 'ERROR' ? `Error: ${factura.errorDetalle}` : '—'}</td>

@@ -3,6 +3,7 @@ import { getEmpleados } from '../api/empleados'
 import { getVentasPorVendedor } from '../api/reportes'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
+import { formatoFechaHora } from '../utils/formato'
 import type { EmpleadoResponse, VentaResponse } from '../types/api'
 
 export function VentasPorVendedor() {
@@ -85,7 +86,7 @@ export function VentasPorVendedor() {
               {ventas.map((v) => (
                 <tr key={v.idVenta}>
                   <td>#{v.idVenta}</td>
-                  <td>{new Date(v.fecha).toLocaleString('es-AR')}</td>
+                  <td>{formatoFechaHora(v.fecha)}</td>
                   <td>{v.medioPago}</td>
                   <td>{v.totalVenta.toFixed(2)}</td>
                 </tr>

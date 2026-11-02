@@ -2605,3 +2605,4 @@ estados de carga, error, sin datos y la tabla equivalente. Cada gráfico carga p
 
 **Verificado**: tests de backend sobre H2 y `tsc`, `oxlint` y `vite build` del frontend. **Sin verificar**:
 navegador real y Postgres real (el dueño pidió no levantar en local).
+**Hora en pantalla (misma sesión)**: la API mandaba los `LocalDateTime` tal como estaban guardados, en UTC, y todas las pantallas mostraban la hora 3 horas adelantada. `FechaHoraJsonConfig` los convierte a Argentina al serializar, sin tocar los datos, y `formatoFechaHora` los muestra siempre en 24 horas. Pendiente sin tocar: `FacturaFiscalService` toma el día de la factura con `venta.getFecha().toLocalDate()`, así que una venta después de las 21:00 se factura con fecha de mañana.

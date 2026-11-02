@@ -10,6 +10,7 @@ import { getProductos } from '../api/productos'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { useCarrito } from '../hooks/useCarrito'
+import { formatoFechaHora } from '../utils/formato'
 import type {
   CuentaCorrienteProveedorResponse,
   DetalleDevolucionProveedorRequest,
@@ -182,7 +183,7 @@ export function CuentaCorrienteProveedores() {
               )}
               {cuenta.movimientos.map((m) => (
                 <tr key={m.idMovimiento}>
-                  <td>{new Date(m.fecha).toLocaleString()}</td>
+                  <td>{formatoFechaHora(m.fecha)}</td>
                   <td>{m.tipo}</td>
                   <td>${m.monto.toFixed(2)}</td>
                   <td>{m.medioPago ?? '—'}</td>

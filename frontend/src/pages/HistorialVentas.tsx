@@ -5,6 +5,7 @@ import { getEmpleados } from '../api/empleados'
 import { getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
+import { formatoFechaHora } from '../utils/formato'
 import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import type {
   EmpleadoResponse,
@@ -211,7 +212,7 @@ export function HistorialVentas() {
             <Fragment key={venta.idVenta}>
               <tr>
                 <td>{venta.idVenta}</td>
-                <td>{venta.fecha}</td>
+                <td>{formatoFechaHora(venta.fecha)}</td>
                 <td>
                   {venta.tipoVenta === 'DOMICILIO' ? 'Domicilio' : 'Mostrador'}
                   {venta.tipoVenta === 'DOMICILIO' && venta.estadoTrabajo ? ` (${venta.estadoTrabajo})` : ''}

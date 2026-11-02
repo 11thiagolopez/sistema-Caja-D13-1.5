@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getCuentaCorrienteCliente } from '../api/clientes'
 import { ApiRequestError } from '../api/client'
+import { formatoFechaHora } from '../utils/formato'
 import type { CuentaCorrienteClienteResponse } from '../types/api'
 
 export function CuentaCorrienteCliente() {
@@ -53,7 +54,7 @@ export function CuentaCorrienteCliente() {
           )}
           {cuenta.movimientos.map((m) => (
             <tr key={m.idMovimiento}>
-              <td>{new Date(m.fecha).toLocaleString()}</td>
+              <td>{formatoFechaHora(m.fecha)}</td>
               <td>{m.tipo === 'CREDITO' ? 'Crédito' : 'Débito'}</td>
               <td>${m.monto.toFixed(2)}</td>
               <td>{m.descripcion ?? '—'}</td>

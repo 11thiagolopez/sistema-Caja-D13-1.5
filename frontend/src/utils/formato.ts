@@ -20,6 +20,14 @@ export function formatoPorcentaje(fraccion: number): string {
   return PORCENTAJE.format(fraccion)
 }
 
+// La API ya manda la hora de Argentina: se arma con el texto para que no dependa de la zona del
+// navegador, siempre en formato de 24 horas.
+export function formatoFechaHora(fechaHoraIso: string): string {
+  const [fecha, hora = ''] = fechaHoraIso.split('T')
+  const [anio, mes, dia] = fecha.split('-')
+  return `${dia}/${mes}/${anio} ${hora.slice(0, 5)}`
+}
+
 function aFechaLocal(fechaIso: string): Date {
   const [anio, mes, dia] = fechaIso.split('-').map(Number)
   return new Date(anio, mes - 1, dia)

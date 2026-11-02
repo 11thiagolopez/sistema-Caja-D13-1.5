@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getResumenDia } from '../api/caja'
 import { ApiRequestError } from '../api/client'
+import { formatoFechaHora } from '../utils/formato'
 import type { ResumenDiaResponse } from '../types/api'
 
 export function Caja() {
@@ -69,7 +70,7 @@ export function Caja() {
           )}
           {resumen.movimientosProveedor.map((m) => (
             <tr key={m.idMovimiento}>
-              <td>{new Date(m.fecha).toLocaleString()}</td>
+              <td>{formatoFechaHora(m.fecha)}</td>
               <td>{m.nombreProveedor}</td>
               <td>{m.descripcion ?? '—'}</td>
               <td>{m.medioPago}</td>
@@ -102,7 +103,7 @@ export function Caja() {
           )}
           {resumen.gastos.map((g) => (
             <tr key={g.idGasto}>
-              <td>{new Date(g.fecha).toLocaleString()}</td>
+              <td>{formatoFechaHora(g.fecha)}</td>
               <td>{g.nombre}</td>
               <td>{g.categoria ?? '—'}</td>
               <td>{g.medioPago ?? '—'}</td>
