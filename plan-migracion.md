@@ -2566,3 +2566,42 @@ ALTER TABLE facturas_fiscales ADD COLUMN condicion_iva_receptor integer;
 **Verificación**: backend **304 tests** verdes (28 nuevos), ARCA mockeado. Frontend: `tsc -b`, `oxlint` y
 `vite build` sin errores. No probado en un navegador real ni contra ARCA o Supabase reales, y el SQL no
 se corrió.
+
+---
+
+## 28. Sesión 2026-11-02: gráficos en Reportes
+
+**Pedido del dueño**: pasar la sección Reportes de texto a gráficos con Chart.js, con un filtro global
+de fechas (Hoy / Últimos 7 días / Este mes / Personalizado).
+
+**Backend**: `ReportesController` suma `/resumen`, `/marcas`, `/productos`, `/ventas-por-dia`,
+`/ventas-por-dia-semana` y `/medios-pago`, sobre `ReporteGraficosService` y
+`ReporteGraficosRepository`. Los endpoints viejos siguen igual.
+
+**Criterios acordados con el dueño**:
+- Solo ventas `CONFIRMADA`. El total no resta notas de crédito (el Balance sí, y por eso difieren).
+- El descuento de la venta se reparte proporcionalmente entre sus líneas, porque `subtotal` no lo descuenta.
+- Marcas y productos excluyen los ítems manuales. Marca sin distinguir mayúsculas; vacía = "Sin marca".
+- Lo pagado con saldo a favor va a "Saldo cuenta corriente" y solo el resto a su medio de pago.
+- Días sin ventas en 0 en el gráfico y en el promedio semanal. "Peor día" solo entre días con ventas.
+
+**Zona horaria**: `Venta.fecha` se guarda con `LocalDateTime.now()`, en la zona de la JVM. Los gráficos
+convierten desde esa zona (`TimeZone.getDefault()`) a Argentina, así que dan bien esté Railway en UTC o
+no. Riesgo abierto: si las ventas históricas se guardaron en otra zona que la actual, esas quedan
+corridas. Para revisarlo, en Supabase:
+`SELECT extract(hour FROM fecha)::int AS hora, count(*) FROM ventas GROUP BY 1 ORDER BY 1;`
+Los reportes viejos (`ReporteService`) no convierten: siguen filtrando en la zona de la JVM.
+`hoyIso()` en el frontend pasó de UTC a hora de Argentina (antes, desde las 21:00 devolvía mañana).
+
+**Trampas de la consulta por día**: va `GROUP BY 1` porque Postgres rechaza repetir expresiones con
+parámetros en el `GROUP BY`, y no un subselect porque H2 lo replanifica sin los paréntesis y falla.
+H2 convierte de timestamptz a date con la zona de la sesión, distinto de Postgres, así que el tramo del
+test que mira el día de una venta nocturna solo corre con la JVM en hora de Argentina.
+
+**Frontend**: `useGrafico` crea y destruye la instancia de Chart (evita "Canvas is already in use").
+Un componente por tipo (`GraficoBarras`, `GraficoLineas`, `GraficoDona`) y `TarjetaGrafico` para los
+estados de carga, error, sin datos y la tabla equivalente. Cada gráfico carga por su cuenta
+(`useDatosReporte`), así que si falla uno los demás se ven igual.
+
+**Verificado**: tests de backend sobre H2 y `tsc`, `oxlint` y `vite build` del frontend. **Sin verificar**:
+navegador real y Postgres real (el dueño pidió no levantar en local).

@@ -442,3 +442,190 @@ section {
   gap: 8px;
   margin-top: 16px;
 }
+
+/* Reportes: tarjetas en fila arriba, gráficos en 2 columnas en desktop y 1 en celular. */
+.reportes-filtro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.reportes-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reportes-opciones button[aria-pressed='false'] {
+  background: var(--bg-alt);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--input-border);
+}
+
+.reportes-rango {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.reportes-rango label {
+  margin-bottom: 0;
+}
+
+.reportes-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.reportes-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.reportes-tarjeta span {
+  font-size: 14px;
+  color: #52514e;
+}
+
+.reportes-tarjeta strong {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.reportes-tarjeta small {
+  font-size: 12px;
+  color: #52514e;
+}
+
+.reportes-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.grafico-tarjeta {
+  min-width: 0;
+  padding: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.grafico-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.grafico-encabezado h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.grafico-estado {
+  padding: 48px 0;
+  text-align: center;
+  color: #52514e;
+}
+
+.grafico-contenido {
+  transition: opacity 0.15s;
+}
+
+.grafico-actualizando {
+  opacity: 0.5;
+}
+
+/* position + alto explícito: es lo que necesita Chart.js con maintainAspectRatio: false. */
+.grafico-lienzo {
+  position: relative;
+  width: 100%;
+}
+
+.grafico-tabla {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.grafico-tabla summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.grafico-tabla table {
+  margin-top: 8px;
+}
+
+.grafico-tabla th,
+.grafico-tabla td {
+  border-width: 1px;
+  padding: 4px 8px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.reportes-peores {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.reportes-peores h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reportes-peores ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+}
+
+.reportes-peores li span:last-child {
+  float: right;
+  margin-left: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #52514e;
+}
+
+.reportes-extremos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .reportes-tarjetas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reportes-grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .reportes-tarjeta strong {
+    font-size: 20px;
+  }
+}

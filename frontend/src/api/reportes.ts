@@ -4,18 +4,37 @@ import type {
   ComisionEmpleadoDTO,
   FormaPagoResumenDTO,
   MarcaRankingDTO,
-  ProductoRankingDTO,
+  OrdenRanking,
+  PuntoGraficoDTO,
+  RankingItemDTO,
+  RankingMarcasResponse,
+  ResumenVentasDTO,
   VentaResponse,
+  VentasPorDiaResponse,
 } from '../types/api'
 
-export function getProductosGanadores(
-  desde: string,
-  hasta: string,
-  limit = 10,
-): Promise<ProductoRankingDTO[]> {
-  return request<ProductoRankingDTO[]>(
-    `/api/reportes/productos-ganadores?desde=${desde}&hasta=${hasta}&limit=${limit}`,
-  )
+export function getResumenVentas(desde: string, hasta: string): Promise<ResumenVentasDTO> {
+  return request<ResumenVentasDTO>(`/api/reportes/resumen?desde=${desde}&hasta=${hasta}`)
+}
+
+export function getMarcasGrafico(desde: string, hasta: string, orden: OrdenRanking): Promise<RankingMarcasResponse> {
+  return request<RankingMarcasResponse>(`/api/reportes/marcas?desde=${desde}&hasta=${hasta}&orden=${orden}`)
+}
+
+export function getProductosGrafico(desde: string, hasta: string, orden: OrdenRanking): Promise<RankingItemDTO[]> {
+  return request<RankingItemDTO[]>(`/api/reportes/productos?desde=${desde}&hasta=${hasta}&orden=${orden}`)
+}
+
+export function getVentasPorDia(desde: string, hasta: string): Promise<VentasPorDiaResponse> {
+  return request<VentasPorDiaResponse>(`/api/reportes/ventas-por-dia?desde=${desde}&hasta=${hasta}`)
+}
+
+export function getVentasPorDiaSemana(desde: string, hasta: string): Promise<PuntoGraficoDTO[]> {
+  return request<PuntoGraficoDTO[]>(`/api/reportes/ventas-por-dia-semana?desde=${desde}&hasta=${hasta}`)
+}
+
+export function getMediosPago(desde: string, hasta: string): Promise<PuntoGraficoDTO[]> {
+  return request<PuntoGraficoDTO[]>(`/api/reportes/medios-pago?desde=${desde}&hasta=${hasta}`)
 }
 
 export function getBalance(desde: string, hasta: string): Promise<BalanceFinancieroResponse> {

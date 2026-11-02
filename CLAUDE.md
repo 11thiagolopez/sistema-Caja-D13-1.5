@@ -12,6 +12,13 @@ Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente 
 Estado Actual (Actualizado al 2026-11-02, medio de pago y origen separados + compras en cuenta
 corriente y pago de deuda a proveedores):
 
+**Gráficos en Reportes (detalle en `plan-migracion.md` sección 28)**: `/reportes` muestra tarjetas,
+marcas, productos, ventas por día, por día de la semana, medios de pago y el balance, con Chart.js y un
+solo filtro de fechas. Seis endpoints nuevos en `/api/reportes`, agregados en SQL. **No probado en un
+navegador real ni contra Supabase real**: la consulta de `ventas-por-dia` usa `AT TIME ZONE`, y H2 no
+replica su comportamiento en Postgres. Pendiente: que el dueño revise si las ventas históricas están en
+UTC (ver la sección 28).
+
 **Facturar con autocompletado desde ARCA (detalle y SQL en `plan-migracion.md` sección 27.10)**:
 pantalla `/facturar` (cliente → venta → emitir), padrón `ws_sr_constancia_inscripcion` y envío de
 `CondicionIVAReceptorId`, obligatorio para ARCA desde el **1/12/2026**. **Pendiente del dueño**: correr

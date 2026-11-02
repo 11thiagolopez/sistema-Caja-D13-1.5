@@ -68,7 +68,7 @@ const SECCIONES: NavSection[] = [
     label: 'Reportes',
     roles: ['ADMIN'],
     items: [
-      { label: 'Balance y productos', to: '/reportes' },
+      { label: 'Gráficos y balance', to: '/reportes' },
       { label: 'Ventas por vendedor', to: '/vendedores/ventas' },
       { label: 'Comisiones', to: '/vendedores/comisiones' },
       { label: 'Compras por proveedor', to: '/compras/pagos-proveedores' },

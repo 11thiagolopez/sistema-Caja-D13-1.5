@@ -14,7 +14,13 @@ import com.thiago.escenasFX.dto.ComisionEmpleadoDTO;
 import com.thiago.escenasFX.dto.FormaPagoResumenDTO;
 import com.thiago.escenasFX.dto.MarcaRankingDTO;
 import com.thiago.escenasFX.dto.ProductoRankingDTO;
+import com.thiago.escenasFX.dto.PuntoGraficoDTO;
+import com.thiago.escenasFX.dto.RankingItemDTO;
+import com.thiago.escenasFX.dto.RankingMarcasResponse;
+import com.thiago.escenasFX.dto.ResumenVentasDTO;
 import com.thiago.escenasFX.dto.VentaResponse;
+import com.thiago.escenasFX.dto.VentasPorDiaResponse;
+import com.thiago.escenasFX.service.ReporteGraficosService;
 import com.thiago.escenasFX.service.ReporteService;
 
 /**
@@ -25,9 +31,11 @@ import com.thiago.escenasFX.service.ReporteService;
 public class ReportesController {
 
     private final ReporteService reporteService;
+    private final ReporteGraficosService reporteGraficosService;
 
-    public ReportesController(ReporteService reporteService) {
+    public ReportesController(ReporteService reporteService, ReporteGraficosService reporteGraficosService) {
         this.reporteService = reporteService;
+        this.reporteGraficosService = reporteGraficosService;
     }
 
     @GetMapping("/productos-ganadores")
@@ -74,5 +82,49 @@ public class ReportesController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
         return reporteService.ventasPorFormaPago(desde, hasta);
+    }
+
+    @GetMapping("/resumen")
+    public ResumenVentasDTO resumen(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteGraficosService.resumen(desde, hasta);
+    }
+
+    @GetMapping("/marcas")
+    public RankingMarcasResponse marcas(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(defaultValue = "monto") String orden) {
+        return reporteGraficosService.marcas(desde, hasta, orden);
+    }
+
+    @GetMapping("/productos")
+    public List<RankingItemDTO> productos(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(defaultValue = "monto") String orden) {
+        return reporteGraficosService.productos(desde, hasta, orden);
+    }
+
+    @GetMapping("/ventas-por-dia")
+    public VentasPorDiaResponse ventasPorDia(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteGraficosService.ventasPorDia(desde, hasta);
+    }
+
+    @GetMapping("/ventas-por-dia-semana")
+    public List<PuntoGraficoDTO> ventasPorDiaSemana(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteGraficosService.ventasPorDiaSemana(desde, hasta);
+    }
+
+    @GetMapping("/medios-pago")
+    public List<PuntoGraficoDTO> mediosPago(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteGraficosService.mediosPago(desde, hasta);
     }
 }

@@ -463,11 +463,36 @@ export interface ResumenRangoResponse {
   sesiones: ResumenSesionResponse[]
 }
 
-export interface ProductoRankingDTO {
-  idProducto: number
-  descripcion: string
-  cantidadVendida: number
-  totalFacturado: number
+export type OrdenRanking = 'monto' | 'unidades'
+
+export interface ResumenVentasDTO {
+  totalVendido: number
+  cantidadVentas: number
+  ticketPromedio: number
+  unidadesVendidas: number
+}
+
+export interface PuntoGraficoDTO {
+  etiqueta: string
+  valor: number
+}
+
+export interface RankingItemDTO {
+  etiqueta: string
+  valor: number
+  monto: number
+  unidades: number
+}
+
+export interface RankingMarcasResponse {
+  mejores: RankingItemDTO[]
+  peores: RankingItemDTO[]
+}
+
+export interface VentasPorDiaResponse {
+  puntos: PuntoGraficoDTO[]
+  mejorDia: PuntoGraficoDTO | null
+  peorDia: PuntoGraficoDTO | null
 }
 
 export interface BalanceFinancieroResponse {
