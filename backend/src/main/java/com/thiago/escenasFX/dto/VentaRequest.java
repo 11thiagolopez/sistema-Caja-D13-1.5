@@ -26,8 +26,8 @@ public class VentaRequest {
     @Valid
     private List<DetalleVentaRequest> detalles;
 
-    // Descuento manual opcional: si es > 0, la venta queda PENDIENTE_AUTORIZACION y dispara
-    // un OTP por email al ADMIN (ver VentaService.registrarVenta). Requiere motivoDescuento.
+    // Descuento manual opcional: si es > 0, la venta de un VENDEDOR queda PENDIENTE_AUTORIZACION
+    // hasta que un ADMIN la apruebe (ver VentaService.registrarVenta). Requiere motivoDescuento.
     private BigDecimal descuento;
 
     private String motivoDescuento;

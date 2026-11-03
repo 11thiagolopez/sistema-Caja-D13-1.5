@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
-import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
+import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { getCuentaCorrienteCliente } from '../api/clientes'
 import { ApiRequestError } from '../api/client'
+import { useAutorizaciones } from '../components/AutorizacionesPendientes'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { BuscadorClienteSelect } from '../components/BuscadorClienteSelect'
@@ -17,6 +18,7 @@ interface ItemCarrito extends DetalleVentaRequest {
 
 export function RegistrarVenta() {
   const { sesion } = useAuth()
+  const { agregar: agregarAutorizacion } = useAutorizaciones()
   const [productos, setProductos] = useState<Producto[]>([])
   const { carrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
     useCarrito<ItemCarrito>()
@@ -34,12 +36,6 @@ export function RegistrarVenta() {
   const [enviando, setEnviando] = useState(false)
   const [viendoComprobante, setViendoComprobante] = useState(false)
   const [errorComprobanteVer, setErrorComprobanteVer] = useState<string | null>(null)
-
-  const [idVentaConfirmar, setIdVentaConfirmar] = useState('')
-  const [codigoConfirmar, setCodigoConfirmar] = useState('')
-  const [confirmando, setConfirmando] = useState(false)
-  const [errorConfirmacion, setErrorConfirmacion] = useState<string | null>(null)
-  const [mensajeConfirmacion, setMensajeConfirmacion] = useState<string | null>(null)
 
   const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
 
@@ -122,33 +118,13 @@ export function RegistrarVenta() {
       setErrorComprobante(null)
       setCliente(null)
       setMontoSaldoAplicado('')
-      // Precargamos el id de venta abajo (sigue editable): quien registró la venta con
-      // descuento es normalmente quien la va a confirmar apenas el admin le pase el código.
       if (venta.estado === 'PENDIENTE_AUTORIZACION') {
-        setIdVentaConfirmar(String(venta.idVenta))
-        setMensajeConfirmacion(null)
+        agregarAutorizacion({ tipo: 'DESCUENTO', id: venta.idVenta, monto: venta.descuento, motivo: motivoDescuento })
       }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar la venta')
     } finally {
       setEnviando(false)
-    }
-  }
-
-  async function onConfirmarDescuento() {
-    if (!idVentaConfirmar || !codigoConfirmar) return
-    setErrorConfirmacion(null)
-    setMensajeConfirmacion(null)
-    setConfirmando(true)
-    try {
-      const venta = await confirmarDescuento({ idVenta: Number(idVentaConfirmar), codigo: codigoConfirmar })
-      setMensajeConfirmacion(`Venta #${venta.idVenta} confirmada.`)
-      setIdVentaConfirmar('')
-      setCodigoConfirmar('')
-    } catch (err) {
-      setErrorConfirmacion(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el descuento')
-    } finally {
-      setConfirmando(false)
     }
   }
 
@@ -297,7 +273,7 @@ export function RegistrarVenta() {
         <div className="resultado">
           <p>
             {resultado.estado === 'PENDIENTE_AUTORIZACION'
-              ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: se envió un código a los administradores por email.`
+              ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: le llegó al administrador. Podés seguir cobrando; la respuesta aparece en "Mis peticiones", abajo a la derecha.`
               : `Venta #${resultado.idVenta} confirmada.`}
           </p>
           {resultado.montoSaldoAplicado != null && resultado.montoSaldoAplicado > 0 && (
@@ -343,34 +319,6 @@ export function RegistrarVenta() {
         </div>
       )}
 
-      <section>
-        <h3>Confirmar descuento de venta</h3>
-        <p>
-          El código de autorización le llega por email al ADMIN — pedíselo (llamada, WhatsApp,
-          etc.) y escribilo acá para terminar la venta.
-        </p>
-        <input
-          type="number"
-          placeholder="N° de venta"
-          value={idVentaConfirmar}
-          onChange={(e) => setIdVentaConfirmar(e.target.value)}
-        />
-        <input
-          placeholder="Código"
-          value={codigoConfirmar}
-          onChange={(e) => setCodigoConfirmar(e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={onConfirmarDescuento}
-          disabled={confirmando || !idVentaConfirmar || !codigoConfirmar}
-        >
-          {confirmando && <span className="spinner" />}
-          {confirmando ? 'Confirmando...' : 'Confirmar descuento'}
-        </button>
-        {errorConfirmacion && <p className="error">{errorConfirmacion}</p>}
-        {mensajeConfirmacion && <p className="resultado">{mensajeConfirmacion}</p>}
-      </section>
     </div>
   )
 }

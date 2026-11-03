@@ -1,11 +1,13 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import type { Rol } from '../types/api'
 
 export function RequireAuth() {
   const { sesion } = useAuth()
+  const location = useLocation()
   if (!sesion) {
-    return <Navigate to="/login" replace />
+    // Para volver adonde iba al loguearse: tocar una notificación lleva directo a Peticiones.
+    return <Navigate to="/login" replace state={{ desde: location.pathname }} />
   }
   return <Outlet />
 }

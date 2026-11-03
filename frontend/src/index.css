@@ -9,6 +9,7 @@
   --accent: #005a9e;
   --accent-contrast: #fff;
   --error: #c0392b;
+  --ok: #1e7e34;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   font: 16px/145% var(--sans);

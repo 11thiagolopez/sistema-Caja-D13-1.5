@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { confirmarDescuento, descargarVentaPdf, enviarComprobanteEmail, getVentas } from '../api/ventas'
+import { descargarVentaPdf, enviarComprobanteEmail, getVentas } from '../api/ventas'
+import { resolverPeticion } from '../api/autorizaciones'
 import { getEmpleados } from '../api/empleados'
 import { getFactura, descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
@@ -27,7 +28,6 @@ export function HistorialVentas() {
   const [empleados, setEmpleados] = useState<EmpleadoResponse[]>([])
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
-  const [codigos, setCodigos] = useState<Record<number, string>>({})
   const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
   // Fila expandida con el detalle de productos vendidos (y su proveedor) — un solo idVenta a la
   // vez, plegado por default para no alargar la tabla de entrada.
@@ -67,16 +67,18 @@ export function HistorialVentas() {
     }
   }
 
-  async function confirmar(idVenta: number) {
-    const codigo = codigos[idVenta]
-    if (!codigo) return
+  async function resolverDescuento(idVenta: number, accion: 'aprobar' | 'rechazar') {
+    if (accion === 'rechazar' && !window.confirm(`Se va a anular la venta #${idVenta} y a devolver el stock. ¿Rechazar el descuento?`)) {
+      return
+    }
     setError(null)
     setConfirmandoId(idVenta)
     try {
-      const actualizada = await confirmarDescuento({ idVenta, codigo })
-      setVentas((actual) => actual.map((v) => (v.idVenta === idVenta ? actualizada : v)))
+      await resolverPeticion('DESCUENTO', idVenta, accion)
+      const estado = accion === 'aprobar' ? 'CONFIRMADA' : 'ANULADA'
+      setVentas((actual) => actual.map((v) => (v.idVenta === idVenta ? { ...v, estado } : v)))
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el código')
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo resolver el descuento')
     } finally {
       setConfirmandoId(null)
     }
@@ -234,20 +236,21 @@ export function HistorialVentas() {
                 <td>
                   {venta.estado === 'PENDIENTE_AUTORIZACION' && (
                     <span className="confirmar-descuento">
-                      <input
-                        placeholder="Código"
-                        value={codigos[venta.idVenta] ?? ''}
-                        onChange={(e) =>
-                          setCodigos((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))
-                        }
-                      />
                       <button
                         type="button"
-                        onClick={() => confirmar(venta.idVenta)}
+                        onClick={() => resolverDescuento(venta.idVenta, 'aprobar')}
                         disabled={confirmandoId === venta.idVenta}
                       >
                         {confirmandoId === venta.idVenta && <span className="spinner" />}
-                        {confirmandoId === venta.idVenta ? 'Confirmando...' : 'Confirmar'}
+                        Aprobar
+                      </button>
+                      <button
+                        type="button"
+                        className="boton-rechazar"
+                        onClick={() => resolverDescuento(venta.idVenta, 'rechazar')}
+                        disabled={confirmandoId === venta.idVenta}
+                      >
+                        Rechazar
                       </button>
                     </span>
                   )}

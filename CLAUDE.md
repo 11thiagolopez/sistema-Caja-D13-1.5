@@ -9,7 +9,20 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-02, medio de pago y origen separados + compras en cuenta
+Estado Actual (Actualizado al 2026-11-03, peticiones desde el sistema en vez de códigos por mail,
+diseño para celular y notificaciones):
+
+**Peticiones (detalle y SQL en `plan-migracion.md` sección 29)**: se eliminó el flujo de código OTP por
+mail. Lo que pide un VENDEDOR (retiro o descuento) queda pendiente y el ADMIN lo aprueba o rechaza en
+`/autorizaciones`; rechazar un descuento anula la venta (`ANULADA`, devuelve stock y saldo). Lo que pide
+un ADMIN queda confirmado de una. Quién pide sale del JWT (`RolAutenticado`). Web Push sin contenido
+(`PushService`, `public/sw.js`). **SQL pendiente del dueño, y sin él el backend no arranca**
+(`ddl-auto=validate`). **Pendiente también**: cargar `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` en Railway.
+Backend: **315 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. Diseño para
+celular revisado con capturas de Edge a 390 px y API falsa. **No probado contra Supabase real ni con una
+notificación real en un Android.**
+
+Estado Anterior (Actualizado al 2026-11-02, medio de pago y origen separados + compras en cuenta
 corriente y pago de deuda a proveedores):
 
 **Gráficos en Reportes (detalle en `plan-migracion.md` sección 28)**: `/reportes` muestra tarjetas,

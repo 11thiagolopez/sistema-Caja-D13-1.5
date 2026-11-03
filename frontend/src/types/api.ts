@@ -6,7 +6,7 @@ export type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO'
 // fuerza solo cuando montoSaldoAplicado cubre el total completo de la venta (ver VentaRequest).
 export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'SALDO_CUENTA_CORRIENTE'
 
-export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO'
+export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO' | 'ANULADA'
 
 export type EstadoSesionCaja = 'ABIERTA' | 'CERRADA'
 
@@ -336,11 +336,6 @@ export interface TrabajoDomicilioRequest {
   cerrar: boolean
 }
 
-export interface ConfirmarDescuentoRequest {
-  idVenta: number
-  codigo: string
-}
-
 export interface AbrirCajaRequest {
   idEmpleado: number
   montoInicial: number
@@ -354,11 +349,6 @@ export interface RetiroSolicitarRequest {
   monto: number
   motivo: string
   medioPago: MedioPago
-}
-
-export interface ConfirmarRetiroRequest {
-  idSolicitud: number
-  codigo: string
 }
 
 export interface SesionCajaResponse {
@@ -390,7 +380,27 @@ export interface SolicitudRetiroResponse {
   motivo: string
   medioPago: MedioPago
   estado: string
-  otpExpiraEn: string
+}
+
+export type TipoAutorizacion = 'RETIRO' | 'DESCUENTO'
+export type EstadoAutorizacion = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA'
+
+export interface AutorizacionPeticion {
+  tipo: TipoAutorizacion
+  id: number
+  monto: number
+  motivo: string
+  solicitante: string | null
+  fecha: string
+  medioPago: string
+  // Solo DESCUENTO: total de la venta ya con el descuento aplicado.
+  totalVenta: number | null
+}
+
+export interface AutorizacionEstado {
+  tipo: TipoAutorizacion
+  id: number
+  estado: EstadoAutorizacion
 }
 
 export interface MovimientoCajaResponse {

@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
-import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
@@ -33,7 +32,6 @@ public class VentaService {
     private final VentaRepository ventaRepo;
     private final ProductoRepository productoRepo;
     private final EmpleadoRepository empleadoRepo;
-    private final OtpService otpService;
     private final EmailService emailService;
     private final SesionCajaRepository sesionRepo;
     private final PdfService pdfService;
@@ -42,13 +40,12 @@ public class VentaService {
     private final MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
-            EmpleadoRepository empleadoRepo, OtpService otpService, EmailService emailService,
+            EmpleadoRepository empleadoRepo, EmailService emailService,
             SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService,
             ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo) {
         this.ventaRepo = ventaRepo;
         this.productoRepo = productoRepo;
         this.empleadoRepo = empleadoRepo;
-        this.otpService = otpService;
         this.emailService = emailService;
         this.sesionRepo = sesionRepo;
         this.pdfService = pdfService;
@@ -60,11 +57,14 @@ public class VentaService {
     /**
      * El stock se valida y descuenta siempre en este método para las líneas con un producto real,
      * incluso si la venta queda PENDIENTE_AUTORIZACION por un descuento manual (se "reserva" de
-     * inmediato; no hay liberación automática de stock si el OTP nunca se confirma). Las líneas
+     * inmediato; no hay liberación automática de stock si nadie la aprueba ni la rechaza). Las líneas
      * manuales (trabajos sin producto, ej. "Apertura de cerradura") no tocan stock.
+     *
+     * Un descuento cargado por un ADMIN no necesita autorización: la venta queda
+     * CONFIRMADA de una.
      */
     @Transactional
-    public Venta registrarVenta(Venta venta) {
+    public Venta registrarVenta(Venta venta, boolean autorizadoPorAdmin) {
         // Vincula la venta a la caja abierta en este momento, si hay una (sin filtrar por fecha:
         // una sesión de un día anterior que nunca se cerró sigue "ABIERTA"). Permite el arqueo por
         // turno; no es obligatorio tener una caja abierta para vender (no se pidió esa regla).
@@ -115,22 +115,11 @@ public class VentaService {
 
         BigDecimal montoSaldoAplicado = validarYAplicarSaldoCliente(venta);
 
-        if (descuento.compareTo(BigDecimal.ZERO) > 0) {
-            String codigo = otpService.generarCodigo();
+        if (descuento.compareTo(BigDecimal.ZERO) > 0 && !autorizadoPorAdmin) {
             venta.setEstado("PENDIENTE_AUTORIZACION");
-            venta.setOtpHash(otpService.hash(codigo));
-            venta.setOtpExpiraEn(otpService.nuevaExpiracion());
 
             Venta guardada = ventaRepo.save(venta);
             registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
-
-            emailService.enviarOtpAAdmins(
-                "Autorización de descuento - venta #" + guardada.getIdVenta(),
-                "Se registró la venta #" + guardada.getIdVenta() + " con un descuento de $" + descuento
-                    + " (" + guardada.getMotivoDescuento() + ").\n"
-                    + "Código de confirmación: " + codigo + "\n"
-                    + "Vence en " + OtpService.VIGENCIA_MINUTOS + " minutos.");
-
             return guardada;
         }
 
@@ -205,31 +194,64 @@ public class VentaService {
         movimientoCuentaCorrienteRepo.save(movimiento);
     }
 
-    @Transactional
-    public Venta confirmarDescuento(Integer idVenta, String codigoIngresado) {
-        Venta venta = ventaRepo.findById(idVenta)
-            .orElseThrow(() -> new IllegalArgumentException("Venta no existe: " + idVenta));
+    public List<Venta> listarDescuentosPendientes() {
+        return ventaRepo.findByEstadoOrderByFechaAsc("PENDIENTE_AUTORIZACION");
+    }
 
+    @Transactional
+    public Venta aprobarDescuento(Integer idVenta, Empleado admin) {
+        Venta venta = obtenerPendienteConLock(idVenta);
+        venta.setEstado("CONFIRMADA");
+        venta.setResueltoPor(admin);
+        venta.setResueltoEn(LocalDateTime.now());
+        return ventaRepo.save(venta);
+    }
+
+    /**
+     * Rechazar anula la venta entera (decisión del dueño): devuelve el stock reservado y el saldo
+     * de cuenta corriente que se haya usado, y el vendedor la vuelve a cobrar sin descuento. La
+     * fila queda en ANULADA para que siga auditable; caja, reportes, facturas y notas de crédito
+     * solo miran ventas CONFIRMADA, así que no cuenta en ningún lado.
+     */
+    @Transactional
+    public Venta rechazarDescuento(Integer idVenta, Empleado admin) {
+        Venta venta = obtenerPendienteConLock(idVenta);
+
+        for (DetalleVenta detalle : venta.getDetalles()) {
+            if (detalle.getProducto() != null) {
+                Producto p = productoRepo.buscarPorIdConLock(detalle.getProducto().getIdProducto())
+                    .orElseThrow(() -> new IllegalArgumentException("Producto no existe"));
+                p.setStockActual(p.getStockActual() + detalle.getCantidad());
+                productoRepo.save(p);
+            }
+        }
+
+        BigDecimal saldoAplicado = venta.getMontoSaldoAplicado();
+        if (saldoAplicado != null && saldoAplicado.compareTo(BigDecimal.ZERO) > 0) {
+            MovimientoCuentaCorrienteCliente devolucion = new MovimientoCuentaCorrienteCliente();
+            devolucion.setCliente(venta.getCliente());
+            devolucion.setTipo("CREDITO");
+            devolucion.setMonto(saldoAplicado);
+            devolucion.setVentaAplicacion(venta);
+            devolucion.setDescripcion("Devolución de saldo por venta anulada #" + venta.getIdVenta());
+            devolucion.setEmpleado(admin);
+            movimientoCuentaCorrienteRepo.save(devolucion);
+        }
+
+        venta.setEstado("ANULADA");
+        venta.setResueltoPor(admin);
+        venta.setResueltoEn(LocalDateTime.now());
+        return ventaRepo.save(venta);
+    }
+
+    // Con lock: sin esto, dos ADMIN resolviendo a la vez podían devolver dos veces el stock y el saldo.
+    private Venta obtenerPendienteConLock(Integer idVenta) {
+        Venta venta = ventaRepo.buscarPorIdConLock(idVenta)
+            .orElseThrow(() -> new IllegalArgumentException("Venta no existe: " + idVenta));
         if (!"PENDIENTE_AUTORIZACION".equals(venta.getEstado())) {
             throw new IllegalStateException("La venta no tiene un descuento pendiente de autorización");
         }
-        if (venta.getOtpExpiraEn().isBefore(LocalDateTime.now())) {
-            throw new IllegalStateException("El código OTP expiró; la venta sigue pendiente de autorización");
-        }
-        if (venta.getOtpIntentosFallidos() >= OtpService.MAX_INTENTOS) {
-            throw new IllegalStateException(
-                "Se superó el máximo de intentos; el descuento ya no puede confirmarse con este código");
-        }
-        if (!otpService.coincide(codigoIngresado, venta.getOtpHash())) {
-            venta.setOtpIntentosFallidos(venta.getOtpIntentosFallidos() + 1);
-            ventaRepo.save(venta);
-            throw new AuthenticationFailedException("Código OTP inválido");
-        }
-
-        venta.setEstado("CONFIRMADA");
-        venta.setOtpHash(null);
-        venta.setOtpExpiraEn(null);
-        return ventaRepo.save(venta);
+        return venta;
     }
 
     /**

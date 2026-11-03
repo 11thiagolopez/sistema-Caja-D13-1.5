@@ -1,6 +1,5 @@
 import { request, requestBlob } from './client'
 import type {
-  ConfirmarDescuentoRequest,
   TrabajoDomicilioRequest,
   VentaRequest,
   VentaResponse,
@@ -10,13 +9,6 @@ export function registrarVenta(venta: VentaRequest): Promise<VentaResponse> {
   return request<VentaResponse>('/api/ventas', {
     method: 'POST',
     body: JSON.stringify(venta),
-  })
-}
-
-export function confirmarDescuento(req: ConfirmarDescuentoRequest): Promise<VentaResponse> {
-  return request<VentaResponse>('/api/ventas/descuento/confirmar', {
-    method: 'POST',
-    body: JSON.stringify(req),
   })
 }
 

@@ -118,7 +118,6 @@ de la tabla (Enter guarda, Escape cancela, click afuera guarda).
 | Método | Ruta | Rol | Body | Devuelve |
 |---|---|---|---|---|
 | POST | `/api/ventas` | ADMIN, VENDEDOR | `VentaRequest` (ver abajo) | `VentaResponse` |
-| POST | `/api/ventas/descuento/confirmar` | ADMIN, VENDEDOR | `{idVenta, codigo}` | `VentaResponse` |
 | GET | `/api/ventas?desde=&hasta=` | **solo ADMIN** | — | `VentaResponse[]` |
 | GET | `/api/ventas/{id}` | **solo ADMIN** | — | `VentaResponse` |
 | GET | `/api/ventas/{id}/pdf` | **solo ADMIN** | — | PDF del comprobante (ticket o remito según `tipoVenta`), armado al vuelo, sin guardarse de antemano |
@@ -235,7 +234,6 @@ Consulta de ventas (`HistorialVentas.tsx`), pantalla ya exclusiva de ADMIN.
 | POST | `/api/caja/abrir` | ADMIN, VENDEDOR | `{idEmpleado, montoInicial, cotizacionManual?}` | `SesionCajaResponse` |
 | POST | `/api/caja/cerrar` | ADMIN, VENDEDOR | — | `SesionCajaResponse` |
 | POST | `/api/caja/retiro/solicitar` | ADMIN, VENDEDOR | `{idEmpleado, monto, motivo, medioPago}` | `SolicitudRetiroResponse` |
-| POST | `/api/caja/retiro/confirmar` | ADMIN, VENDEDOR | `{idSolicitud, codigo}` | `MovimientoCajaResponse` |
 | GET | `/api/caja/resumen-dia` | **solo ADMIN** | — | `ResumenDiaResponse` |
 | GET | `/api/caja/resumen?desde=&hasta=` | **solo ADMIN** | — | `ResumenRangoResponse` |
 
@@ -255,13 +253,24 @@ campos correspondientes (no hay que restarla de nuevo en el frontend).
 `ResumenRangoResponse`: `{desde, hasta, total: ResumenDiaResponse, sesiones: [{idSesion, fecha,
 estado, empleadoApertura, resumen: ResumenDiaResponse}]}` — el desglose por turno.
 
-**Flujo de retiro (dos pasos)**: `solicitar` genera un código de 6 dígitos que se manda por email
-a los ADMIN con email cargado; `confirmar` valida ese código (vence a los 10 minutos) y recién ahí
-crea el movimiento de caja real. Desde el 2026-07-30 cualquiera de los dos roles puede llamar a
-`confirmar` — el código sigue llegando sólo al ADMIN por email, pero es habitual que sea el
-VENDEDOR quien está en la caja y termina la operación apenas el ADMIN se lo pasa (llamada,
-WhatsApp, etc.). El frontend necesita un form de dos pasos (monto/motivo/medio → después el
-código).
+**Peticiones (desde 2026-11-03, reemplaza al código OTP por mail)**: un retiro o un descuento pedido por
+VENDEDOR queda pendiente hasta que un ADMIN lo resuelve; pedido por ADMIN (según el JWT, nunca según
+`idEmpleado`) vuelve ya confirmado. El VENDEDOR sigue sus peticiones en el panel flotante "Mis
+peticiones" (`components/AutorizacionesPendientes.tsx`, ids en localStorage por empleado, a propósito
+sin endpoint de listado). Rechazar un descuento anula la venta.
+
+| Método | Ruta | Roles | Respuesta |
+|---|---|---|---|
+| GET | `/api/autorizaciones` | ADMIN | `[{tipo, id, monto, motivo, solicitante, fecha, medioPago, totalVenta}]` |
+| GET | `/api/autorizaciones/estado?retiros=1,2&descuentos=3` | ADMIN, VENDEDOR | `[{tipo, id, estado}]`, solo las propias |
+| POST | `/api/autorizaciones/retiros/{id}/aprobar` o `/rechazar` | ADMIN | `{tipo, id, estado}` |
+| POST | `/api/autorizaciones/descuentos/{id}/aprobar` o `/rechazar` | ADMIN | `{tipo, id, estado}` |
+| GET | `/api/push/clave-publica` | ADMIN | `{clavePublica}` |
+| POST | `/api/push/suscripcion` | ADMIN | 204; body `{endpoint}` |
+
+`tipo`: `RETIRO` o `DESCUENTO`. `estado`: `PENDIENTE`, `APROBADA` o `RECHAZADA`.
+
+`GET /api/ventas/{id}/pdf` admite VENDEDOR, solo para sus propias ventas `CONFIRMADA` (si no, 403).
 
 ### Cotización (`/api/cotizacion`) — dolarización, nuevo 2026-08-14
 

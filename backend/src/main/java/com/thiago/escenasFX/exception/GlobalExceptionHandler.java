@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -24,8 +25,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ex.getMessage()));
     }
 
-    // Handler compartido por todos los flujos que mandan email (OTP de retiro/descuento,
-    // comprobante interno, presupuesto) — el mensaje no puede asumir que siempre es un OTP.
+    // Sin este, un chequeo de permisos hecho dentro de un controller caería en el catch-all de
+    // abajo y respondería 500 en vez de 403.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccesoDenegado(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    // Handler compartido por los flujos que mandan email (comprobante interno, presupuesto).
     @ExceptionHandler(EmailEnvioException.class)
     public ResponseEntity<ErrorResponse> handleEmailEnvio(EmailEnvioException ex) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(ex.getMessage()));

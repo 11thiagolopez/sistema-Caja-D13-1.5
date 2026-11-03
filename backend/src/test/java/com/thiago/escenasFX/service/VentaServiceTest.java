@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
-import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
@@ -50,8 +48,6 @@ class VentaServiceTest {
     private ProductoRepository productoRepo;
     @Mock
     private EmpleadoRepository empleadoRepo;
-    @Mock
-    private OtpService otpService;
     @Mock
     private EmailService emailService;
     @Mock
@@ -161,14 +157,13 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 3, new BigDecimal("100")));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getEstado()).isEqualTo("CONFIRMADA");
         assertThat(guardada.getTotalVenta()).isEqualByComparingTo("300");
         assertThat(producto.getStockActual()).isEqualTo(7);
         assertThat(guardada.getDetalles().get(0).getSubtotal()).isEqualByComparingTo("300");
         verify(productoRepo).save(producto);
-        verify(emailService, never()).enviarOtpAAdmins(anyString(), anyString());
         verify(notificacionService).evaluarYNotificarStockBajo(producto, 10, 7);
     }
 
@@ -179,7 +174,7 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 3, new BigDecimal("100")));
 
-        ventaService.registrarVenta(venta);
+        ventaService.registrarVenta(venta, false);
 
         assertThat(producto.getStockActual()).isEqualTo(3);
         verify(notificacionService).evaluarYNotificarStockBajo(producto, 6, 3);
@@ -195,7 +190,7 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
 
-        ventaService.registrarVenta(venta);
+        ventaService.registrarVenta(venta, false);
 
         verify(notificacionService).evaluarYNotificarStockBajo(producto, 4, 3);
     }
@@ -207,7 +202,7 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 5, new BigDecimal("100")));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Stock insuficiente");
 
@@ -223,7 +218,7 @@ class VentaServiceTest {
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setDescuento(new BigDecimal("-10"));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("no puede ser negativo");
     }
@@ -237,7 +232,7 @@ class VentaServiceTest {
         venta.setDescuento(new BigDecimal("150"));
         venta.setMotivoDescuento("motivo");
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("no puede ser mayor al total");
     }
@@ -250,33 +245,9 @@ class VentaServiceTest {
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setDescuento(new BigDecimal("10"));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("requiere indicar un motivo");
-    }
-
-    @Test
-    void registrarVenta_conDescuentoValido_quedaPendienteYEnviaOtp() {
-        Producto producto = producto(1, 10);
-        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
-        when(otpService.generarCodigo()).thenReturn("123456");
-        when(otpService.hash("123456")).thenReturn("hash-otp");
-        LocalDateTime expiracion = LocalDateTime.now().plusMinutes(10);
-        when(otpService.nuevaExpiracion()).thenReturn(expiracion);
-
-        Venta venta = ventaCon(detalle(producto, 2, new BigDecimal("100")));
-        venta.setDescuento(new BigDecimal("50"));
-        venta.setMotivoDescuento("Cliente frecuente");
-
-        Venta guardada = ventaService.registrarVenta(venta);
-
-        assertThat(guardada.getEstado()).isEqualTo("PENDIENTE_AUTORIZACION");
-        assertThat(guardada.getTotalVenta()).isEqualByComparingTo("150");
-        assertThat(guardada.getOtpHash()).isEqualTo("hash-otp");
-        assertThat(guardada.getOtpExpiraEn()).isEqualTo(expiracion);
-        // El stock se descuenta igual, aunque la venta quede pendiente de autorización.
-        assertThat(producto.getStockActual()).isEqualTo(8);
-        verify(emailService).enviarOtpAAdmins(anyString(), anyString());
     }
 
     @Test
@@ -290,7 +261,7 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getSesion()).isEqualTo(sesionAbierta);
     }
@@ -309,7 +280,7 @@ class VentaServiceTest {
         venta.setCliente(cliente);
         venta.setMontoSaldoAplicado(new BigDecimal("100"));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getMedioPago()).isEqualTo("SALDO_CUENTA_CORRIENTE");
         assertThat(guardada.getMontoSaldoAplicado()).isEqualByComparingTo("100");
@@ -336,7 +307,7 @@ class VentaServiceTest {
         venta.setCliente(cliente);
         venta.setMontoSaldoAplicado(new BigDecimal("30"));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getMedioPago()).isEqualTo("EFECTIVO"); // no cubre el total, no se fuerza.
         assertThat(guardada.getMontoSaldoAplicado()).isEqualByComparingTo("30");
@@ -351,7 +322,7 @@ class VentaServiceTest {
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setMontoSaldoAplicado(new BigDecimal("50"));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("indicar un cliente");
 
@@ -367,7 +338,7 @@ class VentaServiceTest {
         venta.setCliente(cliente(5));
         venta.setMontoSaldoAplicado(new BigDecimal("150"));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("no puede ser mayor al total");
     }
@@ -385,7 +356,7 @@ class VentaServiceTest {
         venta.setCliente(cliente);
         venta.setMontoSaldoAplicado(new BigDecimal("50"));
 
-        assertThatThrownBy(() -> ventaService.registrarVenta(venta))
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, false))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("no tiene saldo suficiente");
 
@@ -399,7 +370,7 @@ class VentaServiceTest {
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getMontoSaldoAplicado()).isNull();
         verify(clienteRepo, never()).buscarPorIdConLock(any());
@@ -407,90 +378,10 @@ class VentaServiceTest {
     }
 
     @Test
-    void confirmarDescuento_codigoCorrecto_confirmaVenta() {
-        Venta venta = new Venta();
-        venta.setEstado("PENDIENTE_AUTORIZACION");
-        venta.setOtpHash("hash-otp");
-        venta.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
-        when(otpService.coincide("123456", "hash-otp")).thenReturn(true);
-
-        Venta confirmada = ventaService.confirmarDescuento(1, "123456");
-
-        assertThat(confirmada.getEstado()).isEqualTo("CONFIRMADA");
-        assertThat(confirmada.getOtpHash()).isNull();
-        assertThat(confirmada.getOtpExpiraEn()).isNull();
-    }
-
-    @Test
-    void confirmarDescuento_codigoIncorrecto_lanzaAuthenticationFailedExceptionYCuentaElIntento() {
-        Venta venta = new Venta();
-        venta.setEstado("PENDIENTE_AUTORIZACION");
-        venta.setOtpHash("hash-otp");
-        venta.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
-        when(otpService.coincide("000000", "hash-otp")).thenReturn(false);
-
-        assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "000000"))
-            .isInstanceOf(AuthenticationFailedException.class);
-
-        assertThat(venta.getOtpIntentosFallidos()).isEqualTo(1);
-        verify(ventaRepo).save(venta);
-    }
-
-    /**
-     * Regresión: antes no había tope de intentos, así que cualquiera con sesión de VENDEDOR podía
-     * probar las 1.000.000 de combinaciones del código de 6 dígitos dentro de la ventana de
-     * vigencia y auto-aprobarse el descuento sin que el ADMIN lo autorice de verdad.
-     */
-    @Test
-    void confirmarDescuento_superaMaximoDeIntentos_yaNoAceptaElCodigoAunqueSeaCorrecto() {
-        Venta venta = new Venta();
-        venta.setEstado("PENDIENTE_AUTORIZACION");
-        venta.setOtpHash("hash-otp");
-        venta.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        venta.setOtpIntentosFallidos(OtpService.MAX_INTENTOS);
-        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
-
-        assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "123456"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("máximo de intentos");
-
-        verify(otpService, never()).coincide(any(), any());
-        verify(ventaRepo, never()).save(any());
-    }
-
-    @Test
-    void confirmarDescuento_otpExpirado_lanzaIllegalStateException() {
-        Venta venta = new Venta();
-        venta.setEstado("PENDIENTE_AUTORIZACION");
-        venta.setOtpHash("hash-otp");
-        venta.setOtpExpiraEn(LocalDateTime.now().minusMinutes(1));
-        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
-
-        assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "123456"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("expiró");
-
-        verify(ventaRepo, never()).save(any());
-    }
-
-    @Test
-    void confirmarDescuento_ventaNoEstaPendiente_lanzaIllegalStateException() {
-        Venta venta = new Venta();
-        venta.setEstado("CONFIRMADA");
-        when(ventaRepo.findById(1)).thenReturn(Optional.of(venta));
-
-        assertThatThrownBy(() -> ventaService.confirmarDescuento(1, "123456"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("no tiene un descuento pendiente");
-    }
-
-    @Test
     void registrarVenta_itemManual_noTocaStockNiRequiereProducto() {
         Venta venta = ventaCon(detalleManual("Apertura de cerradura", 1, new BigDecimal("5000")));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getEstado()).isEqualTo("CONFIRMADA");
         assertThat(guardada.getTotalVenta()).isEqualByComparingTo("5000");
@@ -508,7 +399,7 @@ class VentaServiceTest {
             detalle(producto, 2, new BigDecimal("100")),
             detalleManual("Colocación", 1, new BigDecimal("3000")));
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, false);
 
         assertThat(guardada.getTotalVenta()).isEqualByComparingTo("3200");
         assertThat(producto.getStockActual()).isEqualTo(8);

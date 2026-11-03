@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.AbrirCajaRequest;
-import com.thiago.escenasFX.dto.ConfirmarRetiroRequest;
 import com.thiago.escenasFX.dto.GastoArqueoResponse;
 import com.thiago.escenasFX.dto.MovimientoCajaResponse;
 import com.thiago.escenasFX.dto.MovimientoProveedorArqueoResponse;
@@ -36,6 +36,7 @@ import com.thiago.escenasFX.model.SesionCaja;
 import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.service.CajaService;
+import com.thiago.escenasFX.service.PushService;
 
 import jakarta.validation.Valid;
 
@@ -45,10 +46,12 @@ public class CajaController {
 
     private final CajaService cajaService;
     private final EmpleadoRepository empleadoRepo;
+    private final PushService pushService;
 
-    public CajaController(CajaService cajaService, EmpleadoRepository empleadoRepo) {
+    public CajaController(CajaService cajaService, EmpleadoRepository empleadoRepo, PushService pushService) {
         this.cajaService = cajaService;
         this.empleadoRepo = empleadoRepo;
+        this.pushService = pushService;
     }
 
     @PostMapping("/abrir")
@@ -75,18 +78,15 @@ public class CajaController {
     }
 
     @PostMapping("/retiro/solicitar")
-    public SolicitudRetiroResponse solicitarRetiro(@Valid @RequestBody RetiroRequest request) {
-        Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
-            .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
+    public SolicitudRetiroResponse solicitarRetiro(@Valid @RequestBody RetiroRequest request,
+            Authentication authentication) {
+        Empleado empleado = RolAutenticado.empleadoQueOpera(authentication, request.getIdEmpleado(), empleadoRepo);
         SolicitudRetiro solicitud = cajaService.solicitarRetiro(request.getMonto(), request.getMotivo(),
-            request.getMedioPago(), empleado);
+            request.getMedioPago(), empleado, RolAutenticado.esAdmin(authentication));
+        if ("PENDIENTE".equals(solicitud.getEstado())) {
+            pushService.avisarPeticionNuevaEnSegundoPlano();
+        }
         return toResponse(solicitud);
-    }
-
-    @PostMapping("/retiro/confirmar")
-    public MovimientoCajaResponse confirmarRetiro(@Valid @RequestBody ConfirmarRetiroRequest request) {
-        MovimientoCaja movimiento = cajaService.confirmarRetiro(request.getIdSolicitud(), request.getCodigo());
-        return toResponse(movimiento);
     }
 
     @GetMapping("/resumen-dia")
@@ -167,6 +167,6 @@ public class CajaController {
 
     private SolicitudRetiroResponse toResponse(SolicitudRetiro s) {
         return new SolicitudRetiroResponse(s.getIdSolicitud(), s.getMonto(), s.getMotivo(), s.getMedioPago(),
-            s.getEstado(), s.getOtpExpiraEn());
+            s.getEstado());
     }
 }

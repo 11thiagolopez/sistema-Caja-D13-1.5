@@ -15,9 +15,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Solicitud de retiro de caja pendiente de autorización por OTP. El {@link MovimientoCaja}
- * real solo se crea cuando la solicitud se confirma con el código enviado por email
- * (ver CajaService.confirmarRetiro).
+ * Solicitud de retiro de caja pendiente de que un ADMIN la apruebe desde el sistema. El
+ * {@link MovimientoCaja} real solo se crea al aprobarla (ver CajaService.aprobarRetiro).
  */
 @Entity
 @Table(name = "solicitudes_retiro")
@@ -43,20 +42,17 @@ public class SolicitudRetiro {
     @JoinColumn(name = "id_empleado_solicitante")
     private Empleado empleadoSolicitante;
 
-    @Column(name = "otp_hash", nullable = false)
-    private String otpHash;
-
-    @Column(name = "otp_expira_en", nullable = false)
-    private LocalDateTime otpExpiraEn;
-
     @Column(nullable = false)
-    private String estado = "PENDIENTE"; // PENDIENTE | CONFIRMADA | EXPIRADA
-
-    // Cuenta los códigos incorrectos ingresados; al llegar a OtpService.MAX_INTENTOS la solicitud
-    // pasa a EXPIRADA aunque el código todavía esté vigente (ver CajaService.confirmarRetiro).
-    @Column(name = "intentos_fallidos", nullable = false)
-    private int intentosFallidos = 0;
+    private String estado = "PENDIENTE"; // PENDIENTE | CONFIRMADA | RECHAZADA (EXPIRADA: histórico, del flujo viejo con código)
 
     @Column(name = "creado_en", nullable = false)
     private LocalDateTime creadoEn = LocalDateTime.now();
+
+    // Qué ADMIN aprobó o rechazó la solicitud, y cuándo.
+    @ManyToOne
+    @JoinColumn(name = "id_empleado_resolutor")
+    private Empleado resueltoPor;
+
+    @Column(name = "resuelto_en")
+    private LocalDateTime resueltoEn;
 }

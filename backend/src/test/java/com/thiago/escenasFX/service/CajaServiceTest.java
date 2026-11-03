@@ -24,7 +24,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
-import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.exception.CotizacionNoDisponibleException;
 import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
@@ -53,10 +52,6 @@ class CajaServiceTest {
     private SesionCajaRepository sesionRepo;
     @Mock
     private SolicitudRetiroRepository solicitudRetiroRepo;
-    @Mock
-    private OtpService otpService;
-    @Mock
-    private EmailService emailService;
     @Mock
     private CotizacionService cotizacionService;
     @Mock
@@ -415,115 +410,4 @@ class CajaServiceTest {
         assertThat(resumen.getEfectivoFinal()).isEqualByComparingTo("700");
     }
 
-    @Test
-    void solicitarRetiro_generaCodigoLoHasheaYEnviaEmail() {
-        when(otpService.generarCodigo()).thenReturn("654321");
-        when(otpService.hash("654321")).thenReturn("hash-retiro");
-        LocalDateTime expiracion = LocalDateTime.now().plusMinutes(10);
-        when(otpService.nuevaExpiracion()).thenReturn(expiracion);
-        when(solicitudRetiroRepo.save(any(SolicitudRetiro.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        Empleado solicitante = new Empleado();
-        solicitante.setIdEmpleado(2);
-
-        SolicitudRetiro solicitud = cajaService.solicitarRetiro(new BigDecimal("300"), "Gastos varios", "EFECTIVO",
-            solicitante);
-
-        assertThat(solicitud.getEstado()).isEqualTo("PENDIENTE");
-        assertThat(solicitud.getOtpHash()).isEqualTo("hash-retiro");
-        assertThat(solicitud.getOtpExpiraEn()).isEqualTo(expiracion);
-        assertThat(solicitud.getMonto()).isEqualByComparingTo("300");
-        verify(emailService).enviarOtpAAdmins(anyString(), anyString());
-    }
-
-    private SolicitudRetiro solicitudPendiente() {
-        SolicitudRetiro s = new SolicitudRetiro();
-        s.setIdSolicitud(1);
-        s.setMonto(new BigDecimal("300"));
-        s.setMotivo("Gastos varios");
-        s.setMedioPago("EFECTIVO");
-        s.setEmpleadoSolicitante(new Empleado());
-        s.setOtpHash("hash-retiro");
-        s.setEstado("PENDIENTE");
-        return s;
-    }
-
-    @Test
-    void confirmarRetiro_codigoCorrecto_creaMovimientoCajaYConfirmaSolicitud() {
-        SolicitudRetiro solicitud = solicitudPendiente();
-        solicitud.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
-        when(otpService.coincide("654321", "hash-retiro")).thenReturn(true);
-        when(sesionRepo.findByEstado(anyString())).thenReturn(Optional.empty());
-        when(movRepo.save(any(MovimientoCaja.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        MovimientoCaja movimiento = cajaService.confirmarRetiro(1, "654321");
-
-        assertThat(movimiento.getTipo()).isEqualTo("RETIRO");
-        assertThat(movimiento.getMonto()).isEqualByComparingTo("300");
-        assertThat(solicitud.getEstado()).isEqualTo("CONFIRMADA");
-        verify(solicitudRetiroRepo).save(solicitud);
-    }
-
-    @Test
-    void confirmarRetiro_codigoIncorrecto_lanzaAuthenticationFailedException() {
-        SolicitudRetiro solicitud = solicitudPendiente();
-        solicitud.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
-        when(otpService.coincide("000000", "hash-retiro")).thenReturn(false);
-
-        assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "000000"))
-            .isInstanceOf(AuthenticationFailedException.class);
-
-        assertThat(solicitud.getIntentosFallidos()).isEqualTo(1);
-        verify(movRepo, never()).save(any());
-    }
-
-    /**
-     * Regresión: antes no había tope de intentos, así que cualquiera con sesión de VENDEDOR podía
-     * probar las 1.000.000 de combinaciones del código de 6 dígitos dentro de la ventana de
-     * vigencia y auto-aprobarse el retiro sin que el ADMIN lo autorice de verdad.
-     */
-    @Test
-    void confirmarRetiro_superaMaximoDeIntentos_expiraLaSolicitudYNoValidaElCodigo() {
-        SolicitudRetiro solicitud = solicitudPendiente();
-        solicitud.setOtpExpiraEn(LocalDateTime.now().plusMinutes(5));
-        solicitud.setIntentosFallidos(OtpService.MAX_INTENTOS);
-        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
-
-        assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "654321"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("máximo de intentos");
-
-        assertThat(solicitud.getEstado()).isEqualTo("EXPIRADA");
-        verify(otpService, never()).coincide(any(), any());
-        verify(movRepo, never()).save(any());
-    }
-
-    @Test
-    void confirmarRetiro_solicitudYaProcesada_lanzaIllegalStateException() {
-        SolicitudRetiro solicitud = solicitudPendiente();
-        solicitud.setEstado("CONFIRMADA");
-        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
-
-        assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "654321"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("ya fue procesada");
-
-        verify(movRepo, never()).save(any());
-    }
-
-    @Test
-    void confirmarRetiro_otpExpirado_marcaExpiradaYLanzaExcepcion() {
-        SolicitudRetiro solicitud = solicitudPendiente();
-        solicitud.setOtpExpiraEn(LocalDateTime.now().minusMinutes(1));
-        when(solicitudRetiroRepo.findById(1)).thenReturn(Optional.of(solicitud));
-
-        assertThatThrownBy(() -> cajaService.confirmarRetiro(1, "654321"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("expiró");
-
-        assertThat(solicitud.getEstado()).isEqualTo("EXPIRADA");
-        verify(movRepo, never()).save(any());
-    }
 }

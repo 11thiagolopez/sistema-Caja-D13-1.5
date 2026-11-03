@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiRequestError } from '../api/client'
 
 export function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -17,7 +18,7 @@ export function Login() {
     setCargando(true)
     try {
       await login(usuario, password)
-      navigate('/ventas/nueva', { replace: true })
+      navigate((location.state as { desde?: string } | null)?.desde ?? '/ventas/nueva', { replace: true })
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo iniciar sesión')
     } finally {

@@ -1,8 +1,6 @@
 import { request } from './client'
 import type {
   AbrirCajaRequest,
-  ConfirmarRetiroRequest,
-  MovimientoCajaResponse,
   ResumenDiaResponse,
   ResumenRangoResponse,
   RetiroSolicitarRequest,
@@ -28,13 +26,6 @@ export function getSesionAbierta(): Promise<SesionCajaResponse | null> {
 
 export function solicitarRetiro(req: RetiroSolicitarRequest): Promise<SolicitudRetiroResponse> {
   return request<SolicitudRetiroResponse>('/api/caja/retiro/solicitar', {
-    method: 'POST',
-    body: JSON.stringify(req),
-  })
-}
-
-export function confirmarRetiro(req: ConfirmarRetiroRequest): Promise<MovimientoCajaResponse> {
-  return request<MovimientoCajaResponse>('/api/caja/retiro/confirmar', {
     method: 'POST',
     body: JSON.stringify(req),
   })

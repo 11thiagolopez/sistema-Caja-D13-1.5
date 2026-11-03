@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,8 @@ import com.thiago.escenasFX.repository.EmpleadoRepository;
 @Service
 public class EmailService {
 
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
     private static final String RESEND_URL = "https://api.resend.com/emails";
 
     private final RestClient restClient;
@@ -41,20 +45,8 @@ public class EmailService {
         this.remitente = remitente;
     }
 
-    public void enviarOtpAAdmins(String asunto, String cuerpo) {
-        List<String> emails = emailsDeAdmins();
-        if (emails.isEmpty()) {
-            throw new IllegalStateException(
-                "No hay ningún ADMIN con email configurado para recibir el código OTP");
-        }
-
-        enviar(emails, asunto, cuerpo, null, null);
-    }
-
     /**
-     * Usado por NotificacionService (alertas de stock bajo): mismo destinatario que el OTP (todos
-     * los ADMIN con email configurado), pero sin acoplar el nombre del método a ese único caso de
-     * uso.
+     * Usado por NotificacionService (alertas de stock bajo): todos los ADMIN con email configurado.
      */
     public void enviarAAdmins(String asunto, String cuerpo) {
         List<String> emails = emailsDeAdmins();
@@ -95,15 +87,21 @@ public class EmailService {
                 "content", Base64.getEncoder().encodeToString(adjuntoPdf))));
         }
 
+        // Se loguea el resultado de cada envío (la respuesta de Resend trae el id del email, que se
+        // puede buscar en su panel para ver si se entregó o rebotó): un 2xx solo significa que Resend
+        // lo aceptó, y sin este rastro un mail que no llega no se podía diagnosticar desde el backend.
         try {
-            restClient.post()
+            String respuesta = restClient.post()
                 .uri(RESEND_URL)
                 .header("Authorization", "Bearer " + apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
                 .retrieve()
-                .toBodilessEntity();
+                .body(String.class);
+            log.info("Email aceptado por Resend: asunto=\"{}\", destinatarios={}, respuesta={}", asunto,
+                destinatarios.size(), respuesta);
         } catch (Exception e) {
+            log.error("Resend rechazó el email con asunto \"{}\": {}", asunto, e.getMessage());
             throw new EmailEnvioException("No se pudo enviar el email vía Resend: " + e.getMessage(), e);
         }
     }

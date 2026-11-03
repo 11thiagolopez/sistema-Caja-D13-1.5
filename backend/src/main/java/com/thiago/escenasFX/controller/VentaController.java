@@ -8,6 +8,8 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.thiago.escenasFX.dto.ConfirmarDescuentoRequest;
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
@@ -32,6 +33,7 @@ import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
+import com.thiago.escenasFX.service.PushService;
 import com.thiago.escenasFX.service.VentaService;
 
 import jakarta.validation.Valid;
@@ -45,9 +47,12 @@ public class VentaController {
     private final EmpleadoRepository empleadoRepo;
     private final ProductoRepository productoRepo;
     private final ClienteRepository clienteRepo;
+    private final PushService pushService;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
-            EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo) {
+            EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
+            PushService pushService) {
+        this.pushService = pushService;
         this.ventaService = ventaService;
         this.ventaRepo = ventaRepo;
         this.empleadoRepo = empleadoRepo;
@@ -56,9 +61,8 @@ public class VentaController {
     }
 
     @PostMapping
-    public VentaResponse registrar(@Valid @RequestBody VentaRequest request) {
-        Empleado empleado = empleadoRepo.findById(request.getIdEmpleado())
-            .orElseThrow(() -> new IllegalArgumentException("Empleado no existe: " + request.getIdEmpleado()));
+    public VentaResponse registrar(@Valid @RequestBody VentaRequest request, Authentication authentication) {
+        Empleado empleado = RolAutenticado.empleadoQueOpera(authentication, request.getIdEmpleado(), empleadoRepo);
 
         Venta venta = new Venta();
         venta.setEmpleado(empleado);
@@ -96,14 +100,11 @@ public class VentaController {
             venta.getDetalles().add(detalle);
         }
 
-        Venta guardada = ventaService.registrarVenta(venta);
+        Venta guardada = ventaService.registrarVenta(venta, RolAutenticado.esAdmin(authentication));
+        if ("PENDIENTE_AUTORIZACION".equals(guardada.getEstado())) {
+            pushService.avisarPeticionNuevaEnSegundoPlano();
+        }
         return VentaMapper.toResponse(guardada);
-    }
-
-    @PostMapping("/descuento/confirmar")
-    public VentaResponse confirmarDescuento(@Valid @RequestBody ConfirmarDescuentoRequest request) {
-        Venta venta = ventaService.confirmarDescuento(request.getIdVenta(), request.getCodigo());
-        return VentaMapper.toResponse(venta);
     }
 
     @GetMapping
@@ -127,7 +128,18 @@ public class VentaController {
     }
 
     @GetMapping("/{id}/pdf")
-    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer id) {
+    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer id, Authentication authentication) {
+        // El VENDEDOR imprime lo que acaba de cobrar, pero nada más: si pudiera pedir cualquier id,
+        // este endpoint le abriría el historial de ventas que no debe ver (ver SecurityConfig).
+        if (!RolAutenticado.esAdmin(authentication)) {
+            Venta venta = ventaService.obtenerPorId(id);
+            boolean esPropia = venta.getEmpleado() != null
+                && authentication.getName().equals(venta.getEmpleado().getUsuario());
+            if (!esPropia || !"CONFIRMADA".equals(venta.getEstado())) {
+                throw new AccessDeniedException("Solo podés ver el comprobante de tus ventas confirmadas");
+            }
+        }
+
         byte[] pdf = ventaService.generarPdf(id);
         return ResponseEntity.ok()
             .contentType(MediaType.APPLICATION_PDF)

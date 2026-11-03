@@ -6,6 +6,7 @@ import { Login } from './pages/Login'
 import { Productos } from './pages/Productos'
 import { RegistrarVenta } from './pages/RegistrarVenta'
 import { HistorialVentas } from './pages/HistorialVentas'
+import { Autorizaciones } from './pages/Autorizaciones'
 import { Caja } from './pages/Caja'
 import { Reportes } from './pages/Reportes'
 import { Gastos } from './pages/Gastos'
@@ -37,6 +38,7 @@ function App() {
           <Route path="/ventas/nueva" element={<RegistrarVenta />} />
           <Route path="/presupuestos" element={<Presupuestos />} />
           <Route element={<RequireRole allow={['ADMIN']} />}>
+            <Route path="/autorizaciones" element={<Autorizaciones />} />
             <Route path="/caja/resumen" element={<Caja />} />
             <Route path="/ventas/historial" element={<HistorialVentas />} />
             <Route path="/ventas/domicilio" element={<TrabajoDomicilio />} />

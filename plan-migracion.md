@@ -2606,3 +2606,44 @@ estados de carga, error, sin datos y la tabla equivalente. Cada gráfico carga p
 **Verificado**: tests de backend sobre H2 y `tsc`, `oxlint` y `vite build` del frontend. **Sin verificar**:
 navegador real y Postgres real (el dueño pidió no levantar en local).
 **Hora en pantalla (misma sesión)**: la API mandaba los `LocalDateTime` tal como estaban guardados, en UTC, y todas las pantallas mostraban la hora 3 horas adelantada. `FechaHoraJsonConfig` los convierte a Argentina al serializar, sin tocar los datos, y `formatoFechaHora` los muestra siempre en 24 horas. Pendiente sin tocar: `FacturaFiscalService` toma el día de la factura con `venta.getFecha().toLocalDate()`, así que una venta después de las 21:00 se factura con fecha de mañana.
+
+## 29. Peticiones desde el sistema, celular y notificaciones (2026-11-03)
+
+**Por qué**: los mails con código de retiro no llegaban, sin que se pudiera confirmar la causa desde el
+código (mismo envío que las alertas de stock, que sí llegan). El dueño decidió sacar los mails de
+autorización y resolver todo dentro del sistema. Los mails de stock, comprobantes y presupuestos siguen.
+
+**Decisiones del dueño**: rechazar un descuento anula la venta. Todos usan Android.
+
+- `OtpService` y los endpoints `/retiro/confirmar` y `/descuento/confirmar` se eliminaron.
+- Venta anulada: estado `ANULADA`, devuelve stock y crea un CREDITO por el saldo usado. Caja, reportes,
+  facturas y notas de crédito ya filtraban por `CONFIRMADA`, así que no cuenta en ningún lado.
+- Aprobar y rechazar toman lock de la fila: dos ADMIN a la vez no duplican la plata ni el stock.
+- Web Push sin contenido, firmado con VAPID usando solo el JDK: no suma librerías y ni montos ni motivos
+  pasan por los servidores de Google. Sin claves configuradas queda desactivado.
+- Las columnas de OTP quedan en la base sin uso. Se pueden borrar más adelante.
+
+**SQL, a correr ANTES de desplegar el backend** (es compatible con la versión anterior):
+
+```sql
+ALTER TABLE solicitudes_retiro ALTER COLUMN otp_hash DROP NOT NULL;
+ALTER TABLE solicitudes_retiro ALTER COLUMN otp_expira_en DROP NOT NULL;
+ALTER TABLE solicitudes_retiro ALTER COLUMN intentos_fallidos DROP NOT NULL;
+ALTER TABLE ventas ALTER COLUMN otp_intentos_fallidos DROP NOT NULL;
+
+ALTER TABLE solicitudes_retiro ADD COLUMN id_empleado_resolutor INTEGER REFERENCES empleados(id_empleado);
+ALTER TABLE solicitudes_retiro ADD COLUMN resuelto_en TIMESTAMP;
+ALTER TABLE ventas ADD COLUMN id_empleado_resolutor INTEGER REFERENCES empleados(id_empleado);
+ALTER TABLE ventas ADD COLUMN resuelto_en TIMESTAMP;
+
+CREATE TABLE suscripciones_push (
+    id_suscripcion INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    endpoint       TEXT NOT NULL UNIQUE,
+    id_empleado    INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    creado_en      TIMESTAMP NOT NULL DEFAULT now()
+);
+ALTER TABLE suscripciones_push ENABLE ROW LEVEL SECURITY;
+```
+
+**Variables de entorno nuevas**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (nunca commitear la privada) y
+`VAPID_CONTACTO` (opcional, `mailto:...`).

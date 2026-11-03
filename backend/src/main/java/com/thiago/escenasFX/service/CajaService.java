@@ -14,7 +14,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.thiago.escenasFX.dto.ResumenDiaDTO;
 import com.thiago.escenasFX.dto.ResumenRangoDTO;
 import com.thiago.escenasFX.dto.ResumenSesionDTO;
-import com.thiago.escenasFX.exception.AuthenticationFailedException;
 import com.thiago.escenasFX.model.CotizacionDolar;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.Gasto;
@@ -46,8 +45,6 @@ public class CajaService {
     private final MovimientoCajaRepository movRepo;
     private final SesionCajaRepository sesionRepo;
     private final SolicitudRetiroRepository solicitudRetiroRepo;
-    private final OtpService otpService;
-    private final EmailService emailService;
     private final CotizacionService cotizacionService;
     private final ProductoRepository productoRepo;
     private final MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
@@ -55,16 +52,13 @@ public class CajaService {
     private final TransactionTemplate transactionTemplate;
 
     public CajaService(VentaRepository ventaRepo, MovimientoCajaRepository movRepo, SesionCajaRepository sesionRepo,
-            SolicitudRetiroRepository solicitudRetiroRepo, OtpService otpService, EmailService emailService,
-            CotizacionService cotizacionService, ProductoRepository productoRepo,
+            SolicitudRetiroRepository solicitudRetiroRepo, CotizacionService cotizacionService, ProductoRepository productoRepo,
             MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo, GastoRepository gastoRepo,
             PlatformTransactionManager transactionManager) {
         this.ventaRepo = ventaRepo;
         this.movRepo = movRepo;
         this.sesionRepo = sesionRepo;
         this.solicitudRetiroRepo = solicitudRetiroRepo;
-        this.otpService = otpService;
-        this.emailService = emailService;
         this.cotizacionService = cotizacionService;
         this.productoRepo = productoRepo;
         this.movimientoProveedorRepo = movimientoProveedorRepo;
@@ -141,64 +135,65 @@ public class CajaService {
     }
 
     /**
-     * Genera el OTP y lo envía por email a los ADMIN. El MovimientoCaja real recién se crea
-     * en confirmarRetiro(), una vez validado el código: mientras tanto no hay ningún gasto
-     * registrado en caja.
+     * El MovimientoCaja real recién se crea cuando un ADMIN aprueba la petición: mientras tanto no
+     * hay ningún gasto registrado en caja. Si lo pide un ADMIN no hay nada que autorizar, así que
+     * el retiro se registra de una; la solicitud se guarda igual, ya CONFIRMADA, para que quede el
+     * mismo rastro que en un retiro pedido por un VENDEDOR.
      */
     @Transactional
-    public SolicitudRetiro solicitarRetiro(BigDecimal monto, String motivo, String medioPago, Empleado solicitante) {
-        String codigo = otpService.generarCodigo();
-
+    public SolicitudRetiro solicitarRetiro(BigDecimal monto, String motivo, String medioPago, Empleado solicitante,
+            boolean autorizadoPorAdmin) {
         SolicitudRetiro solicitud = new SolicitudRetiro();
         solicitud.setMonto(monto);
         solicitud.setMotivo(motivo);
         solicitud.setMedioPago(medioPago);
         solicitud.setEmpleadoSolicitante(solicitante);
-        solicitud.setOtpHash(otpService.hash(codigo));
-        solicitud.setOtpExpiraEn(otpService.nuevaExpiracion());
+
+        if (autorizadoPorAdmin) {
+            return confirmarRetiro(solicitud, solicitante);
+        }
+
         solicitud.setEstado("PENDIENTE");
-        solicitud = solicitudRetiroRepo.save(solicitud);
+        return solicitudRetiroRepo.save(solicitud);
+    }
 
-        emailService.enviarOtpAAdmins(
-            "Autorización de retiro de caja - solicitud #" + solicitud.getIdSolicitud(),
-            "Empleado solicitante: " + solicitante.getNombre() + "\n"
-                + "Se solicitó un retiro de $" + monto + " (" + motivo + ").\n"
-                + "Código de confirmación: " + codigo + "\n"
-                + "Vence en " + OtpService.VIGENCIA_MINUTOS + " minutos.");
-
-        return solicitud;
+    public List<SolicitudRetiro> listarRetirosPendientes() {
+        return solicitudRetiroRepo.findByEstadoOrderByCreadoEnAsc("PENDIENTE");
     }
 
     @Transactional
-    public MovimientoCaja confirmarRetiro(Integer idSolicitud, String codigoIngresado) {
-        SolicitudRetiro solicitud = solicitudRetiroRepo.findById(idSolicitud)
-            .orElseThrow(() -> new IllegalArgumentException("Solicitud de retiro no existe: " + idSolicitud));
+    public SolicitudRetiro aprobarRetiro(Integer idSolicitud, Empleado admin) {
+        return confirmarRetiro(obtenerPendienteConLock(idSolicitud), admin);
+    }
 
+    @Transactional
+    public SolicitudRetiro rechazarRetiro(Integer idSolicitud, Empleado admin) {
+        SolicitudRetiro solicitud = obtenerPendienteConLock(idSolicitud);
+        solicitud.setEstado("RECHAZADA");
+        solicitud.setResueltoPor(admin);
+        solicitud.setResueltoEn(LocalDateTime.now());
+        return solicitudRetiroRepo.save(solicitud);
+    }
+
+    // Con lock: sin esto, dos ADMIN aprobando a la vez podían pasar los dos el chequeo de PENDIENTE
+    // y registrar dos veces la misma salida de plata.
+    private SolicitudRetiro obtenerPendienteConLock(Integer idSolicitud) {
+        SolicitudRetiro solicitud = solicitudRetiroRepo.buscarPorIdConLock(idSolicitud)
+            .orElseThrow(() -> new IllegalArgumentException("Solicitud de retiro no existe: " + idSolicitud));
         if (!"PENDIENTE".equals(solicitud.getEstado())) {
             throw new IllegalStateException("La solicitud de retiro ya fue procesada");
         }
-        if (solicitud.getOtpExpiraEn().isBefore(LocalDateTime.now())) {
-            solicitud.setEstado("EXPIRADA");
-            solicitudRetiroRepo.save(solicitud);
-            throw new IllegalStateException("El código OTP expiró, hay que generar una nueva solicitud de retiro");
-        }
-        if (solicitud.getIntentosFallidos() >= OtpService.MAX_INTENTOS) {
-            solicitud.setEstado("EXPIRADA");
-            solicitudRetiroRepo.save(solicitud);
-            throw new IllegalStateException(
-                "Se superó el máximo de intentos; hay que generar una nueva solicitud de retiro");
-        }
-        if (!otpService.coincide(codigoIngresado, solicitud.getOtpHash())) {
-            solicitud.setIntentosFallidos(solicitud.getIntentosFallidos() + 1);
-            solicitudRetiroRepo.save(solicitud);
-            throw new AuthenticationFailedException("Código OTP inválido");
-        }
+        return solicitud;
+    }
 
+    private SolicitudRetiro confirmarRetiro(SolicitudRetiro solicitud, Empleado resueltoPor) {
         solicitud.setEstado("CONFIRMADA");
-        solicitudRetiroRepo.save(solicitud);
-
-        return registrarRetiro(solicitud.getMonto(), solicitud.getMotivo(), solicitud.getMedioPago(),
-            solicitud.getEmpleadoSolicitante());
+        solicitud.setResueltoPor(resueltoPor);
+        solicitud.setResueltoEn(LocalDateTime.now());
+        SolicitudRetiro guardada = solicitudRetiroRepo.save(solicitud);
+        registrarRetiro(guardada.getMonto(), guardada.getMotivo(), guardada.getMedioPago(),
+            guardada.getEmpleadoSolicitante());
+        return guardada;
     }
 
     private MovimientoCaja registrarRetiro(BigDecimal monto, String motivo, String medioPago, Empleado empleado) {

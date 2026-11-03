@@ -380,6 +380,140 @@ section {
   padding: 0 4px;
 }
 
+/* Panel flotante del vendedor: por debajo de los modales, sin bloquear la pantalla. */
+.autorizaciones {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  width: min(calc(100vw - 32px), 340px);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  border: 1px solid var(--table-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.autorizaciones-titulo {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  border-radius: 7px;
+}
+
+.autorizaciones-lista {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0 12px;
+}
+
+.autorizacion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.autorizacion:last-child {
+  border-bottom: none;
+}
+
+.autorizacion p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.autorizacion-aprobada p {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.autorizacion-rechazada p {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.boton-link {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.boton-rechazar {
+  background: var(--error);
+}
+
+/* Pantalla de peticiones del ADMIN: pensada primero para el celular. */
+.peticiones {
+  max-width: 640px;
+}
+
+.peticion {
+  margin-bottom: 12px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--bg-alt);
+  border: 1px solid var(--table-border);
+}
+
+.peticion header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.peticion-monto {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.peticion p {
+  margin: 6px 0;
+}
+
+.peticion-detalle {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.peticion-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.peticion-acciones button {
+  flex: 1;
+  padding: 10px;
+}
+
+.activar-notificaciones {
+  margin-bottom: 12px;
+}
+
+.sidebar-contador {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--error);
+  color: var(--accent-contrast);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Solo existe en celular (ver el @media del final): el fondo que cierra el menú al tocar afuera. */
+.sidebar-fondo {
+  display: none;
+}
+
 /* Fila de botones genérica (acá y en Trabajo a domicilio — antes también en ComprobanteInterno,
    que dejó de existir: ver el comentario de EtiquetaImprimible.tsx). */
 .comprobante-acciones {
@@ -627,5 +761,101 @@ section {
 @media (max-width: 420px) {
   .reportes-tarjeta strong {
     font-size: 20px;
+  }
+}
+
+/* Celular. "screen" para no tocar las etiquetas, que se imprimen desde el navegador. */
+@media screen and (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .sidebar-cerrada {
+    box-shadow: none;
+  }
+
+  .sidebar-fondo {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    padding: 0;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .sidebar-enlace,
+  .sidebar-seccion-titulo {
+    padding: 11px 12px;
+  }
+
+  .layout-topbar {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  /* En escritorio el título flota centrado en la ventana, y en pantalla chica se pisaba con el
+     botón del menú y el usuario: acá ocupa su propio lugar dentro de la barra. */
+  .topbar-titulo {
+    position: static;
+    flex: 1;
+    min-width: 0;
+    transform: none;
+    overflow: hidden;
+    font-size: 20px;
+    text-align: center;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-usuario {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .layout-topbar .nav-usuario {
+    display: none;
+  }
+
+  .layout-contenido main {
+    padding: 12px;
+  }
+
+  /* Las tablas anchas se deslizan de costado en vez de romper toda la pantalla. */
+  main table,
+  .modal table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  input,
+  select {
+    max-width: 100%;
+  }
+
+  button {
+    min-height: 40px;
+  }
+
+  .boton-link {
+    min-height: 0;
+    padding: 6px 0;
+  }
+
+  .agregar-producto,
+  .comprobante-acciones {
+    flex-wrap: wrap;
+  }
+
+  .pantalla-login form {
+    width: min(320px, calc(100vw - 32px));
+    padding: 20px;
+  }
+
+  .modal {
+    padding: 16px;
   }
 }

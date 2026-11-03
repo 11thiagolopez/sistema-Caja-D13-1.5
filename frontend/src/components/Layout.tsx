@@ -5,6 +5,7 @@ import { getSesionAbierta } from '../api/caja'
 import { getCotizacionActual } from '../api/cotizacion'
 import type { CotizacionResponse, Rol } from '../types/api'
 import { AbrirCajaModal } from './AbrirCajaModal'
+import { AutorizacionesProvider, useAutorizaciones } from './AutorizacionesPendientes'
 import { CerrarCajaModal } from './CerrarCajaModal'
 import { RetiroModal } from './RetiroModal'
 import { ProveedoresModal } from './ProveedoresModal'
@@ -79,6 +80,7 @@ const SECCIONES: NavSection[] = [
 ]
 
 const ENLACES_SUELTOS: NavItem[] = [
+  { label: 'Peticiones', to: '/autorizaciones', roles: ['ADMIN'] },
   { label: 'Cobros', to: '/ventas/nueva' },
   { label: 'Productos', to: '/productos' },
   { label: 'Presupuestos', to: '/presupuestos' },
@@ -86,17 +88,32 @@ const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
 ]
 
+// En celular el menú flota sobre el contenido: arranca cerrado y se cierra solo al elegir una opción.
+function esCelular(): boolean {
+  return window.matchMedia('(max-width: 768px)').matches
+}
+
 function puedeVer(roles: Rol[] | undefined, rol: Rol | undefined): boolean {
   return !roles || (rol != null && roles.includes(rol))
 }
 
 export function Layout() {
+  const { sesion } = useAuth()
+  return (
+    <AutorizacionesProvider key={sesion?.idEmpleado} idEmpleado={sesion?.idEmpleado ?? 0} rol={sesion?.rol}>
+      <LayoutContenido />
+    </AutorizacionesProvider>
+  )
+}
+
+function LayoutContenido() {
   const { sesion, logout } = useAuth()
   const navigate = useNavigate()
   const [seccionAbierta, setSeccionAbierta] = useState<string | null>('Caja')
   const [modalAbierto, setModalAbierto] = useState<ModalKey | null>(null)
   const [cajaObligatoria, setCajaObligatoria] = useState(false)
-  const [sidebarAbierta, setSidebarAbierta] = useState(true)
+  const [sidebarAbierta, setSidebarAbierta] = useState(() => !esCelular())
+  const { peticiones } = useAutorizaciones()
 
   // Dolarización: gate diario que va ANTES que el de caja — nadie (ningún rol) puede operar el
   // sistema sin la cotización del día cargada. Arranca en true (bloquea) hasta que el chequeo
@@ -134,6 +151,12 @@ export function Layout() {
     navigate('/login', { replace: true })
   }
 
+  function cerrarMenuEnCelular() {
+    if (esCelular()) {
+      setSidebarAbierta(false)
+    }
+  }
+
   function toggleSeccion(label: string) {
     setSeccionAbierta((actual) => (actual === label ? null : label))
   }
@@ -144,8 +167,11 @@ export function Layout() {
         <div className="sidebar-marca">Sistema D13</div>
         <nav>
           {ENLACES_SUELTOS.filter((item) => puedeVer(item.roles, sesion?.rol)).map((item) => (
-            <NavLink key={item.to} to={item.to!} className="sidebar-enlace">
+            <NavLink key={item.to} to={item.to!} className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
               {item.label}
+              {item.to === '/autorizaciones' && peticiones.length > 0 && (
+                <span className="sidebar-contador">{peticiones.length}</span>
+              )}
             </NavLink>
           ))}
 
@@ -170,12 +196,15 @@ export function Layout() {
                           key={item.label}
                           type="button"
                           className="sidebar-enlace sidebar-enlace-boton"
-                          onClick={() => setModalAbierto(item.modal!)}
+                          onClick={() => {
+                            setModalAbierto(item.modal!)
+                            cerrarMenuEnCelular()
+                          }}
                         >
                           {item.label}
                         </button>
                       ) : (
-                        <NavLink key={item.to} to={item.to!} className="sidebar-enlace">
+                        <NavLink key={item.to} to={item.to!} className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
                           {item.label}
                         </NavLink>
                       ),
@@ -189,13 +218,19 @@ export function Layout() {
             <button
               type="button"
               className="sidebar-enlace sidebar-enlace-boton"
-              onClick={() => setModalAbierto('proveedores')}
+              onClick={() => {
+                setModalAbierto('proveedores')
+                cerrarMenuEnCelular()
+              }}
             >
               Proveedores
             </button>
           )}
         </nav>
       </aside>
+      {sidebarAbierta && (
+        <button type="button" className="sidebar-fondo" aria-label="Cerrar menú" onClick={() => setSidebarAbierta(false)} />
+      )}
 
       <div className="layout-contenido">
         <header className="layout-topbar">

@@ -1,7 +1,6 @@
 package com.thiago.escenasFX.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -14,5 +13,4 @@ public class SolicitudRetiroResponse {
     private String motivo;
     private String medioPago;
     private String estado;
-    private LocalDateTime otpExpiraEn;
 }

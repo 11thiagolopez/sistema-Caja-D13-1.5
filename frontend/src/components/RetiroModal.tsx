@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from './Modal'
-import { confirmarRetiro, solicitarRetiro } from '../api/caja'
+import { useAutorizaciones } from './AutorizacionesPendientes'
+import { solicitarRetiro } from '../api/caja'
 import { ApiRequestError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { MedioPago } from '../types/api'
@@ -11,25 +12,22 @@ interface RetiroModalProps {
 
 export function RetiroModal({ onClose }: RetiroModalProps) {
   const { sesion } = useAuth()
+  const { agregar } = useAutorizaciones()
   const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO')
   const [error, setError] = useState<string | null>(null)
-  const [mensajeSolicitud, setMensajeSolicitud] = useState<string | null>(null)
-  const [solicitando, setSolicitando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
 
-  const [idSolicitud, setIdSolicitud] = useState('')
-  const [codigo, setCodigo] = useState('')
-  const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null)
-  const [mensajeConfirmar, setMensajeConfirmar] = useState<string | null>(null)
-  const [confirmando, setConfirmando] = useState(false)
+  const esAdmin = sesion?.rol === 'ADMIN'
 
-  async function onSolicitar(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!sesion || !monto || !motivo) return
     setError(null)
-    setMensajeSolicitud(null)
-    setSolicitando(true)
+    setMensaje(null)
+    setEnviando(true)
     try {
       const solicitud = await solicitarRetiro({
         idEmpleado: sesion.idEmpleado,
@@ -37,84 +35,47 @@ export function RetiroModal({ onClose }: RetiroModalProps) {
         motivo,
         medioPago,
       })
-      setMensajeSolicitud(
-        `Retiro solicitado (#${solicitud.idSolicitud}). Se envió un código de autorización a los administradores.`,
-      )
-      setIdSolicitud(String(solicitud.idSolicitud))
+      if (solicitud.estado === 'CONFIRMADA') {
+        setMensaje(`Retiro #${solicitud.idSolicitud} registrado.`)
+      } else {
+        agregar({ tipo: 'RETIRO', id: solicitud.idSolicitud, monto: solicitud.monto, motivo: solicitud.motivo })
+        setMensaje(
+          `Retiro #${solicitud.idSolicitud} solicitado: le llegó al administrador. Podés cerrar esta ventana y seguir trabajando; la respuesta aparece en "Mis peticiones", abajo a la derecha.`,
+        )
+      }
       setMonto('')
       setMotivo('')
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'No se pudo solicitar el retiro')
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar el retiro')
     } finally {
-      setSolicitando(false)
+      setEnviando(false)
     }
   }
 
-  async function onConfirmar(e: React.FormEvent) {
-    e.preventDefault()
-    if (!idSolicitud || !codigo) return
-    setErrorConfirmar(null)
-    setConfirmando(true)
-    try {
-      await confirmarRetiro({ idSolicitud: Number(idSolicitud), codigo })
-      setMensajeConfirmar('Retiro confirmado.')
-      setIdSolicitud('')
-      setCodigo('')
-    } catch (err) {
-      setErrorConfirmar(err instanceof ApiRequestError ? err.message : 'No se pudo confirmar el retiro')
-    } finally {
-      setConfirmando(false)
-    }
-  }
+  const textoBoton = esAdmin ? 'Registrar retiro' : 'Solicitar retiro'
 
   return (
     <Modal title="Retiros de dinero" onClose={onClose}>
-      <section>
-        <h4>Solicitar retiro</h4>
-        <form onSubmit={onSolicitar}>
-          <input
-            type="number"
-            placeholder="Monto"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-          />
-          <input placeholder="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA">Tarjeta</option>
-          </select>
-          {error && <p className="error">{error}</p>}
-          {mensajeSolicitud && <p className="resultado">{mensajeSolicitud}</p>}
-          <button type="submit" disabled={solicitando || !monto || !motivo}>
-            {solicitando && <span className="spinner" />}
-            {solicitando ? 'Solicitando...' : 'Solicitar'}
-          </button>
-        </form>
-      </section>
-
-      <section>
-        <h4>Confirmar retiro</h4>
-        <p>
-          El código de autorización le llega por email al ADMIN — pedíselo y escribilo acá para
-          terminar el retiro.
-        </p>
-        <form onSubmit={onConfirmar}>
-          <input
-            type="number"
-            placeholder="N° de solicitud"
-            value={idSolicitud}
-            onChange={(e) => setIdSolicitud(e.target.value)}
-          />
-          <input placeholder="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-          {errorConfirmar && <p className="error">{errorConfirmar}</p>}
-          {mensajeConfirmar && <p className="resultado">{mensajeConfirmar}</p>}
-          <button type="submit" disabled={confirmando || !idSolicitud || !codigo}>
-            {confirmando && <span className="spinner" />}
-            {confirmando ? 'Confirmando...' : 'Confirmar retiro'}
-          </button>
-        </form>
-      </section>
+      <form onSubmit={onSubmit}>
+        <input
+          type="number"
+          placeholder="Monto"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+        />
+        <input placeholder="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+        <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="TARJETA">Tarjeta</option>
+        </select>
+        {error && <p className="error">{error}</p>}
+        {mensaje && <p className="resultado">{mensaje}</p>}
+        <button type="submit" disabled={enviando || !monto || !motivo}>
+          {enviando && <span className="spinner" />}
+          {enviando ? 'Enviando...' : textoBoton}
+        </button>
+      </form>
     </Modal>
   )
 }

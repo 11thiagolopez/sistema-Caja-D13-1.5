@@ -51,7 +51,7 @@ public class Venta {
     private BigDecimal totalVenta = BigDecimal.ZERO;
 
     @Column(nullable = false)
-    private String estado = "CONFIRMADA"; // CONFIRMADA | PENDIENTE_AUTORIZACION
+    private String estado = "CONFIRMADA"; // CONFIRMADA | PENDIENTE_AUTORIZACION | EN_PROGRESO | ANULADA
 
     @Column(precision = 12, scale = 2, nullable = false)
     private BigDecimal descuento = BigDecimal.ZERO;
@@ -59,17 +59,13 @@ public class Venta {
     @Column(name = "motivo_descuento")
     private String motivoDescuento;
 
-    @Column(name = "otp_hash")
-    private String otpHash;
+    // Qué ADMIN aprobó o rechazó el descuento, y cuándo (null si la venta no pasó por autorización).
+    @ManyToOne
+    @JoinColumn(name = "id_empleado_resolutor")
+    private Empleado resueltoPor;
 
-    @Column(name = "otp_expira_en")
-    private LocalDateTime otpExpiraEn;
-
-    // Cuenta los códigos incorrectos ingresados al confirmar el descuento; al llegar a
-    // OtpService.MAX_INTENTOS ya no se acepta el código aunque siga vigente en el tiempo (ver
-    // VentaService.confirmarDescuento).
-    @Column(name = "otp_intentos_fallidos", nullable = false)
-    private int otpIntentosFallidos = 0;
+    @Column(name = "resuelto_en")
+    private LocalDateTime resueltoEn;
 
     // Se completa recién al enviar el comprobante por email (no se pide al registrar la venta).
     @Column(name = "cliente_email")

@@ -69,17 +69,10 @@ public class SecurityConfig {
     /**
      * JWT stateless por roles (ADMIN / VENDEDOR).
      * - ADMIN: unico rol que ve ventas (GET), resúmenes de caja y accede a reportes.
-     * - ADMIN y VENDEDOR: pueden listar productos, registrar ventas (POST), abrir/cerrar caja,
-     *   solicitar un retiro, y confirmar un descuento de venta o un retiro de caja.
+     * - ADMIN y VENDEDOR: pueden listar productos, registrar ventas (POST), abrir/cerrar caja y
+     *   solicitar un retiro.
+     * - Aprobar o rechazar la petición de un VENDEDOR (retiro o descuento): solo ADMIN.
      * - Alta/baja de productos y carga de stock: solo ADMIN.
-     *
-     * Flujo de autorización real (2026-07-30, aclarado por el dueño del negocio): el OTP de un
-     * descuento o un retiro le llega por email solo al ADMIN — eso es lo que evita que el
-     * VENDEDOR se autoconfirme. Pero quien está frente a la caja (a menudo el VENDEDOR) es quien
-     * tiene que terminar la operación: el ADMIN le pasa el código (llamado, WhatsApp, etc.) y el
-     * VENDEDOR lo escribe para cerrarla. Por eso confirmar NO puede quedar exclusivo de ADMIN en
-     * el backend — el control de seguridad está en quién recibe el código por email, no en qué
-     * rol aprieta "Confirmar".
      *
      * Decisión de negocio (confirmada por el dueño del negocio): el VENDEDOR no debe poder ver
      * el historial de ventas ni el arqueo de caja bajo ninguna forma, ni siquiera el de su propio
@@ -106,6 +99,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/cotizacion/actual").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/cotizacion/cargar").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/cotizacion/manual").hasRole("ADMIN")
+                // Peticiones de autorización: el VENDEDOR solo consulta cómo quedaron las suyas.
+                .requestMatchers(HttpMethod.GET, "/api/autorizaciones/estado").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers("/api/autorizaciones/**").hasRole("ADMIN")
+                .requestMatchers("/api/push/**").hasRole("ADMIN")
                 .requestMatchers("/api/proveedores/**").hasRole("ADMIN")
                 .requestMatchers("/api/gastos/**").hasRole("ADMIN")
                 .requestMatchers("/api/compras/**").hasRole("ADMIN")
@@ -122,9 +119,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/ventas").hasAnyRole("ADMIN", "VENDEDOR")
                 // Historial de ventas: solo ADMIN, ni global ni por turno (ver nota arriba).
                 .requestMatchers(HttpMethod.GET, "/api/ventas").hasRole("ADMIN")
-                // Confirmar el descuento: cualquiera de los dos roles (ver nota arriba sobre el
-                // flujo real de autorización — el control está en quién recibe el OTP por email).
-                .requestMatchers("/api/ventas/descuento/confirmar").hasAnyRole("ADMIN", "VENDEDOR")
                 // Enviar el comprobante de una venta por email: día a día, igual que registrarla.
                 // El historial (GET /api/ventas, arriba) sigue siendo lo único exclusivo de ADMIN.
                 .requestMatchers(HttpMethod.POST, "/api/ventas/*/enviar-comprobante")
@@ -133,7 +127,9 @@ public class SecurityConfig {
                 // descargar su comprobante): a diferencia de Cobros, todo el módulo queda
                 // exclusivo de ADMIN — VENDEDOR no lo usa.
                 .requestMatchers(HttpMethod.GET, "/api/ventas/*").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasRole("ADMIN")
+                // Comprobante: VENDEDOR también, pero solo de sus ventas confirmadas (lo valida el
+                // controller, porque depende de la venta y no solo del rol).
+                .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
                 // Facturación fiscal (ARCA/WSFE): vive únicamente en Consulta de ventas, pantalla
                 // ya exclusiva de ADMIN — se mantiene ADMIN-only acá también, es una acción
@@ -147,11 +143,11 @@ public class SecurityConfig {
                 // administrativo — no afecta stock ni caja, así que no sigue la regla de abajo
                 // de que todo "/api/reportes/**" es exclusivo de ADMIN.
                 .requestMatchers("/api/presupuestos/**").hasAnyRole("ADMIN", "VENDEDOR")
-                // Abrir/cerrar caja, solicitar y confirmar un retiro: operación del día a día,
+                // Abrir/cerrar caja y solicitar un retiro: operación del día a día,
                 // VENDEDOR también puede. Ver resúmenes sigue exclusivo de ADMIN (matcher general
                 // de abajo).
                 .requestMatchers(HttpMethod.POST, "/api/caja/abrir", "/api/caja/cerrar",
-                        "/api/caja/retiro/solicitar", "/api/caja/retiro/confirmar")
+                        "/api/caja/retiro/solicitar")
                     .hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/caja/**").hasRole("ADMIN")
                 .requestMatchers("/api/reportes/**").hasRole("ADMIN")
