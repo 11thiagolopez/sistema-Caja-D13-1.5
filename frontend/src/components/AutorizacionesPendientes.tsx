@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { ApiRequestError } from '../api/client'
 import { getEstadoPeticiones, getPeticiones } from '../api/autorizaciones'
 import { descargarVentaPdf } from '../api/ventas'
+import { GloboPeticiones } from './GloboPeticiones'
 import { verBlob } from '../utils/descargarBlob'
 import type { AutorizacionPeticion, EstadoAutorizacion, Rol, TipoAutorizacion } from '../types/api'
 
@@ -38,6 +39,13 @@ function textoEstado({ tipo, estado }: AutorizacionPendiente): string {
   return 'Esperando respuesta del administrador...'
 }
 
+// El color del globo: primero lo que más le importa ver al vendedor.
+function estadoDelGlobo(pendientes: AutorizacionPendiente[]): EstadoAutorizacion {
+  if (pendientes.some((p) => p.estado === 'RECHAZADA')) return 'RECHAZADA'
+  if (pendientes.some((p) => p.estado === 'APROBADA')) return 'APROBADA'
+  return 'PENDIENTE'
+}
+
 /**
  * Lo que el vendedor pidió y todavía espera la respuesta del ADMIN, a la vista desde cualquier
  * pantalla: pedir un retiro o un descuento no bloquea seguir cobrando. Se guarda en localStorage
@@ -62,7 +70,6 @@ export function AutorizacionesProvider({
       return []
     }
   })
-  const [plegado, setPlegado] = useState(false)
   const [errorComprobante, setErrorComprobante] = useState<string | null>(null)
   const [peticiones, setPeticiones] = useState<AutorizacionPeticion[]>([])
 
@@ -108,7 +115,6 @@ export function AutorizacionesProvider({
 
   function agregar(autorizacion: AutorizacionPendiente) {
     setPendientes((actual) => [...actual, autorizacion])
-    setPlegado(false)
   }
 
   // Mismo PDF que "Ver comprobante" en Cobros: cuando aprueban el descuento, esa pantalla ya puede
@@ -130,41 +136,30 @@ export function AutorizacionesProvider({
     <AutorizacionesContext.Provider value={{ agregar, peticiones, refrescarPeticiones }}>
       {children}
       {pendientes.length > 0 && (
-        <aside className="autorizaciones">
-          <button
-            type="button"
-            className="autorizaciones-titulo"
-            onClick={() => setPlegado((actual) => !actual)}
-            aria-expanded={!plegado}
-          >
-            Mis peticiones ({pendientes.length})
-            <span>{plegado ? '▴' : '▾'}</span>
-          </button>
-          {!plegado && (
-            <div className="autorizaciones-lista">
-              {errorComprobante && <p className="error">{errorComprobante}</p>}
-              {pendientes.map((p) => (
-                <div key={`${p.tipo}-${p.id}`} className={`autorizacion autorizacion-${(p.estado ?? 'PENDIENTE').toLowerCase()}`}>
-                  <strong>{titulo(p)}</strong>
-                  <span>
-                    ${p.monto.toFixed(2)} — {p.motivo}
-                  </span>
-                  <p>{textoEstado(p)}</p>
-                  {p.tipo === 'DESCUENTO' && p.estado === 'APROBADA' && (
-                    <button type="button" onClick={() => verComprobante(p.id)}>
-                      Ver comprobante
-                    </button>
-                  )}
-                  {p.estado && p.estado !== 'PENDIENTE' && (
-                    <button type="button" className="boton-link" onClick={() => quitar(p)}>
-                      Listo
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
+        <GloboPeticiones cantidad={pendientes.length} estado={estadoDelGlobo(pendientes)}>
+          <div className="autorizaciones-lista">
+            {errorComprobante && <p className="error">{errorComprobante}</p>}
+            {pendientes.map((p) => (
+              <div key={`${p.tipo}-${p.id}`} className={`autorizacion autorizacion-${(p.estado ?? 'PENDIENTE').toLowerCase()}`}>
+                <strong>{titulo(p)}</strong>
+                <span>
+                  ${p.monto.toFixed(2)} — {p.motivo}
+                </span>
+                <p>{textoEstado(p)}</p>
+                {p.tipo === 'DESCUENTO' && p.estado === 'APROBADA' && (
+                  <button type="button" onClick={() => verComprobante(p.id)}>
+                    Ver comprobante
+                  </button>
+                )}
+                {p.estado && p.estado !== 'PENDIENTE' && (
+                  <button type="button" className="boton-link" onClick={() => quitar(p)}>
+                    Listo
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </GloboPeticiones>
       )}
     </AutorizacionesContext.Provider>
   )

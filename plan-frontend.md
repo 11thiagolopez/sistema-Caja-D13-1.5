@@ -255,9 +255,10 @@ estado, empleadoApertura, resumen: ResumenDiaResponse}]}` — el desglose por tu
 
 **Peticiones (desde 2026-11-03, reemplaza al código OTP por mail)**: un retiro o un descuento pedido por
 VENDEDOR queda pendiente hasta que un ADMIN lo resuelve; pedido por ADMIN (según el JWT, nunca según
-`idEmpleado`) vuelve ya confirmado. El VENDEDOR sigue sus peticiones en el panel flotante "Mis
-peticiones" (`components/AutorizacionesPendientes.tsx`, ids en localStorage por empleado, a propósito
-sin endpoint de listado). Rechazar un descuento anula la venta.
+`idEmpleado`) vuelve ya confirmado. El VENDEDOR sigue sus peticiones en un globo que se arrastra
+(`components/GloboPeticiones.tsx`, posición en localStorage) y se abre con "Mis peticiones"
+(`components/AutorizacionesPendientes.tsx`, ids en localStorage por empleado, a propósito sin endpoint
+de listado). Rechazar un descuento anula la venta.
 
 | Método | Ruta | Roles | Respuesta |
 |---|---|---|---|
