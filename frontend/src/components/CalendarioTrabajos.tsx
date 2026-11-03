@@ -66,6 +66,7 @@ export function CalendarioTrabajos({
 
   return (
     <section className="calendario-trabajos">
+      <div className="calendario-recuadro">
       <div className="calendario-mes">
         <button type="button" aria-label="Mes anterior" onClick={() => onCambiarFecha(fechaIso(anio, mesBase0 - 1, 1))}>
           ‹
@@ -113,6 +114,7 @@ export function CalendarioTrabajos({
             </button>
           )
         })}
+      </div>
       </div>
 
       {error && <p className="error">{error}</p>}

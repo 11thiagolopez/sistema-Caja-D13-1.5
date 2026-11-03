@@ -575,6 +575,15 @@ section {
   max-width: 640px;
 }
 
+.calendario-recuadro {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--table-border);
+  border-radius: 10px;
+  background: var(--bg-calendario);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 .calendario-mes {
   display: flex;
   align-items: center;
