@@ -60,6 +60,10 @@ class VentaServiceTest {
     private ClienteRepository clienteRepo;
     @Mock
     private MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
+    @Mock
+    private com.thiago.escenasFX.repository.FacturaFiscalRepository facturaRepo;
+    @Mock
+    private com.thiago.escenasFX.repository.NotaCreditoRepository notaCreditoRepo;
 
     @InjectMocks
     private VentaService ventaService;
@@ -463,9 +467,11 @@ class VentaServiceTest {
         TrabajoDomicilioRequest req = trabajoReq(
             List.of(detalleReqProducto(1, 2, "100"), detalleReqServicio("Instalación", 1, "3000")), true);
         req.setIdEmpleadoTecnico(2);
+        req.setMedioPago("EFECTIVO");
 
         Venta guardado = ventaService.guardarTrabajoDomicilio(req, empleado);
 
+        assertThat(guardado.getMedioPago()).isEqualTo("EFECTIVO");
         assertThat(guardado.getEstado()).isEqualTo("CONFIRMADA");
         assertThat(guardado.getEstadoTrabajo()).isEqualTo("COBRADO");
         assertThat(guardado.getTotalVenta()).isEqualByComparingTo("3200");
@@ -483,8 +489,9 @@ class VentaServiceTest {
         Venta existente = new Venta();
         existente.setIdVenta(5);
         existente.setTipoVenta("DOMICILIO");
+        existente.setEstado("EN_PROGRESO");
         existente.setDetalles(new ArrayList<>(List.of(detalle(producto, 2, new BigDecimal("100")))));
-        when(ventaRepo.findById(5)).thenReturn(Optional.of(existente));
+        when(ventaRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(existente));
 
         Empleado empleado = empleado(1, "Recepcionista");
         TrabajoDomicilioRequest req = trabajoReq(List.of(detalleReqProducto(1, 5, "100")), false);
@@ -503,7 +510,7 @@ class VentaServiceTest {
         Venta mostrador = new Venta();
         mostrador.setIdVenta(9);
         mostrador.setTipoVenta("MOSTRADOR");
-        when(ventaRepo.findById(9)).thenReturn(Optional.of(mostrador));
+        when(ventaRepo.buscarPorIdConLock(9)).thenReturn(Optional.of(mostrador));
 
         Empleado empleado = empleado(1, "Recepcionista");
         TrabajoDomicilioRequest req = trabajoReq(List.of(), false);

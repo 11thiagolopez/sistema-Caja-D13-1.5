@@ -2647,3 +2647,61 @@ ALTER TABLE suscripciones_push ENABLE ROW LEVEL SECURITY;
 
 **Variables de entorno nuevas**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (nunca commitear la privada) y
 `VAPID_CONTACTO` (opcional, `mailto:...`).
+
+## 30. Agenda de trabajos a domicilio y conciliación (2026-11-03)
+
+**Decisiones del dueño**:
+
+- La plata de los trabajos no se mezcla con la caja ni con el arqueo: solo se suma en "Total del día" del
+  resumen de caja. Un trabajo cobrado no se vincula a la sesión, y por eso no importa si hay caja abierta.
+- Los reportes de mostrador no incluyen trabajos, que tienen su sección propia
+  (`GET /api/reportes/trabajos-domicilio`, `ReporteTrabajosService`). Comisiones y Balance sí los incluyen,
+  porque son el resultado de todo el negocio.
+- El técnico cobra su % solo sobre la mano de obra, y el resto queda para el negocio. Los artículos de un
+  trabajo no pagan comisión a nadie. Las cuentas están en `CuentasTrabajo`.
+- Los artículos de un trabajo agendado quedan reservados desde que se carga.
+- Fecha de una factura emitida después de las 21:00: no importa, porque no se emiten a esa hora.
+- Los trabajos se eliminan desde el sistema, cobrados o no: devuelve el stock y sale de la agenda y los
+  reportes. La fila queda en `ANULADA` para auditar. Con factura o nota de crédito no se puede.
+
+Decisión técnica: el % del técnico se guarda en `ventas.comision_tecnico` al cobrar, para que cambiarle la
+comisión no altere lo ya cobrado. Los trabajos cobrados antes usan el % actual. Un técnico se crea solo con
+nombre y comisión (`POST /api/empleados/tecnicos`): no entra al sistema, y usuario y contraseña se generan
+al azar porque la tabla los exige.
+
+**Qué se encontró en la auditoría**, comprobado por `TrabajoDomicilioConciliacionIntegrationTest`:
+
+- "Cerrar y cobrar" no guardaba medio de pago. Ahora es obligatorio, para el reporte por medio de pago.
+- `ventas.fecha` quedaba en el día de carga: un trabajo cobrado días después caía en un período ya cerrado.
+  Ahora al cerrar pasa a ser el momento del cobro, y la agenda usa `fecha_programada`.
+- Guardar un trabajo cobrado lo sacaba de los reportes. El backend ahora rechaza modificar lo que no esté
+  `EN_PROGRESO`.
+- "Unidades vendidas" contaba la mano de obra como unidad.
+- Caja y reportes separaban los días en la zona de la JVM (UTC en Railway): lo cobrado después de las 21:00
+  caía al día siguiente. Ahora usan `ZonaNegocio`, igual que los gráficos, que ya estaban bien.
+- No había forma de cancelar un trabajo, y sus artículos quedaban reservados para siempre. Se agregó
+  `POST /api/ventas/trabajo-domicilio/{id}/anular`, el botón "Eliminar trabajo".
+
+**SQL, a correr ANTES de desplegar el backend** (con `ddl-auto=validate`, sin esta columna no arranca, y es
+compatible con la versión anterior). El `UPDATE` asume que `fecha` está guardada en UTC, como en Railway:
+
+```sql
+ALTER TABLE ventas ADD COLUMN fecha_programada DATE;
+ALTER TABLE ventas ADD COLUMN comision_tecnico NUMERIC(5, 2);
+
+UPDATE ventas
+SET fecha_programada = (fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+WHERE tipo_venta = 'DOMICILIO' AND fecha_programada IS NULL;
+```
+
+**Datos anteriores**: los trabajos cobrados antes de este cambio no tienen medio de pago y aparecen como "Sin
+especificar" en el reporte de trabajos. Como no pasan por el arqueo, eso no afecta a la caja. Siguen en su
+día de carga, porque no se guardó cuándo se cobraron.
+
+Si crear un técnico falla, revisar que la tabla no tenga una restricción que lo impida, que el código no
+puede ver:
+
+```sql
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE conrelid = 'empleados'::regclass AND contype = 'c';
+```

@@ -410,8 +410,14 @@ porque el módulo nuevo de Trabajo a domicilio lo reusa.
 teléfono, dirección, descripción del trabajo, artículos de catálogo (mismo componente que Cobros,
 extraído a `components/BuscadorProductoCarrito.tsx`, con descuento real de stock), mano de obra
 de precio libre (`tipo="SERVICIO"`, sin producto) y técnico asignado. Botones "Guardar borrador"
-(estado `EN_PROGRESO`, no genera comprobante) y "Cerrar y cobrar" (estado `CONFIRMADA`). Un
-borrador se puede reabrir por número de trabajo y seguir editando — al reeditar,
+(estado `EN_PROGRESO`, no genera comprobante) y "Cerrar y cobrar" (estado `CONFIRMADA`). La
+pantalla arranca en un calendario del mes por `fecha_programada` (dirección, cliente y color según
+estado, `utils/estadoTrabajo.ts`; "Cobrado" solo si está `CONFIRMADA`). Cerrar exige medio de pago y
+pasa `fecha` al momento del cobro, que es lo que cuentan los reportes. Solo se edita lo que está
+`EN_PROGRESO`; "Eliminar trabajo" pasa a `ANULADA` y devuelve el stock, salvo con factura o nota de
+crédito. **Los trabajos no entran al arqueo ni a los reportes de mostrador**: tienen su
+reporte propio y el técnico cobra solo sobre la mano de obra (ver `plan-migracion.md` sección 30). Un
+borrador se puede reabrir desde el calendario o por número y seguir editando — al reeditar,
 `VentaService.guardarTrabajoDomicilio` primero devuelve el stock de las líneas viejas con
 producto y recién después vuelve a descontar las nuevas, para no descuadrar el inventario.
 `Venta` ganó columnas nuevas: `tipo_venta` (`MOSTRADOR`|`DOMICILIO`), `cliente_nombre`,
@@ -428,13 +434,13 @@ venta/trabajo `CONFIRMADA`, y filtrar la lista por tipo de venta, técnico y est
 (`ReporteService.comisionesPorVendedor`). Una línea `SERVICIO` de un trabajo a domicilio atribuye
 su monto BRUTO (sin restar costo) al **técnico asignado**, nunca a quien cobró la venta; cualquier
 otra línea (artículo/copia, en mostrador o en domicilio) sigue atribuyendo el margen a quien
-registró la venta, como siempre. Verificado en vivo: en un trabajo con 1 artículo + 1 línea de
-mano de obra, el reporte de Comisiones mostró la ganancia del artículo del lado del vendedor y el
-monto de mano de obra separado del lado del técnico.
+registró la venta, como siempre. **Reemplazado el 2026-11-03**: en un trabajo a domicilio solo cobra
+el técnico y solo sobre la mano de obra; sus artículos no pagan comisión (`CuentasTrabajo`, ver
+`plan-migracion.md` sección 30).
 
 **8. Rol TECNICO, nuevo.** Se agregó a `Empleado.rol` (antes solo ADMIN|VENDEDOR). Solo TECNICO
-tiene comisión — en el alta de empleado (`Vendedores.tsx`) el campo "Comisión %" solo se muestra
-si el rol elegido es TECNICO, y `EmpleadoService.crear`/`actualizar` fuerza `comision=null` para
+tiene comisión — desde 2026-11-03 se crean y editan en su propia pantalla (`Tecnicos.tsx`, solo nombre
+y comisión), y `EmpleadoService.crear`/`actualizar` fuerza `comision=null` para
 cualquier otro rol aunque el request traiga un valor (VENDEDOR tiene sueldo fijo, ADMIN no cobra
 comisión — regla de negocio explícita del dueño). El selector de "Técnico asignado" en Trabajo a
 domicilio filtra `empleados` a solo `rol==='TECNICO'`. TECNICO **no tiene acceso al sistema** a

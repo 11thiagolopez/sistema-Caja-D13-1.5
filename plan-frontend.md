@@ -260,6 +260,12 @@ VENDEDOR queda pendiente hasta que un ADMIN lo resuelve; pedido por ADMIN (segú
 (`components/AutorizacionesPendientes.tsx`, ids en localStorage por empleado, a propósito sin endpoint
 de listado). Rechazar un descuento anula la venta.
 
+**Agenda de trabajos a domicilio**: `GET /api/ventas/trabajo-domicilio?desde&hasta` (ADMIN) lista por
+`fechaProgramada`; `POST /api/ventas/trabajo-domicilio/{id}/anular` (ADMIN) devuelve el stock. El
+guardado suma `fechaProgramada` y `medioPago`, obligatorio al cerrar. `GET
+/api/reportes/trabajos-domicilio?desde&hasta` (ADMIN) es el reporte propio de trabajos. Los técnicos se
+manejan con `POST /api/empleados/tecnicos` y `PUT /api/empleados/tecnicos/{id}` (`{nombre, comision}`).
+
 | Método | Ruta | Roles | Respuesta |
 |---|---|---|---|
 | GET | `/api/autorizaciones` | ADMIN | `[{tipo, id, monto, motivo, solicitante, fecha, medioPago, totalVenta}]` |

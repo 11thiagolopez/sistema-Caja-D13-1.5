@@ -107,7 +107,7 @@ class CajaServiceTest {
         assertThat(creada.getEstado()).isEqualTo("ABIERTA");
         assertThat(creada.getMontoInicial()).isEqualByComparingTo("1000");
         assertThat(creada.getEmpleadoApertura()).isEqualTo(empleado);
-        assertThat(creada.getFecha()).isEqualTo(LocalDate.now());
+        assertThat(creada.getFecha()).isEqualTo(ZonaNegocio.hoy());
         assertThat(creada.getCotizacionUsdVenta()).isEqualByComparingTo("1234.56");
         assertThat(creada.getProductosActualizados()).isEqualTo(42);
         verify(cotizacionService, never()).registrarManual(any());
@@ -161,7 +161,7 @@ class CajaServiceTest {
     @Test
     void abrirSesion_haySesionAbiertaDeUnDiaAnterior_lanzaExcepcion() {
         SesionCaja sesionDeAyer = new SesionCaja();
-        sesionDeAyer.setFecha(LocalDate.now().minusDays(1));
+        sesionDeAyer.setFecha(ZonaNegocio.hoy().minusDays(1));
         sesionDeAyer.setEstado("ABIERTA");
         when(sesionRepo.findByEstado(eq("ABIERTA"))).thenReturn(Optional.of(sesionDeAyer));
 
@@ -278,7 +278,7 @@ class CajaServiceTest {
 
     @Test
     void calcularResumenPorRango_buscaLosGastosPorCuandoSeRegistraron() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = ZonaNegocio.hoy();
         when(sesionRepo.findByFechaBetweenOrderByFechaAscIdSesionAsc(hoy, hoy)).thenReturn(List.of());
         when(gastoRepo.findByCreadoEnBetween(any(LocalDateTime.class), any(LocalDateTime.class)))
             .thenReturn(List.of(gasto("EFECTIVO", "CAJA", "100")));
@@ -348,7 +348,7 @@ class CajaServiceTest {
      */
     @Test
     void calcularResumenPorRango_sumaMontoInicialDeTodasLasSesionesDelPeriodo() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = ZonaNegocio.hoy();
 
         SesionCaja sesionManana = new SesionCaja();
         sesionManana.setIdSesion(10);
@@ -387,7 +387,7 @@ class CajaServiceTest {
 
     @Test
     void calcularResumenDelDia_noPierdeElMontoInicialAunqueLaUltimaSesionEsteCerrada() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = ZonaNegocio.hoy();
 
         SesionCaja sesionCerrada = new SesionCaja();
         sesionCerrada.setIdSesion(5);

@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -26,8 +27,10 @@ public class VentaResponse {
     private String direccionTrabajo;
     private String descripcionTrabajo;
     private String estadoTrabajo;
+    private LocalDate fechaProgramada;
     private Integer idEmpleadoTecnico;
     private String nombreTecnico;
+    private BigDecimal comisionTecnico;
     // Cliente del catálogo nuevo (cuenta corriente) — distinto de clienteNombre/clienteTelefono
     // arriba, que son texto libre de Trabajo a domicilio. Null si la venta no tiene cliente
     // vinculado (hoy el caso normal en Cobros, que todavía no lo pide).

@@ -8,10 +8,15 @@ import type {
   PuntoGraficoDTO,
   RankingItemDTO,
   RankingMarcasResponse,
+  ReporteTrabajosResponse,
   ResumenVentasDTO,
   VentaResponse,
   VentasPorDiaResponse,
 } from '../types/api'
+
+export function getReporteTrabajos(desde: string, hasta: string): Promise<ReporteTrabajosResponse> {
+  return request<ReporteTrabajosResponse>(`/api/reportes/trabajos-domicilio?desde=${desde}&hasta=${hasta}`)
+}
 
 export function getResumenVentas(desde: string, hasta: string): Promise<ResumenVentasDTO> {
   return request<ResumenVentasDTO>(`/api/reportes/resumen?desde=${desde}&hasta=${hasta}`)

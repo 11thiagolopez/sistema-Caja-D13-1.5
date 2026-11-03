@@ -33,4 +33,7 @@ public class ResumenDiaResponse {
     private List<GastoArqueoResponse> gastos;
     private BigDecimal gastosEfectivoCaja;
     private BigDecimal gastosTransferenciaCaja;
+
+    private BigDecimal totalTrabajosDomicilio;
+    private BigDecimal totalDelDia;
 }

@@ -13,8 +13,9 @@ import { GraficoDona } from '../components/graficos/GraficoDona'
 import { GraficoLineas } from '../components/graficos/GraficoLineas'
 import { TarjetaGrafico } from '../components/graficos/TarjetaGrafico'
 import { COLOR_OTRO_MEDIO_PAGO, COLORES_MEDIO_PAGO, TEMA } from '../components/graficos/tema'
+import { FiltroPeriodo } from '../components/graficos/FiltroPeriodo'
 import { useDatosReporte } from '../hooks/useDatosReporte'
-import { hoyIso, restarDiasIso } from '../utils/date'
+import { rangoDelMes, type Rango } from '../utils/date'
 import {
   formatoDiaCorto,
   formatoDiaLargo,
@@ -24,27 +25,6 @@ import {
   formatoPorcentaje,
 } from '../utils/formato'
 import type { OrdenRanking, RankingItemDTO } from '../types/api'
-
-type Periodo = 'hoy' | 'semana' | 'mes' | 'personalizado'
-
-interface Rango {
-  desde: string
-  hasta: string
-}
-
-const PERIODOS: { id: Periodo; nombre: string }[] = [
-  { id: 'hoy', nombre: 'Hoy' },
-  { id: 'semana', nombre: 'Últimos 7 días' },
-  { id: 'mes', nombre: 'Este mes' },
-  { id: 'personalizado', nombre: 'Personalizado' },
-]
-
-function rangoDe(periodo: Exclude<Periodo, 'personalizado'>): Rango {
-  const hoy = hoyIso()
-  if (periodo === 'hoy') return { desde: hoy, hasta: hoy }
-  if (periodo === 'semana') return { desde: restarDiasIso(hoy, 6), hasta: hoy }
-  return { desde: hoy.slice(0, 8) + '01', hasta: hoy }
-}
 
 function ToggleOrden({ orden, onCambiar }: { orden: OrdenRanking; onCambiar: (orden: OrdenRanking) => void }) {
   return (
@@ -300,10 +280,13 @@ function BalanceFinanciero({ rango }: { rango: Rango }) {
       {balance && (
         <>
           <ul>
-            <li>Ingresos por ventas: {formatoPesos(balance.ingresosPorVentas)}</li>
+            <li>
+              Ingresos totales: {formatoPesos(balance.ingresosPorVentas)} (de trabajos a domicilio:{' '}
+              {formatoPesos(balance.ingresosPorTrabajos)})
+            </li>
             <li>Costo de mercadería: {formatoPesos(balance.costoMercaderia)}</li>
             <li>Gastos operativos (luz, alquiler, etc.): {formatoPesos(balance.gastosOperativos)}</li>
-            <li>Comisiones pagadas a vendedores: {formatoPesos(balance.comisionesPagadas)}</li>
+            <li>Comisiones pagadas: {formatoPesos(balance.comisionesPagadas)}</li>
             <li>
               <strong>Ganancia neta: {formatoPesos(balance.gananciaNeta)}</strong>
             </li>
@@ -322,56 +305,17 @@ function BalanceFinanciero({ rango }: { rango: Rango }) {
 }
 
 export function Reportes() {
-  const [periodo, setPeriodo] = useState<Periodo>('mes')
-  const [rango, setRango] = useState<Rango>(() => rangoDe('mes'))
-  const [borrador, setBorrador] = useState<Rango>(rango)
-
-  function elegirPeriodo(nuevo: Periodo) {
-    setPeriodo(nuevo)
-    if (nuevo === 'personalizado') {
-      setBorrador(rango)
-    } else {
-      setRango(rangoDe(nuevo))
-    }
-  }
-
-  // Un rango a medio cargar o invertido no se aplica: los gráficos quedan en el último válido.
-  function cambiarBorrador(cambio: Partial<Rango>) {
-    const nuevo = { ...borrador, ...cambio }
-    setBorrador(nuevo)
-    if (nuevo.desde && nuevo.hasta && nuevo.desde <= nuevo.hasta) {
-      setRango(nuevo)
-    }
-  }
-
-  const rangoInvalido = periodo === 'personalizado' && !!borrador.desde && !!borrador.hasta && borrador.desde > borrador.hasta
+  const [rango, setRango] = useState<Rango>(rangoDelMes)
 
   return (
     <div className="reportes">
       <h2>Reportes</h2>
 
-      <div className="reportes-filtro">
-        <div className="reportes-opciones" role="group" aria-label="Período">
-          {PERIODOS.map(({ id, nombre }) => (
-            <button key={id} type="button" aria-pressed={periodo === id} onClick={() => elegirPeriodo(id)}>
-              {nombre}
-            </button>
-          ))}
-        </div>
-        {periodo === 'personalizado' && (
-          <div className="reportes-rango">
-            <label>
-              Desde
-              <input type="date" max={hoyIso()} value={borrador.desde} onChange={(e) => cambiarBorrador({ desde: e.target.value })} />
-            </label>
-            <label>
-              Hasta
-              <input type="date" max={hoyIso()} value={borrador.hasta} onChange={(e) => cambiarBorrador({ hasta: e.target.value })} />
-            </label>
-          </div>
-        )}
-      </div>
-      {rangoInvalido && <p className="error">La fecha desde no puede ser posterior a la fecha hasta.</p>}
+      <FiltroPeriodo rango={rango} onCambiar={setRango} />
+
+      <p className="reportes-aclaracion">
+        Ventas de mostrador. Los trabajos a domicilio tienen su propio reporte y solo se suman en el balance.
+      </p>
 
       <TarjetasResumen rango={rango} />
 

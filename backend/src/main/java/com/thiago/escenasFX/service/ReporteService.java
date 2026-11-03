@@ -52,9 +52,25 @@ public class ReporteService {
         this.notaCreditoRepo = notaCreditoRepo;
     }
 
-    public List<ProductoRankingDTO> productosGanadores(LocalDate desde, LocalDate hasta, int limit) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
+    // Los trabajos a domicilio tienen su propio reporte (ReporteTrabajosService). Solo cuentan acá
+    // en Comisiones y en el Balance, que es el resultado de todo el negocio.
+    private List<Venta> ventasDeMostrador(LocalDate desde, LocalDate hasta) {
+        return confirmadas(desde, hasta).stream()
+            .filter(v -> !esTrabajo(v))
+            .toList();
+    }
+
+    private List<Venta> confirmadas(LocalDate desde, LocalDate hasta) {
+        return ventaRepo.findByFechaBetweenAndEstado(ZonaNegocio.inicioDelDia(desde), ZonaNegocio.finDelDia(hasta),
             ESTADO_CONFIRMADA);
+    }
+
+    private boolean esTrabajo(Venta v) {
+        return "DOMICILIO".equals(v.getTipoVenta());
+    }
+
+    public List<ProductoRankingDTO> productosGanadores(LocalDate desde, LocalDate hasta, int limit) {
+        List<Venta> ventas = ventasDeMostrador(desde, hasta);
 
         // Los ítems manuales (trabajos sin producto, ej. "Apertura de cerradura") no rankean acá:
         // no hay un producto del catálogo al que atribuirles la venta.
@@ -82,8 +98,7 @@ public class ReporteService {
     }
 
     public List<MarcaRankingDTO> ventasPorMarca(LocalDate desde, LocalDate hasta) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
-            ESTADO_CONFIRMADA);
+        List<Venta> ventas = ventasDeMostrador(desde, hasta);
 
         // Los ítems manuales no tienen marca — se excluyen del ranking (ver productosGanadores).
         List<DetalleVenta> detalles = ventas.stream()
@@ -113,54 +128,53 @@ public class ReporteService {
     }
 
     /**
-     * Comisión: % configurado en Empleado.comision sobre una base que depende del tipo de línea.
-     * Artículo/copia (venta de mostrador o dentro de un trabajo a domicilio) → margen (precio de
-     * venta - costo) atribuido a quien registró/cobró la venta, como siempre. Mano de obra
-     * ("SERVICIO") de un trabajo a domicilio → el monto BRUTO de esa línea, sin restar costo,
-     * atribuido al técnico asignado — nunca a quien cobró ni mezclado con productos.
+     * Comisión: % configurado en Empleado.comision sobre una base que depende del tipo de venta.
+     * Mostrador → margen (precio de venta - costo) atribuido a quien registró/cobró la venta. Trabajo
+     * a domicilio → solo la mano de obra, al técnico asignado (ver CuentasTrabajo): sus artículos no
+     * pagan comisión a nadie, y sin técnico todo queda para el negocio.
      */
     public List<ComisionEmpleadoDTO> comisionesPorVendedor(LocalDate desde, LocalDate hasta) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
-            ESTADO_CONFIRMADA);
-
         Map<Integer, Empleado> empleadosPorId = new LinkedHashMap<>();
         Map<Integer, BigDecimal> gananciaPorId = new LinkedHashMap<>();
+        Map<Integer, BigDecimal> comisionPorId = new LinkedHashMap<>();
         Map<Integer, Set<Integer>> ventasPorId = new LinkedHashMap<>();
 
-        for (Venta v : ventas) {
-            for (DetalleVenta d : v.getDetalles()) {
-                Empleado responsable;
-                BigDecimal monto;
-                if ("SERVICIO".equals(d.getTipo()) && v.getEmpleadoTecnico() != null) {
-                    responsable = v.getEmpleadoTecnico();
-                    monto = d.getPrecioUnitario().multiply(BigDecimal.valueOf(d.getCantidad()));
-                } else if (v.getEmpleado() != null) {
-                    responsable = v.getEmpleado();
-                    monto = margenDelDetalle(d);
-                } else {
+        for (Venta v : confirmadas(desde, hasta)) {
+            Empleado responsable = esTrabajo(v) ? v.getEmpleadoTecnico() : v.getEmpleado();
+            if (responsable == null) {
+                continue;
+            }
+            BigDecimal ganancia;
+            BigDecimal comision;
+            if (esTrabajo(v)) {
+                ganancia = CuentasTrabajo.manoDeObra(v);
+                if (ganancia.signum() == 0) {
                     continue;
                 }
-
-                Integer idResponsable = responsable.getIdEmpleado();
-                empleadosPorId.putIfAbsent(idResponsable, responsable);
-                gananciaPorId.merge(idResponsable, monto, BigDecimal::add);
-                ventasPorId.computeIfAbsent(idResponsable, k -> new LinkedHashSet<>()).add(v.getIdVenta());
+                comision = CuentasTrabajo.paraTecnico(v);
+            } else {
+                ganancia = v.getDetalles().stream()
+                    .map(this::margenDelDetalle)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal porcentaje = responsable.getComision() != null ? responsable.getComision() : BigDecimal.ZERO;
+                comision = ganancia.multiply(porcentaje).divide(BigDecimal.valueOf(100));
             }
+
+            Integer idResponsable = responsable.getIdEmpleado();
+            empleadosPorId.putIfAbsent(idResponsable, responsable);
+            gananciaPorId.merge(idResponsable, ganancia, BigDecimal::add);
+            comisionPorId.merge(idResponsable, comision, BigDecimal::add);
+            ventasPorId.computeIfAbsent(idResponsable, k -> new LinkedHashSet<>()).add(v.getIdVenta());
         }
 
         return gananciaPorId.entrySet().stream()
-            .map(entry -> aComisionEmpleado(empleadosPorId.get(entry.getKey()), entry.getValue(),
-                ventasPorId.get(entry.getKey()).size()))
+            .map(entry -> {
+                Empleado empleado = empleadosPorId.get(entry.getKey());
+                return new ComisionEmpleadoDTO(empleado.getIdEmpleado(), empleado.getNombre(), empleado.getComision(),
+                    entry.getValue(), comisionPorId.get(entry.getKey()), ventasPorId.get(entry.getKey()).size());
+            })
             .sorted(Comparator.comparing(ComisionEmpleadoDTO::getComisionCalculada).reversed())
             .toList();
-    }
-
-    private ComisionEmpleadoDTO aComisionEmpleado(Empleado empleado, BigDecimal ganancia, int cantidadVentas) {
-        BigDecimal porcentaje = empleado.getComision() != null ? empleado.getComision() : BigDecimal.ZERO;
-        BigDecimal comisionCalculada = ganancia.multiply(porcentaje).divide(BigDecimal.valueOf(100));
-
-        return new ComisionEmpleadoDTO(empleado.getIdEmpleado(), empleado.getNombre(), empleado.getComision(),
-            ganancia, comisionCalculada, cantidadVentas);
     }
 
     private BigDecimal margenDelDetalle(DetalleVenta d) {
@@ -189,16 +203,13 @@ public class ReporteService {
     }
 
     public List<Venta> ventasPorVendedor(LocalDate desde, LocalDate hasta, Integer idEmpleado) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
-            ESTADO_CONFIRMADA);
-        return ventas.stream()
+        return ventasDeMostrador(desde, hasta).stream()
             .filter(v -> v.getEmpleado() != null && v.getEmpleado().getIdEmpleado().equals(idEmpleado))
             .toList();
     }
 
     public List<FormaPagoResumenDTO> ventasPorFormaPago(LocalDate desde, LocalDate hasta) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
-            ESTADO_CONFIRMADA);
+        List<Venta> ventas = ventasDeMostrador(desde, hasta);
 
         return ventas.stream()
             .collect(Collectors.groupingBy(v -> v.getMedioPago() == null ? "Sin especificar" : v.getMedioPago()))
@@ -217,13 +228,18 @@ public class ReporteService {
      * Asiento contable simplificado: Ganancia Neta = Ingresos por Ventas - Costo de Mercadería
      * - Gastos Operativos (tabla Gasto: alquiler, luz, etc.) - Comisiones pagadas a vendedores.
      * Los retiros de caja (MovimientoCaja) quedan fuera de este cálculo: son movimiento de
-     * efectivo/arqueo, no un gasto del negocio (ver Reportes/Caja para el arqueo).
+     * efectivo/arqueo, no un gasto del negocio (ver Reportes/Caja para el arqueo). Incluye los trabajos
+     * a domicilio: es el resultado de todo el negocio.
      */
     public BalanceFinancieroResponse balanceFinanciero(LocalDate desde, LocalDate hasta) {
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desde.atStartOfDay(), hasta.atTime(23, 59, 59),
-            ESTADO_CONFIRMADA);
+        List<Venta> ventas = confirmadas(desde, hasta);
 
         BigDecimal ingresosPorVentas = ventas.stream()
+            .map(Venta::getTotalVenta)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal ingresosPorTrabajos = ventas.stream()
+            .filter(this::esTrabajo)
             .map(Venta::getTotalVenta)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -238,7 +254,7 @@ public class ReporteService {
         // verdad en este período, volvió al depósito). Nunca se tocan Venta/DetalleVenta: la nota
         // de crédito es un documento aparte, ver clase NotaCredito.
         List<NotaCredito> notasCredito = notaCreditoRepo.findByFechaBetweenOrderByFechaDesc(
-            desde.atStartOfDay(), hasta.atTime(23, 59, 59));
+            ZonaNegocio.inicioDelDia(desde), ZonaNegocio.finDelDia(hasta));
 
         BigDecimal totalNotasCredito = notasCredito.stream()
             .map(NotaCredito::getMontoTotal)
@@ -268,6 +284,6 @@ public class ReporteService {
             .subtract(comisionesPagadas);
 
         return new BalanceFinancieroResponse(desde, hasta, ingresosPorVentas, costoMercaderia, gastosOperativos,
-            comisionesPagadas, gananciaNeta);
+            comisionesPagadas, gananciaNeta, ingresosPorTrabajos);
     }
 }

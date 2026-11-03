@@ -24,14 +24,17 @@ public interface ReporteGraficosRepository extends Repository<Venta, Integer> {
     // en una venta de total 0 (la línea queda en null y SUM la ignora).
     String MONTO_NETO = "coalesce(sum(d.subtotal * v.totalVenta / nullif(v.totalVenta + v.descuento, 0)), 0)";
 
-    String VENTAS_DEL_PERIODO = "v.estado = 'CONFIRMADA' and v.fecha >= :inicio and v.fecha < :fin";
+    // Los trabajos a domicilio tienen su propio reporte (ReporteTrabajosService).
+    String VENTAS_DEL_PERIODO = "v.estado = 'CONFIRMADA' and v.tipoVenta <> 'DOMICILIO'"
+        + " and v.fecha >= :inicio and v.fecha < :fin";
 
     String DETALLES_DE_CATALOGO = "from DetalleVenta d join d.venta v join d.producto p where " + VENTAS_DEL_PERIODO;
 
     @Query("select coalesce(sum(v.totalVenta), 0), count(v) from Venta v where " + VENTAS_DEL_PERIODO)
     List<Object[]> totalesDeVentas(@Param("inicio") LocalDateTime inicio, @Param("fin") LocalDateTime fin);
 
-    @Query("select coalesce(sum(d.cantidad), 0) from DetalleVenta d join d.venta v where " + VENTAS_DEL_PERIODO)
+    @Query("select coalesce(sum(d.cantidad), 0) from DetalleVenta d join d.venta v where d.tipo <> 'SERVICIO' and "
+        + VENTAS_DEL_PERIODO)
     Number unidadesVendidas(@Param("inicio") LocalDateTime inicio, @Param("fin") LocalDateTime fin);
 
     @Query("select upper(trim(p.marca)), " + MONTO_NETO + ", sum(d.cantidad) " + DETALLES_DE_CATALOGO
@@ -60,7 +63,7 @@ public interface ReporteGraficosRepository extends Repository<Venta, Integer> {
                     AT TIME ZONE CAST(:zonaNegocio AS varchar)) AS date),
                SUM(v.total_venta)
         FROM ventas v
-        WHERE v.estado = 'CONFIRMADA' AND v.fecha >= :inicio AND v.fecha < :fin
+        WHERE v.estado = 'CONFIRMADA' AND v.tipo_venta <> 'DOMICILIO' AND v.fecha >= :inicio AND v.fecha < :fin
         GROUP BY 1
         """, nativeQuery = true)
     List<Object[]> totalesPorDia(@Param("zonaGuardada") String zonaGuardada, @Param("zonaNegocio") String zonaNegocio,

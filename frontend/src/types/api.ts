@@ -270,8 +270,10 @@ export interface VentaResponse {
   direccionTrabajo: string | null
   descripcionTrabajo: string | null
   estadoTrabajo: EstadoTrabajo | null
+  fechaProgramada: string | null
   idEmpleadoTecnico: number | null
   nombreTecnico: string | null
+  comisionTecnico: number | null
   // Cliente del catálogo nuevo (cuenta corriente) — distinto de clienteNombre/clienteTelefono
   // arriba, que son texto libre de Trabajo a domicilio.
   idCliente: number | null
@@ -332,6 +334,8 @@ export interface TrabajoDomicilioRequest {
   direccionTrabajo?: string
   descripcionTrabajo?: string
   estadoTrabajo?: EstadoTrabajo
+  fechaProgramada: string
+  medioPago: MedioPago
   detalles: DetalleVentaRequest[]
   cerrar: boolean
 }
@@ -456,6 +460,9 @@ export interface ResumenDiaResponse {
   gastos: GastoArqueoResponse[]
   gastosEfectivoCaja: number
   gastosTransferenciaCaja: number
+  // Fuera del arqueo: lo cobrado en trabajos a domicilio, y eso más lo cobrado en mostrador.
+  totalTrabajosDomicilio: number
+  totalDelDia: number
 }
 
 export interface ResumenSesionResponse {
@@ -513,6 +520,47 @@ export interface BalanceFinancieroResponse {
   gastosOperativos: number
   comisionesPagadas: number
   gananciaNeta: number
+  ingresosPorTrabajos: number
+}
+
+export interface TecnicoRequest {
+  nombre: string
+  comision: number
+}
+
+// total = paraTecnicos + paraNegocio. gananciaNegocio además le resta el costo de los artículos.
+export interface ReporteTrabajosResponse {
+  cantidadTrabajos: number
+  total: number
+  manoDeObra: number
+  articulos: number
+  paraTecnicos: number
+  paraNegocio: number
+  costoArticulos: number
+  gananciaNegocio: number
+  porTecnico: {
+    idEmpleado: number | null
+    nombre: string
+    cantidadTrabajos: number
+    manoDeObra: number
+    paraTecnico: number
+    paraNegocio: number
+  }[]
+  porDia: PuntoGraficoDTO[]
+  porMedioPago: PuntoGraficoDTO[]
+  trabajos: {
+    idVenta: number
+    fecha: string
+    direccion: string | null
+    cliente: string | null
+    tecnico: string | null
+    medioPago: string
+    total: number
+    manoDeObra: number
+    articulos: number
+    paraTecnico: number
+    paraNegocio: number
+  }[]
 }
 
 export interface GastoRequest {

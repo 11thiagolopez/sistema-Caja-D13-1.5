@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -17,7 +18,13 @@ import jakarta.persistence.LockModeType;
 public interface VentaRepository extends JpaRepository<Venta, Integer> {
     List<Venta> findByFechaBetween(LocalDateTime desde, LocalDateTime hasta);
 
+    List<Venta> findByTipoVentaAndEstadoNotAndFechaProgramadaBetweenOrderByFechaProgramadaAscIdVentaAsc(String tipoVenta,
+        String estadoExcluido, LocalDate desde, LocalDate hasta);
+
     List<Venta> findByFechaBetweenAndEstado(LocalDateTime desde, LocalDateTime hasta, String estado);
+
+    List<Venta> findByTipoVentaAndEstadoAndFechaBetweenOrderByFechaDesc(String tipoVenta, String estado,
+        LocalDateTime desde, LocalDateTime hasta);
 
     List<Venta> findBySesion_IdSesionAndEstado(Integer idSesion, String estado);
 

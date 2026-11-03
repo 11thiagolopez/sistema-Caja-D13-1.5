@@ -528,6 +528,197 @@ section {
   font-weight: 600;
 }
 
+/* Trabajos a domicilio: el color sale del estado (ver utils/estadoTrabajo.ts). */
+.trabajo-agendado {
+  --color-trabajo: var(--accent);
+}
+
+.trabajo-en-curso {
+  --color-trabajo: var(--aviso);
+}
+
+.trabajo-sin-cobrar {
+  --color-trabajo: var(--error);
+}
+
+.trabajo-cobrado {
+  --color-trabajo: var(--ok);
+}
+
+.trabajo-anulado {
+  --color-trabajo: var(--apagado);
+}
+
+.tecnico-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  max-width: 640px;
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid var(--table-border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+
+.tecnico-acciones {
+  margin-top: 0;
+}
+
+.reportes-aclaracion {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.calendario-trabajos {
+  max-width: 640px;
+}
+
+.calendario-mes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.calendario-mes strong {
+  flex: 1;
+  font-size: 18px;
+  text-align: center;
+}
+
+.calendario-mes strong::first-letter {
+  text-transform: uppercase;
+}
+
+.calendario-grilla {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendario-dia-semana {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendario-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+}
+
+.calendario-dia-hoy {
+  border: 2px solid var(--accent);
+  font-weight: 700;
+}
+
+.calendario-dia-elegido {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.calendario-puntos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 12px;
+}
+
+.trabajo-punto {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--bg-alt);
+  border-radius: 50%;
+  background: var(--color-trabajo);
+}
+
+.calendario-mas {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.trabajos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+  margin-top: 12px;
+}
+
+.trabajo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--table-border);
+  border-left: 6px solid var(--color-trabajo);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  color: var(--text);
+  text-align: left;
+}
+
+.trabajo-datos {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.trabajo-direccion {
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.trabajo-detalle {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.trabajo-estado {
+  flex-shrink: 0;
+  max-width: 45%;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: var(--color-trabajo);
+  color: var(--accent-contrast);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.trabajo-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0 4px;
+}
+
+.trabajo-encabezado h2 {
+  margin: 0;
+}
+
+.trabajo-campos {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
 .boton-link {
   padding: 0;
   background: none;

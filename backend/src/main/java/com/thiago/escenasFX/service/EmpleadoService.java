@@ -2,6 +2,7 @@ package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.thiago.escenasFX.dto.EmpleadoRequest;
 import com.thiago.escenasFX.dto.EmpleadoUpdateRequest;
+import com.thiago.escenasFX.dto.TecnicoRequest;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 
@@ -63,6 +65,33 @@ public class EmpleadoService {
             empleado.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         }
         return empleadoRepo.save(empleado);
+    }
+
+    /**
+     * Un técnico no entra al sistema: se le generan usuario y contraseña al azar, que nadie conoce,
+     * solo porque la tabla los exige.
+     */
+    @Transactional
+    public Empleado crearTecnico(TecnicoRequest req) {
+        Empleado tecnico = new Empleado();
+        tecnico.setNombre(req.getNombre());
+        tecnico.setUsuario("tecnico-" + UUID.randomUUID());
+        tecnico.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        tecnico.setRol("TECNICO");
+        tecnico.setComision(req.getComision());
+        tecnico.setActivo(true);
+        return empleadoRepo.save(tecnico);
+    }
+
+    @Transactional
+    public Empleado actualizarTecnico(Integer id, TecnicoRequest req) {
+        Empleado tecnico = obtenerPorId(id);
+        if (!"TECNICO".equals(tecnico.getRol())) {
+            throw new IllegalArgumentException("El empleado #" + id + " no es un técnico");
+        }
+        tecnico.setNombre(req.getNombre());
+        tecnico.setComision(req.getComision());
+        return empleadoRepo.save(tecnico);
     }
 
     /**

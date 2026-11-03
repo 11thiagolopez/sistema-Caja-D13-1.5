@@ -13,6 +13,8 @@ import { Gastos } from './pages/Gastos'
 import { ComprasNueva } from './pages/ComprasNueva'
 import { ComprasConsulta } from './pages/ComprasConsulta'
 import { PagosProveedores } from './pages/PagosProveedores'
+import { ReporteTrabajos } from './pages/ReporteTrabajos'
+import { Tecnicos } from './pages/Tecnicos'
 import { Vendedores } from './pages/Vendedores'
 import { ComisionesVendedores } from './pages/ComisionesVendedores'
 import { VentasPorVendedor } from './pages/VentasPorVendedor'
@@ -49,6 +51,8 @@ function App() {
             <Route path="/reportes" element={<Reportes />} />
             <Route path="/reportes/marcas" element={<VentasPorMarca />} />
             <Route path="/reportes/forma-pago" element={<VentasPorFormaPago />} />
+            <Route path="/reportes/trabajos" element={<ReporteTrabajos />} />
+            <Route path="/tecnicos" element={<Tecnicos />} />
             <Route path="/gastos" element={<Gastos />} />
             <Route path="/compras/nueva" element={<ComprasNueva />} />
             <Route path="/compras" element={<ComprasConsulta />} />

@@ -25,7 +25,7 @@ import com.thiago.escenasFX.dto.VentasPorDiaResponse;
 import com.thiago.escenasFX.repository.ReporteGraficosRepository;
 
 /**
- * Datos de los gráficos de Reportes. Solo cuenta ventas CONFIRMADAS. A propósito no descuenta notas
+ * Datos de los gráficos de Reportes. Solo cuenta ventas de mostrador CONFIRMADAS. A propósito no descuenta notas
  * de crédito (son ventas brutas del período, a diferencia de ReporteService.balanceFinanciero).
  *
  * Zona horaria: Venta.fecha se guarda con LocalDateTime.now(), es decir en la zona de la JVM, que

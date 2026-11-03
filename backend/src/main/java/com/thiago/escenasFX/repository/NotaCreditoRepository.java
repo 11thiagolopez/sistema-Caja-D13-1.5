@@ -10,4 +10,6 @@ import com.thiago.escenasFX.model.NotaCredito;
 public interface NotaCreditoRepository extends JpaRepository<NotaCredito, Integer> {
 
     List<NotaCredito> findByFechaBetweenOrderByFechaDesc(LocalDateTime desde, LocalDateTime hasta);
+
+    boolean existsByVentaOriginalIdVenta(Integer idVenta);
 }

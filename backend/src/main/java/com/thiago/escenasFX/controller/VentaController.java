@@ -35,6 +35,7 @@ import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 import com.thiago.escenasFX.service.PushService;
 import com.thiago.escenasFX.service.VentaService;
+import com.thiago.escenasFX.service.ZonaNegocio;
 
 import jakarta.validation.Valid;
 
@@ -111,7 +112,7 @@ public class VentaController {
     public List<VentaResponse> listarPorRango(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
-        List<Venta> ventas = ventaRepo.findByFechaBetween(desde.atStartOfDay(), hasta.atTime(23, 59, 59));
+        List<Venta> ventas = ventaRepo.findByFechaBetween(ZonaNegocio.inicioDelDia(desde), ZonaNegocio.finDelDia(hasta));
         return ventas.stream().map(VentaMapper::toResponse).toList();
     }
 
@@ -146,6 +147,21 @@ public class VentaController {
             .header(HttpHeaders.CONTENT_DISPOSITION,
                 ContentDisposition.attachment().filename("comprobante-" + id + ".pdf").build().toString())
             .body(pdf);
+    }
+
+    @GetMapping("/trabajo-domicilio")
+    public List<VentaResponse> agendaDeTrabajos(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return ventaRepo.findByTipoVentaAndEstadoNotAndFechaProgramadaBetweenOrderByFechaProgramadaAscIdVentaAsc(
+                "DOMICILIO", "ANULADA", desde, hasta)
+            .stream().map(VentaMapper::toResponse).toList();
+    }
+
+    @PostMapping("/trabajo-domicilio/{id}/anular")
+    public VentaResponse anularTrabajoDomicilio(@PathVariable Integer id, Authentication authentication) {
+        return VentaMapper.toResponse(
+            ventaService.anularTrabajoDomicilio(id, RolAutenticado.empleado(authentication, empleadoRepo)));
     }
 
     @PostMapping("/trabajo-domicilio")

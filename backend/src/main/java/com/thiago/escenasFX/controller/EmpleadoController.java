@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.thiago.escenasFX.dto.EmpleadoRequest;
 import com.thiago.escenasFX.dto.EmpleadoResponse;
 import com.thiago.escenasFX.dto.EmpleadoUpdateRequest;
+import com.thiago.escenasFX.dto.TecnicoRequest;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.service.EmpleadoService;
 
@@ -44,6 +45,16 @@ public class EmpleadoController {
     @PutMapping("/{id}")
     public EmpleadoResponse actualizar(@PathVariable Integer id, @Valid @RequestBody EmpleadoUpdateRequest request) {
         return toResponse(empleadoService.actualizar(id, request));
+    }
+
+    @PostMapping("/tecnicos")
+    public ResponseEntity<EmpleadoResponse> crearTecnico(@Valid @RequestBody TecnicoRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(empleadoService.crearTecnico(request)));
+    }
+
+    @PutMapping("/tecnicos/{id}")
+    public EmpleadoResponse actualizarTecnico(@PathVariable Integer id, @Valid @RequestBody TecnicoRequest request) {
+        return toResponse(empleadoService.actualizarTecnico(id, request));
     }
 
     @DeleteMapping("/{id}")

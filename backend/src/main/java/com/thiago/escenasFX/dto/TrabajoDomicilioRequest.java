@@ -1,5 +1,6 @@
 package com.thiago.escenasFX.dto;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -34,6 +35,12 @@ public class TrabajoDomicilioRequest {
 
     // AGENDADO | EN_CURSO | COMPLETADO — "COBRADO" lo fija el backend cuando cerrar=true.
     private String estadoTrabajo;
+
+    // Día de la agenda. Sin valor: un trabajo nuevo va a hoy y uno existente conserva el que tenía.
+    private LocalDate fechaProgramada;
+
+    // EFECTIVO | TRANSFERENCIA | TARJETA. Obligatorio si cerrar=true: la caja suma por medio de pago.
+    private String medioPago;
 
     @Valid
     private List<DetalleVentaRequest> detalles;

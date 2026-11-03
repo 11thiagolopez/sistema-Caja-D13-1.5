@@ -142,7 +142,9 @@ public class CajaController {
             resumen.getPagosProveedorTransferenciaCaja(),
             resumen.getGastos().stream().map(this::toResponse).toList(),
             resumen.getGastosEfectivoCaja(),
-            resumen.getGastosTransferenciaCaja());
+            resumen.getGastosTransferenciaCaja(),
+            resumen.getTotalTrabajosDomicilio(),
+            resumen.getTotalDelDia());
     }
 
     private GastoArqueoResponse toResponse(Gasto g) {

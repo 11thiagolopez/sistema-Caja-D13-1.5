@@ -17,11 +17,13 @@ import com.thiago.escenasFX.dto.ProductoRankingDTO;
 import com.thiago.escenasFX.dto.PuntoGraficoDTO;
 import com.thiago.escenasFX.dto.RankingItemDTO;
 import com.thiago.escenasFX.dto.RankingMarcasResponse;
+import com.thiago.escenasFX.dto.ReporteTrabajosResponse;
 import com.thiago.escenasFX.dto.ResumenVentasDTO;
 import com.thiago.escenasFX.dto.VentaResponse;
 import com.thiago.escenasFX.dto.VentasPorDiaResponse;
 import com.thiago.escenasFX.service.ReporteGraficosService;
 import com.thiago.escenasFX.service.ReporteService;
+import com.thiago.escenasFX.service.ReporteTrabajosService;
 
 /**
  * Protegido exclusivamente para ADMIN via SecurityConfig (matcher "/api/reportes/**").
@@ -32,10 +34,20 @@ public class ReportesController {
 
     private final ReporteService reporteService;
     private final ReporteGraficosService reporteGraficosService;
+    private final ReporteTrabajosService reporteTrabajosService;
 
-    public ReportesController(ReporteService reporteService, ReporteGraficosService reporteGraficosService) {
+    public ReportesController(ReporteService reporteService, ReporteGraficosService reporteGraficosService,
+            ReporteTrabajosService reporteTrabajosService) {
         this.reporteService = reporteService;
         this.reporteGraficosService = reporteGraficosService;
+        this.reporteTrabajosService = reporteTrabajosService;
+    }
+
+    @GetMapping("/trabajos-domicilio")
+    public ReporteTrabajosResponse trabajosDomicilio(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reporteTrabajosService.reporte(desde, hasta);
     }
 
     @GetMapping("/productos-ganadores")

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +19,9 @@ import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.repository.FacturaFiscalRepository;
 import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteClienteRepository;
+import com.thiago.escenasFX.repository.NotaCreditoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
@@ -28,6 +31,8 @@ public class VentaService {
 
     private static final String NOMBRE_LOCAL = "D13 Distribuidora";
     private static final String MEDIO_PAGO_SALDO = "SALDO_CUENTA_CORRIENTE";
+    private static final Set<String> MEDIOS_DE_COBRO = Set.of("EFECTIVO", "TRANSFERENCIA", "TARJETA");
+    private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CURSO", "COMPLETADO");
 
     private final VentaRepository ventaRepo;
     private final ProductoRepository productoRepo;
@@ -38,11 +43,16 @@ public class VentaService {
     private final NotificacionService notificacionService;
     private final ClienteRepository clienteRepo;
     private final MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
+    private final FacturaFiscalRepository facturaRepo;
+    private final NotaCreditoRepository notaCreditoRepo;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
             EmpleadoRepository empleadoRepo, EmailService emailService,
             SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService,
-            ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo) {
+            ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo,
+            FacturaFiscalRepository facturaRepo, NotaCreditoRepository notaCreditoRepo) {
+        this.facturaRepo = facturaRepo;
+        this.notaCreditoRepo = notaCreditoRepo;
         this.ventaRepo = ventaRepo;
         this.productoRepo = productoRepo;
         this.empleadoRepo = empleadoRepo;
@@ -217,14 +227,7 @@ public class VentaService {
     public Venta rechazarDescuento(Integer idVenta, Empleado admin) {
         Venta venta = obtenerPendienteConLock(idVenta);
 
-        for (DetalleVenta detalle : venta.getDetalles()) {
-            if (detalle.getProducto() != null) {
-                Producto p = productoRepo.buscarPorIdConLock(detalle.getProducto().getIdProducto())
-                    .orElseThrow(() -> new IllegalArgumentException("Producto no existe"));
-                p.setStockActual(p.getStockActual() + detalle.getCantidad());
-                productoRepo.save(p);
-            }
-        }
+        devolverStock(venta);
 
         BigDecimal saldoAplicado = venta.getMontoSaldoAplicado();
         if (saldoAplicado != null && saldoAplicado.compareTo(BigDecimal.ZERO) > 0) {
@@ -242,6 +245,17 @@ public class VentaService {
         venta.setResueltoPor(admin);
         venta.setResueltoEn(LocalDateTime.now());
         return ventaRepo.save(venta);
+    }
+
+    private void devolverStock(Venta venta) {
+        for (DetalleVenta detalle : venta.getDetalles()) {
+            if (detalle.getProducto() != null) {
+                Producto p = productoRepo.buscarPorIdConLock(detalle.getProducto().getIdProducto())
+                    .orElseThrow(() -> new IllegalArgumentException("Producto no existe"));
+                p.setStockActual(p.getStockActual() + detalle.getCantidad());
+                productoRepo.save(p);
+            }
+        }
     }
 
     // Con lock: sin esto, dos ADMIN resolviendo a la vez podían devolver dos veces el stock y el saldo.
@@ -331,29 +345,39 @@ public class VentaService {
      * cero ítems (un trabajo recién agendado puede no tener artículos ni mano de obra todavía) y
      * permite reabrir uno existente: en ese caso primero devuelve el stock de sus líneas viejas
      * con producto antes de reemplazarlas, para no descuadrar el inventario al editar cantidades.
+     * Los artículos de un trabajo agendado quedan reservados desde que se cargan.
+     *
+     * Solo se edita lo que todavía no se cobró: volver a guardar un trabajo cobrado lo sacaría de
+     * los reportes. Al cerrar, "fecha" pasa a ser el momento del cobro, porque los reportes cuentan
+     * por esa fecha y un trabajo puede cobrarse días después de cargarlo. No se vincula a la sesión
+     * de caja: la plata de los trabajos no pasa por el arqueo (decisión del dueño).
      */
     @Transactional
     public Venta guardarTrabajoDomicilio(TrabajoDomicilioRequest req, Empleado empleado) {
+        if (req.getEstadoTrabajo() != null && !ESTADOS_DE_BORRADOR.contains(req.getEstadoTrabajo())) {
+            throw new IllegalArgumentException("Estado de trabajo inválido: " + req.getEstadoTrabajo()
+                + ". Un trabajo queda cobrado solo con \"Cerrar y cobrar\"");
+        }
+        if (req.getMedioPago() != null && !MEDIOS_DE_COBRO.contains(req.getMedioPago())) {
+            throw new IllegalArgumentException("Medio de pago inválido: " + req.getMedioPago());
+        }
+
         Venta venta;
         if (req.getIdVenta() != null) {
-            venta = ventaRepo.findById(req.getIdVenta())
-                .orElseThrow(() -> new IllegalArgumentException("Trabajo no existe: " + req.getIdVenta()));
-            if (!"DOMICILIO".equals(venta.getTipoVenta())) {
-                throw new IllegalArgumentException("La venta #" + req.getIdVenta() + " no es un trabajo a domicilio");
-            }
-            for (DetalleVenta viejo : venta.getDetalles()) {
-                if (viejo.getProducto() != null) {
-                    Producto p = viejo.getProducto();
-                    p.setStockActual(p.getStockActual() + viejo.getCantidad());
-                    productoRepo.save(p);
-                }
-            }
+            venta = obtenerTrabajoEditableConLock(req.getIdVenta());
+            devolverStock(venta);
             venta.getDetalles().clear();
         } else {
             venta = new Venta();
             venta.setTipoVenta("DOMICILIO");
         }
 
+        if (req.getFechaProgramada() != null) {
+            venta.setFechaProgramada(req.getFechaProgramada());
+        } else if (venta.getFechaProgramada() == null) {
+            venta.setFechaProgramada(ZonaNegocio.hoy());
+        }
+        venta.setMedioPago(req.getMedioPago());
         venta.setEmpleado(empleado);
         venta.setClienteNombre(req.getClienteNombre());
         venta.setClienteTelefono(req.getClienteTelefono());
@@ -410,14 +434,61 @@ public class VentaService {
             if (venta.getDetalles().isEmpty() || total.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Un trabajo no se puede cerrar y cobrar sin al menos un ítem");
             }
-            sesionRepo.findByEstado("ABIERTA").ifPresent(venta::setSesion);
+            if (req.getMedioPago() == null) {
+                throw new IllegalArgumentException("Para cerrar y cobrar un trabajo hay que indicar el medio de pago");
+            }
+            venta.setFecha(LocalDateTime.now());
+            venta.setComisionTecnico(venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getComision() : null);
             venta.setEstadoTrabajo("COBRADO");
             venta.setEstado("CONFIRMADA");
         } else {
-            venta.setEstadoTrabajo(req.getEstadoTrabajo());
+            venta.setEstadoTrabajo(req.getEstadoTrabajo() != null ? req.getEstadoTrabajo() : "AGENDADO");
             venta.setEstado("EN_PROGRESO");
         }
 
         return ventaRepo.save(venta);
+    }
+
+    /**
+     * "Eliminar trabajo" en pantalla, cobrado o no: devuelve el stock y sale de la agenda y de los
+     * reportes, que solo miran CONFIRMADA. La fila queda en ANULADA para que siga auditable. Con una
+     * factura o nota de crédito no se puede: esos documentos ya existen y hay que resolverlos aparte.
+     */
+    @Transactional
+    public Venta anularTrabajoDomicilio(Integer idVenta, Empleado admin) {
+        Venta venta = obtenerTrabajoConLock(idVenta);
+        if ("ANULADA".equals(venta.getEstado())) {
+            throw new IllegalStateException("El trabajo #" + idVenta + " ya está eliminado");
+        }
+        boolean tieneFactura = facturaRepo.findByVentaIdVenta(idVenta)
+            .filter(factura -> !"ERROR".equals(factura.getEstado()))
+            .isPresent();
+        if (tieneFactura || notaCreditoRepo.existsByVentaOriginalIdVenta(idVenta)) {
+            throw new IllegalStateException("El trabajo #" + idVenta
+                + " tiene una factura o nota de crédito: no se puede eliminar");
+        }
+        devolverStock(venta);
+        venta.setEstado("ANULADA");
+        venta.setResueltoPor(admin);
+        venta.setResueltoEn(LocalDateTime.now());
+        return ventaRepo.save(venta);
+    }
+
+    // Con lock: sin esto, dos ADMIN cerrando a la vez podían devolver dos veces el stock.
+    private Venta obtenerTrabajoConLock(Integer idVenta) {
+        Venta venta = ventaRepo.buscarPorIdConLock(idVenta)
+            .orElseThrow(() -> new IllegalArgumentException("Trabajo no existe: " + idVenta));
+        if (!"DOMICILIO".equals(venta.getTipoVenta())) {
+            throw new IllegalArgumentException("La venta #" + idVenta + " no es un trabajo a domicilio");
+        }
+        return venta;
+    }
+
+    private Venta obtenerTrabajoEditableConLock(Integer idVenta) {
+        Venta venta = obtenerTrabajoConLock(idVenta);
+        if (!"EN_PROGRESO".equals(venta.getEstado())) {
+            throw new IllegalStateException("El trabajo #" + idVenta + " ya está cobrado o anulado: no se puede modificar");
+        }
+        return venta;
     }
 }

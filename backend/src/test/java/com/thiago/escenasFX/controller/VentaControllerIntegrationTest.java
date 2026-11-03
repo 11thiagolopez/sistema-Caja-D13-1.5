@@ -154,7 +154,7 @@ class VentaControllerIntegrationTest extends AbstractIntegrationTest {
             .andExpect(status().isOk());
 
         String tokenAdmin = login("admin1", "clave123");
-        java.time.LocalDate hoy = java.time.LocalDate.now();
+        java.time.LocalDate hoy = com.thiago.escenasFX.service.ZonaNegocio.hoy();
 
         mockMvc.perform(get("/api/ventas")
                 .param("desde", hoy.toString())

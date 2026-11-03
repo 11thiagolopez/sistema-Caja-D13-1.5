@@ -77,6 +77,14 @@ const SECCIONES: NavSection[] = [
       { label: 'Ventas por forma de pago', to: '/reportes/forma-pago' },
     ],
   },
+  {
+    label: 'Reportes de trabajos a domicilio',
+    roles: ['ADMIN'],
+    items: [
+      { label: 'Reporte de trabajos', to: '/reportes/trabajos' },
+      { label: 'Técnicos', to: '/tecnicos' },
+    ],
+  },
 ]
 
 const ENLACES_SUELTOS: NavItem[] = [

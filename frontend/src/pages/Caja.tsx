@@ -49,6 +49,16 @@ export function Caja() {
         )}
       </ul>
 
+      <h3>Total vendido en el día</h3>
+      <p>Los trabajos a domicilio no pasan por la caja: se suman acá, pero no al arqueo de arriba.</p>
+      <ul>
+        <li>Ventas de mostrador: {(resumen.totalDelDia - resumen.totalTrabajosDomicilio).toFixed(2)}</li>
+        <li>Trabajos a domicilio: {resumen.totalTrabajosDomicilio.toFixed(2)}</li>
+        <li>
+          <strong>Total del día: {resumen.totalDelDia.toFixed(2)}</strong>
+        </li>
+      </ul>
+
       <h3>Compras y pagos a proveedores</h3>
       <table>
         <thead>

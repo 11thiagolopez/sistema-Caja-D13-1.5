@@ -25,7 +25,7 @@ export function Vendedores() {
   function cargar() {
     setError(null)
     return getEmpleados()
-      .then(setEmpleados)
+      .then((todos) => setEmpleados(todos.filter((e) => e.rol !== 'TECNICO')))
       .catch((err) => setError(err instanceof ApiRequestError ? err.message : 'No se pudieron cargar los vendedores'))
   }
 
@@ -75,7 +75,6 @@ export function Vendedores() {
             <th>Usuario</th>
             <th>Rol</th>
             <th>Email</th>
-            <th>Comisión %</th>
             <th />
           </tr>
         </thead>
@@ -86,7 +85,6 @@ export function Vendedores() {
               <td>{e.usuario}</td>
               <td>{e.rol}</td>
               <td>{e.email}</td>
-              <td>{e.comision != null ? e.comision : '—'}</td>
               <td>
                 <button type="button" onClick={() => onDesactivar(e)} disabled={eliminandoId === e.idEmpleado}>
                   {eliminandoId === e.idEmpleado ? 'Dando de baja...' : 'Dar de baja'}
@@ -123,33 +121,11 @@ export function Vendedores() {
           </label>
           <label>
             Rol
-            <select
-              value={form.rol}
-              onChange={(e) => {
-                const rol = e.target.value as Rol
-                setForm({ ...form, rol, comision: rol === 'TECNICO' ? form.comision : undefined })
-              }}
-            >
+            <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>
               <option value="VENDEDOR">VENDEDOR</option>
               <option value="ADMIN">ADMIN</option>
-              <option value="TECNICO">TECNICO</option>
             </select>
           </label>
-          {form.rol === 'TECNICO' && (
-            <label>
-              Comisión % (sobre la mano de obra de sus trabajos a domicilio)
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={form.comision ?? ''}
-                onChange={(e) =>
-                  setForm({ ...form, comision: e.target.value ? Number(e.target.value) : undefined })
-                }
-              />
-            </label>
-          )}
           {errorAlta && <p className="error">{errorAlta}</p>}
           <button type="submit" disabled={agregando}>
             {agregando && <span className="spinner" />}

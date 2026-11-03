@@ -104,7 +104,7 @@ public class CajaService {
         int productosActualizados = productoRepo.reajustarPreciosPorCotizacion(cotizacion);
 
         SesionCaja sesion = new SesionCaja();
-        sesion.setFecha(LocalDate.now());
+        sesion.setFecha(ZonaNegocio.hoy());
         sesion.setMontoInicial(montoInicial);
         sesion.setEstado("ABIERTA");
         sesion.setEmpleadoApertura(empleado);
@@ -214,7 +214,7 @@ public class CajaService {
      * sesión del día).
      */
     public ResumenDiaDTO calcularResumenDelDia() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = ZonaNegocio.hoy();
         return calcularResumenPorRango(hoy, hoy).getTotal();
     }
 
@@ -226,13 +226,16 @@ public class CajaService {
         SesionCaja sesion = sesionRepo.findById(idSesion)
             .orElseThrow(() -> new IllegalArgumentException("Sesión de caja no existe: " + idSesion));
 
-        List<Venta> ventas = ventaRepo.findBySesion_IdSesionAndEstado(idSesion, ESTADO_CONFIRMADA);
+        // Sin trabajos a domicilio: algunos viejos quedaron vinculados a la sesión.
+        List<Venta> ventas = ventaRepo.findBySesion_IdSesionAndEstado(idSesion, ESTADO_CONFIRMADA).stream()
+            .filter(v -> !esTrabajo(v))
+            .toList();
         List<MovimientoCaja> retiros = movRepo.findBySesion_IdSesion(idSesion);
         List<MovimientoCuentaCorrienteProveedor> movimientosProveedor =
             movimientoProveedorRepo.findBySesion_IdSesion(idSesion);
         List<Gasto> gastos = gastoRepo.findBySesion_IdSesion(idSesion);
 
-        return armarResumen(ventas, retiros, movimientosProveedor, gastos, sesion.getMontoInicial());
+        return armarResumen(ventas, List.of(), retiros, movimientosProveedor, gastos, sesion.getMontoInicial());
     }
 
     /**
@@ -252,24 +255,32 @@ public class CajaService {
             .map(SesionCaja::getMontoInicial)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        LocalDateTime desdeDT = desde.atStartOfDay();
-        LocalDateTime hastaDT = hasta.atTime(23, 59, 59);
+        LocalDateTime desdeDT = ZonaNegocio.inicioDelDia(desde);
+        LocalDateTime hastaDT = ZonaNegocio.finDelDia(hasta);
 
         // Ventas CONFIRMADA por fecha (no por sesión): más inclusivo, no depende de que la venta
         // haya tenido una caja abierta al momento de registrarse.
-        List<Venta> ventas = ventaRepo.findByFechaBetweenAndEstado(desdeDT, hastaDT, ESTADO_CONFIRMADA);
+        List<Venta> confirmadas = ventaRepo.findByFechaBetweenAndEstado(desdeDT, hastaDT, ESTADO_CONFIRMADA);
+        List<Venta> ventas = confirmadas.stream().filter(v -> !esTrabajo(v)).toList();
+        List<Venta> trabajos = confirmadas.stream().filter(CajaService::esTrabajo).toList();
         List<MovimientoCaja> retiros = movRepo.findByFechaBetween(desdeDT, hastaDT);
         List<MovimientoCuentaCorrienteProveedor> movimientosProveedor =
             movimientoProveedorRepo.findByFechaBetween(desdeDT, hastaDT);
         // Por cuándo se registró, no por Gasto.fecha: cargar un gasto atrasado no altera turnos cerrados.
         List<Gasto> gastos = gastoRepo.findByCreadoEnBetween(desdeDT, hastaDT);
 
-        ResumenDiaDTO total = armarResumen(ventas, retiros, movimientosProveedor, gastos, montoInicialTotal);
+        ResumenDiaDTO total = armarResumen(ventas, trabajos, retiros, movimientosProveedor, gastos, montoInicialTotal);
 
         return new ResumenRangoDTO(desde, hasta, total, resumenesPorSesion);
     }
 
-    private ResumenDiaDTO armarResumen(List<Venta> ventas, List<MovimientoCaja> retiros,
+    // Los trabajos a domicilio no se mezclan con el arqueo (decisión del dueño): la caja solo cuenta
+    // mostrador, y se suman aparte a lo vendido en el día.
+    private static boolean esTrabajo(Venta v) {
+        return "DOMICILIO".equals(v.getTipoVenta());
+    }
+
+    private ResumenDiaDTO armarResumen(List<Venta> ventas, List<Venta> trabajos, List<MovimientoCaja> retiros,
             List<MovimientoCuentaCorrienteProveedor> movimientosLedger, List<Gasto> gastos, BigDecimal montoInicial) {
         BigDecimal ventasEfectivo = sumarVentasPorMedio(ventas, "EFECTIVO");
         BigDecimal ventasTransferencia = sumarVentasPorMedio(ventas, "TRANSFERENCIA");
@@ -302,10 +313,15 @@ public class CajaService {
             .subtract(pagosProveedorTransferenciaCaja).subtract(gastosTransferenciaCaja).add(ventasTarjeta);
         BigDecimal cajaTotal = efectivoFinal.add(totalDigital);
 
+        BigDecimal totalTrabajos = trabajos.stream()
+            .map(Venta::getTotalVenta)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalDelDia = ventasEfectivo.add(ventasTransferencia).add(ventasTarjeta).add(totalTrabajos);
+
         return new ResumenDiaDTO(ventas, retiros, montoInicial, ventasEfectivo, ventasTransferencia, ventasTarjeta,
             retirosEfectivo, retirosTransferencia, efectivoFinal, totalDigital, cajaTotal, ventasPagadasConSaldo,
             movimientosProveedor, pagosProveedorEfectivoCaja, pagosProveedorTransferenciaCaja,
-            gastos, gastosEfectivoCaja, gastosTransferenciaCaja);
+            gastos, gastosEfectivoCaja, gastosTransferenciaCaja, totalTrabajos, totalDelDia);
     }
 
     public static boolean restaDelSaldoEsperado(MovimientoCuentaCorrienteProveedor m) {

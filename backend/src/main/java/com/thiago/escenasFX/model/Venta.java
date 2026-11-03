@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.model;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,9 +96,18 @@ public class Venta {
     @Column(name = "estado_trabajo")
     private String estadoTrabajo;
 
+    // El día de la agenda en el que se hace el trabajo. La plata se cuenta por "fecha", que al
+    // cerrar y cobrar pasa a ser el momento del cobro.
+    @Column(name = "fecha_programada")
+    private LocalDate fechaProgramada;
+
     @ManyToOne
     @JoinColumn(name = "id_empleado_tecnico")
     private Empleado empleadoTecnico;
+
+    // El % del técnico sobre la mano de obra, guardado al cobrar el trabajo.
+    @Column(name = "comision_tecnico", precision = 5, scale = 2)
+    private BigDecimal comisionTecnico;
 
     // Nullable: ninguna venta existente lo tiene todavía. Lo usa Nota de Crédito para "heredar"
     // el cliente de la venta cuando esté disponible, y Cobros lo pide cuando se paga (total o

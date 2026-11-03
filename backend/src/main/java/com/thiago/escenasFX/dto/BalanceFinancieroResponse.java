@@ -16,4 +16,6 @@ public class BalanceFinancieroResponse {
     private BigDecimal gastosOperativos;
     private BigDecimal comisionesPagadas;
     private BigDecimal gananciaNeta;
+    // Cuánto de los ingresos vino de trabajos a domicilio.
+    private BigDecimal ingresosPorTrabajos;
 }

@@ -226,7 +226,7 @@ class ReporteServiceTest {
     }
 
     @Test
-    void comisionesPorVendedor_manoDeObraSeAtribuyeAlTecnicoNoAQuienCobra() {
+    void comisionesPorVendedor_enUnTrabajoSoloCobraElTecnicoYSoloSobreLaManoDeObra() {
         Empleado vendedor = new Empleado();
         vendedor.setIdEmpleado(1);
         vendedor.setNombre("Vendedor");
@@ -253,10 +253,7 @@ class ReporteServiceTest {
 
         List<ComisionEmpleadoDTO> resultado = reporteService.comisionesPorVendedor(LocalDate.now(), LocalDate.now());
 
-        ComisionEmpleadoDTO comisionVendedor = resultado.stream()
-            .filter(c -> c.getIdEmpleado().equals(1)).findFirst().orElseThrow();
-        assertThat(comisionVendedor.getGananciaGenerada()).isEqualByComparingTo("40");
-        assertThat(comisionVendedor.getComisionCalculada()).isEqualByComparingTo("4");
+        assertThat(resultado).noneMatch(c -> c.getIdEmpleado().equals(1));
 
         ComisionEmpleadoDTO comisionTecnico = resultado.stream()
             .filter(c -> c.getIdEmpleado().equals(2)).findFirst().orElseThrow();

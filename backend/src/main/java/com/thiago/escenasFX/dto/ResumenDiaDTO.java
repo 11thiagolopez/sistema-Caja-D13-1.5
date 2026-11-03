@@ -45,4 +45,8 @@ public class ResumenDiaDTO {
     private List<Gasto> gastos;
     private BigDecimal gastosEfectivoCaja;
     private BigDecimal gastosTransferenciaCaja;
+
+    // Fuera del arqueo: lo cobrado en trabajos a domicilio, y eso más lo cobrado en mostrador.
+    private BigDecimal totalTrabajosDomicilio;
+    private BigDecimal totalDelDia;
 }
