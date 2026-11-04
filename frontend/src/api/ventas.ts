@@ -1,5 +1,6 @@
 import { request, requestBlob } from './client'
 import type {
+  EstadoFactura,
   TrabajoDomicilioRequest,
   VentaRequest,
   VentaResponse,
@@ -12,8 +13,9 @@ export function registrarVenta(venta: VentaRequest): Promise<VentaResponse> {
   })
 }
 
-export function getVentas(desde: string, hasta: string): Promise<VentaResponse[]> {
-  return request<VentaResponse[]>(`/api/ventas?desde=${desde}&hasta=${hasta}`)
+export function getVentas(desde: string, hasta: string, estadoFactura?: EstadoFactura): Promise<VentaResponse[]> {
+  const filtro = estadoFactura ? `&estadoFactura=${estadoFactura}` : ''
+  return request<VentaResponse[]>(`/api/ventas?desde=${desde}&hasta=${hasta}${filtro}`)
 }
 
 export function enviarComprobanteEmail(idVenta: number, email: string): Promise<VentaResponse> {

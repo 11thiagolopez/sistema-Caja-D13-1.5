@@ -31,11 +31,16 @@ public class VentaResponse {
     private Integer idEmpleadoTecnico;
     private String nombreTecnico;
     private BigDecimal comisionTecnico;
-    // Cliente del catálogo nuevo (cuenta corriente) — distinto de clienteNombre/clienteTelefono
-    // arriba, que son texto libre de Trabajo a domicilio. Null si la venta no tiene cliente
-    // vinculado (hoy el caso normal en Cobros, que todavía no lo pide).
+    // Cliente del catálogo (cuenta corriente, facturación) — distinto de clienteNombre/clienteTelefono
+    // arriba, que son texto libre de Trabajo a domicilio. Null si la venta no tiene cliente vinculado.
     private Integer idCliente;
     private String nombreCliente;
     private BigDecimal montoSaldoAplicado;
     private List<DetalleVentaResponse> detalles;
+    // SIN_FACTURAR | FACTURADA. Los tres de facturación son null en el arqueo y los trabajos, que no
+    // los usan (ver VentaConFacturacion). Con un intento rechazado, sigue SIN_FACTURAR y factura trae
+    // el error para reintentar.
+    private String estadoFactura;
+    private FacturaFiscalResponse factura;
+    private Boolean tieneNotaCredito;
 }

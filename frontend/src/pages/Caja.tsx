@@ -41,6 +41,17 @@ export function Caja() {
         <li>
           <strong>Caja total del día: {resumen.cajaTotalDelDia.toFixed(2)}</strong>
         </li>
+        {(resumen.pagosClienteEfectivo > 0 || resumen.pagosClienteTransferencia > 0 || resumen.pagosClienteTarjeta > 0) && (
+          <li>
+            Pagos de clientes de cuenta corriente (incluidos arriba): efectivo {resumen.pagosClienteEfectivo.toFixed(2)},
+            transferencia {resumen.pagosClienteTransferencia.toFixed(2)}, tarjeta {resumen.pagosClienteTarjeta.toFixed(2)}
+          </li>
+        )}
+        {resumen.ventasEnCuentaCorriente > 0 && (
+          <li>
+            Vendido en cuenta corriente (todavía no cobrado): {resumen.ventasEnCuentaCorriente.toFixed(2)}
+          </li>
+        )}
         {resumen.ventasPagadasConSaldo > 0 && (
           <li>
             Pagado con saldo de cuenta corriente (no es dinero real cobrado):{' '}

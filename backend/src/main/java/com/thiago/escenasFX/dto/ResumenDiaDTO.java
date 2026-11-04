@@ -49,4 +49,12 @@ public class ResumenDiaDTO {
     // Fuera del arqueo: lo cobrado en trabajos a domicilio, y eso más lo cobrado en mostrador.
     private BigDecimal totalTrabajosDomicilio;
     private BigDecimal totalDelDia;
+
+    // Lo que los clientes pagaron de su cuenta corriente: dinero real, entra al arqueo por su medio.
+    private BigDecimal pagosClienteEfectivo;
+    private BigDecimal pagosClienteTransferencia;
+    private BigDecimal pagosClienteTarjeta;
+
+    // Informativo, no suma a cajaTotalDelDia: lo vendido en cuenta corriente, que todavía no se cobró.
+    private BigDecimal ventasEnCuentaCorriente;
 }

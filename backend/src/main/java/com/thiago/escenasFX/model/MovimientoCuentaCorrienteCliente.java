@@ -36,8 +36,8 @@ public class MovimientoCuentaCorrienteCliente {
 
     private LocalDateTime fecha = LocalDateTime.now();
 
-    // CREDITO (a favor del cliente, ej. nota de crédito) | DEBITO (usado, ej. aplicado como pago
-    // en una venta futura — fase 3).
+    // CREDITO (a favor del cliente: nota de crédito o pago) | DEBITO (saldo aplicado en una venta o
+    // venta en cuenta corriente). Saldo negativo = el cliente debe.
     @Column(nullable = false)
     private String tipo;
 
@@ -49,12 +49,20 @@ public class MovimientoCuentaCorrienteCliente {
     @JoinColumn(name = "id_nota_credito")
     private NotaCredito notaCredito;
 
-    // Set en movimientos DEBITO: la venta en la que se aplicó el saldo (fase 3, sin usar todavía).
+    // La venta que originó el movimiento: saldo aplicado, cargo en cuenta corriente o su reversión.
     @ManyToOne
     @JoinColumn(name = "id_venta_aplicacion")
     private Venta ventaAplicacion;
 
     private String descripcion;
+
+    // Solo en los pagos del cliente, que son dinero real y entran al arqueo.
+    @Column(name = "medio_pago")
+    private String medioPago;
+
+    @ManyToOne
+    @JoinColumn(name = "id_sesion")
+    private SesionCaja sesion;
 
     @ManyToOne
     @JoinColumn(name = "id_empleado")

@@ -45,3 +45,13 @@ export function formatoDiaLargo(fechaIso: string): string {
     year: 'numeric',
   })
 }
+
+// Saldo de cuenta corriente: positivo = a favor del cliente, negativo = debe.
+export function textoSaldo(saldo: number): string {
+  if (saldo === 0) return 'Sin saldo'
+  return `${saldo > 0 ? 'A favor' : 'Debe'} ${formatoPesos(Math.abs(saldo))}`
+}
+
+export function numeroComprobante(puntoVenta: number | null, numero: number | null): string {
+  return `${String(puntoVenta ?? 0).padStart(4, '0')}-${String(numero ?? 0).padStart(8, '0')}`
+}

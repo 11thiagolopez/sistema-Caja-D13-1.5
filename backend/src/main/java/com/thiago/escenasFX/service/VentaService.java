@@ -31,6 +31,9 @@ public class VentaService {
 
     private static final String NOMBRE_LOCAL = "D13 Distribuidora";
     private static final String MEDIO_PAGO_SALDO = "SALDO_CUENTA_CORRIENTE";
+    private static final String MEDIO_PAGO_CUENTA_CORRIENTE = "CUENTA_CORRIENTE";
+    private static final List<String> MEDIOS_PAGO_VALIDOS = List.of(
+        "EFECTIVO", "TRANSFERENCIA", "TARJETA", MEDIO_PAGO_CUENTA_CORRIENTE, MEDIO_PAGO_SALDO);
     private static final Set<String> MEDIOS_DE_COBRO = Set.of("EFECTIVO", "TRANSFERENCIA", "TARJETA");
     private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CURSO", "COMPLETADO");
 
@@ -123,20 +126,77 @@ public class VentaService {
         venta.setDescuento(descuento);
         venta.setTotalVenta(totalBruto.subtract(descuento));
 
+        validarMedioPago(venta);
+        resolverCliente(venta);
+        validarMedioSegunCliente(venta);
         BigDecimal montoSaldoAplicado = validarYAplicarSaldoCliente(venta);
 
-        if (descuento.compareTo(BigDecimal.ZERO) > 0 && !autorizadoPorAdmin) {
-            venta.setEstado("PENDIENTE_AUTORIZACION");
+        boolean requiereAutorizacion = descuento.compareTo(BigDecimal.ZERO) > 0 && !autorizadoPorAdmin;
+        venta.setEstado(requiereAutorizacion ? "PENDIENTE_AUTORIZACION" : "CONFIRMADA");
 
-            Venta guardada = ventaRepo.save(venta);
-            registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
-            return guardada;
-        }
-
-        venta.setEstado("CONFIRMADA");
         Venta guardada = ventaRepo.save(venta);
         registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
+        registrarCargoCuentaCorrienteSiCorresponde(guardada);
         return guardada;
+    }
+
+    // El backend aceptaba cualquier texto: una venta en CUENTA_CORRIENTE se habría guardado sin cargarle
+    // nada a nadie. Null solo es posible desde código interno: el request lo exige con @NotBlank.
+    private void validarMedioPago(Venta venta) {
+        if (venta.getMedioPago() == null) {
+            return;
+        }
+        String medio = venta.getMedioPago().trim().toUpperCase();
+        if (!MEDIOS_PAGO_VALIDOS.contains(medio)) {
+            throw new IllegalArgumentException("Medio de pago inválido: " + venta.getMedioPago());
+        }
+        venta.setMedioPago(medio);
+    }
+
+    // Lockea al cliente: dos ventas simultáneas no pueden gastar el mismo saldo.
+    private void resolverCliente(Venta venta) {
+        if (venta.getCliente() == null) {
+            return;
+        }
+        Integer idCliente = venta.getCliente().getIdCliente();
+        Cliente cliente = clienteRepo.buscarPorIdConLock(idCliente)
+            .orElseThrow(() -> new IllegalArgumentException("Cliente no existe: " + idCliente));
+        if (!cliente.isActivo()) {
+            throw new IllegalStateException("El cliente " + cliente.getNombre() + " está dado de baja");
+        }
+        venta.setCliente(cliente);
+    }
+
+    private void validarMedioSegunCliente(Venta venta) {
+        BigDecimal montoSaldoAplicado = venta.getMontoSaldoAplicado() != null ? venta.getMontoSaldoAplicado() : BigDecimal.ZERO;
+        if (MEDIO_PAGO_SALDO.equals(venta.getMedioPago()) && montoSaldoAplicado.compareTo(venta.getTotalVenta()) != 0) {
+            throw new IllegalArgumentException("Pagar con saldo requiere que el saldo aplicado cubra el total de la venta");
+        }
+        if (!MEDIO_PAGO_CUENTA_CORRIENTE.equals(venta.getMedioPago())) {
+            return;
+        }
+        if (venta.getCliente() == null) {
+            throw new IllegalArgumentException("Para vender en cuenta corriente hay que indicar un cliente");
+        }
+        // El cargo ya descuenta lo que tenga a favor: aplicar saldo además lo contaría dos veces.
+        if (montoSaldoAplicado.compareTo(BigDecimal.ZERO) > 0) {
+            throw new IllegalArgumentException("Una venta en cuenta corriente no admite pagar además con saldo");
+        }
+    }
+
+    private void registrarCargoCuentaCorrienteSiCorresponde(Venta guardada) {
+        if (!MEDIO_PAGO_CUENTA_CORRIENTE.equals(guardada.getMedioPago())
+                || guardada.getTotalVenta().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        MovimientoCuentaCorrienteCliente cargo = new MovimientoCuentaCorrienteCliente();
+        cargo.setCliente(guardada.getCliente());
+        cargo.setTipo("DEBITO");
+        cargo.setMonto(guardada.getTotalVenta());
+        cargo.setVentaAplicacion(guardada);
+        cargo.setDescripcion("Venta en cuenta corriente #" + guardada.getIdVenta());
+        cargo.setEmpleado(guardada.getEmpleado());
+        movimientoCuentaCorrienteRepo.save(cargo);
     }
 
     /**
@@ -162,15 +222,12 @@ public class VentaService {
             throw new IllegalArgumentException("El saldo aplicado no puede ser mayor al total de la venta");
         }
 
-        Cliente cliente = clienteRepo.buscarPorIdConLock(venta.getCliente().getIdCliente())
-            .orElseThrow(() -> new IllegalArgumentException("Cliente no existe: " + venta.getCliente().getIdCliente()));
-        BigDecimal saldoDisponible = calcularSaldoCliente(cliente.getIdCliente());
+        BigDecimal saldoDisponible = calcularSaldoCliente(venta.getCliente().getIdCliente());
         if (montoSaldoAplicado.compareTo(saldoDisponible) > 0) {
             throw new IllegalStateException("El cliente no tiene saldo suficiente (disponible: $"
                 + saldoDisponible + ", solicitado: $" + montoSaldoAplicado + ")");
         }
 
-        venta.setCliente(cliente);
         venta.setMontoSaldoAplicado(montoSaldoAplicado);
         if (montoSaldoAplicado.compareTo(venta.getTotalVenta()) == 0) {
             venta.setMedioPago(MEDIO_PAGO_SALDO);
@@ -239,6 +296,17 @@ public class VentaService {
             devolucion.setDescripcion("Devolución de saldo por venta anulada #" + venta.getIdVenta());
             devolucion.setEmpleado(admin);
             movimientoCuentaCorrienteRepo.save(devolucion);
+        }
+        if (MEDIO_PAGO_CUENTA_CORRIENTE.equals(venta.getMedioPago())
+                && venta.getTotalVenta().compareTo(BigDecimal.ZERO) > 0) {
+            MovimientoCuentaCorrienteCliente reversion = new MovimientoCuentaCorrienteCliente();
+            reversion.setCliente(venta.getCliente());
+            reversion.setTipo("CREDITO");
+            reversion.setMonto(venta.getTotalVenta());
+            reversion.setVentaAplicacion(venta);
+            reversion.setDescripcion("Reversión del cargo por venta anulada #" + venta.getIdVenta());
+            reversion.setEmpleado(admin);
+            movimientoCuentaCorrienteRepo.save(reversion);
         }
 
         venta.setEstado("ANULADA");

@@ -63,7 +63,7 @@ const SECCIONES: NavSection[] = [
   {
     label: 'Facturación',
     roles: ['ADMIN'],
-    items: [{ label: 'Facturar', to: '/facturar' }],
+    items: [{ label: 'Comprobantes', to: '/comprobantes' }],
   },
   {
     label: 'Reportes',

@@ -23,9 +23,7 @@ import { VentasPorFormaPago } from './pages/VentasPorFormaPago'
 import { Presupuestos } from './pages/Presupuestos'
 import { TrabajoDomicilio } from './pages/TrabajoDomicilio'
 import { Clientes } from './pages/Clientes'
-import { Facturar } from './pages/Facturar'
-import { CuentaCorrienteCliente } from './pages/CuentaCorrienteCliente'
-import { NotaCredito } from './pages/NotaCredito'
+import { Comprobantes } from './pages/Comprobantes'
 import { CuentaCorrienteProveedores } from './pages/CuentaCorrienteProveedores'
 
 function App() {
@@ -44,10 +42,8 @@ function App() {
             <Route path="/caja/resumen" element={<Caja />} />
             <Route path="/ventas/historial" element={<HistorialVentas />} />
             <Route path="/ventas/domicilio" element={<TrabajoDomicilio />} />
-            <Route path="/notas-credito/nueva" element={<NotaCredito />} />
-            <Route path="/facturar" element={<Facturar />} />
+            <Route path="/comprobantes" element={<Comprobantes />} />
             <Route path="/clientes" element={<Clientes />} />
-            <Route path="/clientes/:id/cuenta-corriente" element={<CuentaCorrienteCliente />} />
             <Route path="/reportes" element={<Reportes />} />
             <Route path="/reportes/marcas" element={<VentasPorMarca />} />
             <Route path="/reportes/forma-pago" element={<VentasPorFormaPago />} />

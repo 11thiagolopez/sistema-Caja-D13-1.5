@@ -30,6 +30,8 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
 
     List<Venta> findByEstadoOrderByFechaAsc(String estado);
 
+    List<Venta> findByCliente_IdClienteOrderByFechaDesc(Integer idCliente);
+
     List<Venta> findByIdVentaInAndEmpleado_IdEmpleado(Collection<Integer> ids, Integer idEmpleado);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

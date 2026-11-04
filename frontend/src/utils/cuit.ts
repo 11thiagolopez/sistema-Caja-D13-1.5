@@ -23,3 +23,23 @@ export const CONDICIONES_IVA: { id: number; nombre: string }[] = [
   { id: 10, nombre: 'IVA Liberado – Ley 19.640' },
   { id: 15, nombre: 'IVA No Alcanzado' },
 ]
+
+// Las cuatro que ofrece el formulario. Un cliente o el padrón pueden traer otra de CONDICIONES_IVA:
+// se conserva y se muestra, pero no se elige a mano.
+export const CONDICIONES_FORMULARIO = [
+  { id: CONSUMIDOR_FINAL, nombre: 'Consumidor Final' },
+  { id: 1, nombre: 'Responsable Inscripto' },
+  { id: 6, nombre: 'Monotributista' },
+  { id: 4, nombre: 'Exento' },
+]
+
+export function nombreCondicionIva(id: number | null): string {
+  if (id == null) return 'Sin indicar'
+  const propia = CONDICIONES_FORMULARIO.find((c) => c.id === id) ?? CONDICIONES_IVA.find((c) => c.id === id)
+  return propia?.nombre ?? `Código ${id}`
+}
+
+export function etiquetaDocumento(docTipo: number, docNro: string | null): string {
+  if (docTipo === 99 || !docNro) return 'Sin documento'
+  return `${docTipo === 80 ? 'CUIT' : 'DNI'} ${docNro}`
+}

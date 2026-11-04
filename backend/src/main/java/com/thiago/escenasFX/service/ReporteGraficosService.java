@@ -48,6 +48,7 @@ public class ReporteGraficosService {
         "EFECTIVO", "Efectivo",
         "TRANSFERENCIA", "Transferencia",
         "TARJETA", "Tarjeta",
+        "CUENTA_CORRIENTE", "Cuenta corriente",
         MEDIO_SALDO, "Saldo cuenta corriente");
 
     private static final Map<DayOfWeek, String> NOMBRES_DIA = Map.of(

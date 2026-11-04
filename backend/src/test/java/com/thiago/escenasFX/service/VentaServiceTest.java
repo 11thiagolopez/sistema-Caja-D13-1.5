@@ -337,6 +337,7 @@ class VentaServiceTest {
     void registrarVenta_saldoMayorAlTotal_lanzaExcepcion() {
         Producto producto = producto(1, 10);
         when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(producto));
+        when(clienteRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(cliente(5)));
 
         Venta venta = ventaCon(detalle(producto, 1, new BigDecimal("100")));
         venta.setCliente(cliente(5));

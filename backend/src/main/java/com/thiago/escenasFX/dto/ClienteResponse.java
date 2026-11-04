@@ -1,5 +1,7 @@
 package com.thiago.escenasFX.dto;
 
+import java.math.BigDecimal;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -15,4 +17,7 @@ public class ClienteResponse {
     private String email;
     private String direccion;
     private boolean activo;
+    // Positivo = a favor, negativo = debe. Null en la búsqueda de Cobros: el vendedor solo ve el saldo
+    // del cliente que eligió (GET /api/clientes/{id}/saldo).
+    private BigDecimal saldo;
 }

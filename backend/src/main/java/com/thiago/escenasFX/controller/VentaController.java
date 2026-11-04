@@ -8,7 +8,6 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -49,11 +48,13 @@ public class VentaController {
     private final ProductoRepository productoRepo;
     private final ClienteRepository clienteRepo;
     private final PushService pushService;
+    private final VentaConFacturacion ventaConFacturacion;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
             EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
-            PushService pushService) {
+            PushService pushService, VentaConFacturacion ventaConFacturacion) {
         this.pushService = pushService;
+        this.ventaConFacturacion = ventaConFacturacion;
         this.ventaService = ventaService;
         this.ventaRepo = ventaRepo;
         this.empleadoRepo = empleadoRepo;
@@ -105,40 +106,40 @@ public class VentaController {
         if ("PENDIENTE_AUTORIZACION".equals(guardada.getEstado())) {
             pushService.avisarPeticionNuevaEnSegundoPlano();
         }
-        return VentaMapper.toResponse(guardada);
+        return ventaConFacturacion.responder(guardada);
     }
 
     @GetMapping
     public List<VentaResponse> listarPorRango(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) String estadoFactura) {
+        if (estadoFactura != null && !VentaMapper.ESTADO_FACTURADA.equals(estadoFactura)
+                && !VentaMapper.ESTADO_SIN_FACTURAR.equals(estadoFactura)) {
+            throw new IllegalArgumentException("Estado de facturación inválido: " + estadoFactura);
+        }
         List<Venta> ventas = ventaRepo.findByFechaBetween(ZonaNegocio.inicioDelDia(desde), ZonaNegocio.finDelDia(hasta));
-        return ventas.stream().map(VentaMapper::toResponse).toList();
+        return ventaConFacturacion.responder(ventas).stream()
+            .filter(v -> estadoFactura == null || estadoFactura.equals(v.getEstadoFactura()))
+            .toList();
     }
 
     @PostMapping("/{id}/enviar-comprobante")
     public VentaResponse enviarComprobante(@PathVariable Integer id,
             @Valid @RequestBody EnviarComprobanteRequest request) {
         Venta venta = ventaService.enviarComprobantePorEmail(id, request.getEmail());
-        return VentaMapper.toResponse(venta);
+        return ventaConFacturacion.responder(venta);
     }
 
     @GetMapping("/{id}")
     public VentaResponse obtener(@PathVariable Integer id) {
-        return VentaMapper.toResponse(ventaService.obtenerPorId(id));
+        return ventaConFacturacion.responder(ventaService.obtenerPorId(id));
     }
 
     @GetMapping("/{id}/pdf")
     public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer id, Authentication authentication) {
-        // El VENDEDOR imprime lo que acaba de cobrar, pero nada más: si pudiera pedir cualquier id,
-        // este endpoint le abriría el historial de ventas que no debe ver (ver SecurityConfig).
         if (!RolAutenticado.esAdmin(authentication)) {
-            Venta venta = ventaService.obtenerPorId(id);
-            boolean esPropia = venta.getEmpleado() != null
-                && authentication.getName().equals(venta.getEmpleado().getUsuario());
-            if (!esPropia || !"CONFIRMADA".equals(venta.getEstado())) {
-                throw new AccessDeniedException("Solo podés ver el comprobante de tus ventas confirmadas");
-            }
+            RolAutenticado.exigirVentaPropiaConfirmada(ventaService.obtenerPorId(id), authentication);
         }
 
         byte[] pdf = ventaService.generarPdf(id);

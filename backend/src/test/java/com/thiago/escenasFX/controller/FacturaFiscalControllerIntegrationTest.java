@@ -83,15 +83,15 @@ class FacturaFiscalControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void facturar_comoVendedor_devuelve403() throws Exception {
+    void facturar_ventaDeOtroVendedor_devuelve403() throws Exception {
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        crearEmpleado("vendedor2", "clave123", "VENDEDOR", null);
         Producto producto = crearProducto();
-        String tokenVendedor = login("vendedor1", "clave123");
-        Integer idVenta = crearVentaConfirmada(tokenVendedor, vendedor, producto);
+        Integer idVenta = crearVentaConfirmada(login("vendedor1", "clave123"), vendedor, producto);
 
         mockMvc.perform(post("/api/ventas/" + idVenta + "/factura")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login("vendedor2", "clave123"))
                 .content("{\"clienteDocTipo\": 99}"))
             .andExpect(status().isForbidden());
     }
@@ -230,13 +230,13 @@ class FacturaFiscalControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void consultarPadron_comoVendedor_devuelve403() throws Exception {
+    void consultarPadron_comoVendedor_permitidoParaCrearClientesEnCobros() throws Exception {
         crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String tokenVendedor = login("vendedor1", "clave123");
 
         mockMvc.perform(get("/api/clientes/padron/20300238379")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk());
     }
 
     @Test
@@ -394,26 +394,19 @@ class FacturaFiscalControllerIntegrationTest extends AbstractIntegrationTest {
         assertThat(emailCaptor.getValue()).isEqualTo("cliente@test.com");
     }
 
-    /*
-     * Regresion de un bug real encontrado escribiendo estos tests: el matcher de SecurityConfig
-     * para facturacion fiscal solo cubria el path exacto "/api/ventas/{idVenta}/factura" (un
-     * segmento), y no alcanzaba a "/factura/pdf" ni "/factura/enviar-email" (un segmento mas):
-     * esos dos sub-endpoints quedaban sin matcher propio y caian en el
-     * anyRequest().authenticated() generico del final, asi que cualquier rol autenticado
-     * (VENDEDOR incluido) podia descargar o mandar por mail una factura fiscal ajena. Se agrego
-     * un matcher adicional con doble comodin para cubrir los sub-endpoints.
-     */
+    // El VENDEDOR alcanza este endpoint para abrir sus facturas; el permiso por venta se prueba en
+    // ClientesFacturacionIntegrationTest.
     @Test
-    void descargarPdf_comoVendedor_devuelve403() throws Exception {
+    void descargarPdf_ventaInexistenteComoVendedor_devuelve400() throws Exception {
         crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String tokenVendedor = login("vendedor1", "clave123");
 
         mockMvc.perform(get("/api/ventas/999999/factura/pdf")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenVendedor))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isBadRequest());
     }
 
-    /** Mismo bug de matcher que el test de arriba, mismo comentario. */
+    // Regresión: el matcher exacto de "/factura" no alcanzaba este sub-endpoint y lo dejaba abierto a cualquier rol.
     @Test
     void enviarEmail_comoVendedor_devuelve403() throws Exception {
         crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);

@@ -1153,3 +1153,156 @@ section {
     padding: 16px;
   }
 }
+
+/* Selector de cliente: dentro de Cobros, el modal de facturar y el de nota de crédito. */
+.selector-cliente-elegido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-alt);
+}
+
+.selector-cliente-elegido > div,
+.selector-cliente-resultados button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.selector-cliente-resultados {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.selector-cliente-resultados button {
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-alt);
+  color: var(--text);
+  text-align: left;
+}
+
+.selector-cliente-resultados button:hover {
+  background: var(--border);
+}
+
+.formulario-cliente {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.boton-secundario {
+  background: var(--bg-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* Sección Clientes: grilla de tarjetas y panel lateral con el detalle. */
+.clientes-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cliente-tarjeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.cliente-tarjeta:hover {
+  border-color: var(--accent);
+}
+
+.saldo-deudor {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.saldo-a-favor {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.panel-lateral-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.panel-lateral {
+  width: min(100vw, 560px);
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 20px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+
+.panel-lateral p {
+  margin: 2px 0;
+}
+
+.etiqueta-factura {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+}
+
+.etiqueta-facturada {
+  background: #1a7f37;
+  border-color: #1a7f37;
+  color: #fff;
+}
+
+.detalle-venta .confirmar-descuento input {
+  width: min(240px, 100%);
+}
+
+.detalle-venta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.casilla {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.casilla input {
+  width: auto;
+  margin: 0;
+}

@@ -107,9 +107,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/gastos/**").hasRole("ADMIN")
                 .requestMatchers("/api/compras/**").hasRole("ADMIN")
                 .requestMatchers("/api/empleados/**").hasRole("ADMIN")
-                // Clientes y Notas de crédito: ADMIN-only por ahora, igual que Proveedores/Compras
-                // — Cobros no pide todavía un cliente (eso es la fase de saldo a favor como medio
-                // de pago), así que VENDEDOR no necesita tocar ninguno de los dos endpoints.
+                // Cobros: el VENDEDOR busca y crea clientes y ve el saldo del que eligió. El listado
+                // completo con saldos, los movimientos, editar, dar de baja y los pagos son de ADMIN.
+                .requestMatchers(HttpMethod.GET, "/api/clientes/buscar", "/api/clientes/padron/*",
+                        "/api/clientes/*/saldo")
+                    .hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.POST, "/api/clientes").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/clientes/**").hasRole("ADMIN")
                 .requestMatchers("/api/notas-credito/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/productos/**").hasAnyRole("ADMIN", "VENDEDOR")
@@ -131,9 +134,11 @@ public class SecurityConfig {
                 // controller, porque depende de la venta y no solo del rol).
                 .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
-                // Facturación fiscal (ARCA/WSFE): vive únicamente en Consulta de ventas, pantalla
-                // ya exclusiva de ADMIN — se mantiene ADMIN-only acá también, es una acción
-                // irreversible (emite un comprobante fiscal real). El "/**" es necesario: "*" solo
+                // Facturar al cobrar: el VENDEDOR emite y abre la factura solo de sus ventas confirmadas
+                // (lo valida el controller, igual que el comprobante).
+                .requestMatchers(HttpMethod.POST, "/api/ventas/*/factura").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.GET, "/api/ventas/*/factura/pdf").hasAnyRole("ADMIN", "VENDEDOR")
+                // Lo demás de la facturación fiscal (ARCA/WSFE) queda para ADMIN. El "/**" es necesario: "*" solo
                 // matchea un segmento, así que sin él "/factura/pdf" y "/factura/enviar-email"
                 // quedaban sin matcher propio y cualquier rol autenticado los alcanzaba por el
                 // "anyRequest().authenticated()" genérico de abajo (bug real, encontrado escribiendo

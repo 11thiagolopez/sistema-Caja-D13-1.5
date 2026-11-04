@@ -1,6 +1,5 @@
 package com.thiago.escenasFX.dto;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
@@ -9,8 +8,11 @@ import lombok.Setter;
 @Setter
 public class FacturarVentaRequest {
 
-    // 80 = CUIT | 96 = DNI | 99 = Consumidor Final (en ese caso clienteDocNro va vacío).
-    @NotNull
+    // Cliente del catálogo: si viene, sus datos reemplazan a los de abajo y queda asignado a la venta.
+    private Integer idCliente;
+
+    // 80 = CUIT | 96 = DNI | 99 = Consumidor Final (en ese caso clienteDocNro va vacío). Obligatorio
+    // si no viene idCliente.
     private Integer clienteDocTipo;
 
     // Solo dígitos: es justo lo que espera AFIP en DocNro, y evita mandar texto libre sin escapar

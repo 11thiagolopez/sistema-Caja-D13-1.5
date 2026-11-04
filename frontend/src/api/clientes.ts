@@ -4,6 +4,9 @@ import type {
   ClienteResponse,
   ContribuyenteResponse,
   CuentaCorrienteClienteResponse,
+  MovimientoCuentaCorrienteClienteResponse,
+  PagoClienteRequest,
+  VentaResponse,
 } from '../types/api'
 
 export function getClientes(): Promise<ClienteResponse[]> {
@@ -36,4 +39,23 @@ export function eliminarCliente(id: number): Promise<void> {
 
 export function getCuentaCorrienteCliente(id: number): Promise<CuentaCorrienteClienteResponse> {
   return request<CuentaCorrienteClienteResponse>(`/api/clientes/${id}/cuenta-corriente`)
+}
+
+// Lo único de la cuenta corriente que ve el VENDEDOR: el saldo del cliente que eligió en Cobros.
+export function getSaldoCliente(id: number): Promise<{ saldo: number }> {
+  return request<{ saldo: number }>(`/api/clientes/${id}/saldo`)
+}
+
+export function getVentasCliente(id: number): Promise<VentaResponse[]> {
+  return request<VentaResponse[]>(`/api/clientes/${id}/ventas`)
+}
+
+export function registrarPagoCliente(
+  id: number,
+  pago: PagoClienteRequest,
+): Promise<MovimientoCuentaCorrienteClienteResponse> {
+  return request<MovimientoCuentaCorrienteClienteResponse>(`/api/clientes/${id}/pagos`, {
+    method: 'POST',
+    body: JSON.stringify(pago),
+  })
 }

@@ -36,4 +36,9 @@ public class ResumenDiaResponse {
 
     private BigDecimal totalTrabajosDomicilio;
     private BigDecimal totalDelDia;
+
+    private BigDecimal pagosClienteEfectivo;
+    private BigDecimal pagosClienteTransferencia;
+    private BigDecimal pagosClienteTarjeta;
+    private BigDecimal ventasEnCuentaCorriente;
 }

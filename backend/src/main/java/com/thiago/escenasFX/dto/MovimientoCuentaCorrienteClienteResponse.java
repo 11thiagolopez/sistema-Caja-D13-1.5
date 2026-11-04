@@ -16,4 +16,5 @@ public class MovimientoCuentaCorrienteClienteResponse {
     private String descripcion;
     private Integer idNotaCredito;
     private Integer idVentaAplicacion;
+    private String medioPago;
 }

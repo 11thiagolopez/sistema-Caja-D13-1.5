@@ -383,8 +383,34 @@ descripcionProducto, cantidad, precioUnitario, subtotal}]}`.
 | POST | `/api/ventas/{id}/factura` | `{clienteDocTipo, clienteDocNro?, clienteNombre?, condicionIvaReceptor?}` | `FacturaFiscalResponse` |
 
 `condicionIvaReceptor` es obligatorio con CUIT; con DNI o Consumidor Final se asume 5. `ClienteRequest`
-y `ClienteResponse` suman `condicionIva`. La emisión vive solo en `/facturar` (ver `plan-migracion.md`
-sección 27.10).
+y `ClienteResponse` suman `condicionIva`. Desde 2026-11-04 la pantalla `/facturar` ya no existe: ver
+"Clientes, facturación y notas de crédito" abajo.
+
+### Clientes, facturación y notas de crédito — actualizado 2026-11-04
+
+Detalle y decisiones en `plan-migracion.md` sección 31.
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/api/ventas?desde&hasta&estadoFactura=` | ADMIN | `estadoFactura` opcional: `SIN_FACTURAR` \| `FACTURADA` |
+| POST | `/api/ventas` | ADMIN, VENDEDOR | Medios válidos: `EFECTIVO`, `TRANSFERENCIA`, `TARJETA`, `CUENTA_CORRIENTE` (exige `idCliente`, no admite `montoSaldoAplicado`) |
+| POST | `/api/ventas/{id}/factura` | ADMIN; VENDEDOR solo sus ventas confirmadas | Body: `{idCliente}` o `{clienteDocTipo: 99}` |
+| GET | `/api/ventas/{id}/factura/pdf` | ADMIN; VENDEDOR solo sus ventas confirmadas | |
+| GET | `/api/clientes/buscar?q=` | ADMIN, VENDEDOR | `saldo` viene `null` |
+| GET | `/api/clientes/padron/{cuit}` | ADMIN, VENDEDOR | |
+| POST | `/api/clientes` | ADMIN, VENDEDOR | `409` si el documento ya existe |
+| GET | `/api/clientes/{id}/saldo` | ADMIN, VENDEDOR | `{saldo}`: positivo a favor, negativo debe |
+| GET | `/api/clientes` y `/api/clientes/{id}` | ADMIN | Incluyen `saldo` |
+| GET | `/api/clientes/{id}/ventas` | ADMIN | `VentaResponse[]` |
+| POST | `/api/clientes/{id}/pagos` | ADMIN | `{monto, medioPago, descripcion?}`. Efectivo exige caja abierta |
+
+`VentaResponse` suma `estadoFactura`, `factura` y `tieneNotaCredito`. Son `null` en el arqueo y en los
+trabajos, que no los usan. `ResumenDiaResponse` suma `pagosClienteEfectivo`, `pagosClienteTransferencia`,
+`pagosClienteTarjeta` y `ventasEnCuentaCorriente`.
+
+Componentes: `SelectorCliente` y `FormularioCliente` (único alta y búsqueda de clientes, busca en el
+servidor porque VENDEDOR no ve el listado), `ModalFacturacion` y `ModalNotaCredito`. El rol VENDEDOR sigue
+sin ver el historial: solo puede facturar la venta que acaba de cobrar en Cobros.
 
 ### Gastos (`/api/gastos`) — ADMIN
 

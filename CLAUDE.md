@@ -9,7 +9,17 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-03, peticiones desde el sistema en vez de códigos por mail,
+Estado Actual (Actualizado al 2026-11-04, clientes, facturación y notas de crédito):
+
+**Clientes y facturación (detalle en `plan-migracion.md` sección 31, contrato en `plan-frontend.md`)**: el
+historial es la única lista de ventas. Facturar se hace con `ModalFacturacion`, desde el historial, desde un
+cliente o al cobrar; `/facturar` ya no existe y la sección pasó a `/comprobantes`. `SelectorCliente` es el único
+selector, con alta en el mismo lugar. Cobros permite elegir cliente, vender en cuenta corriente y facturar. El
+estado de facturación se deduce de `facturas_fiscales`, sin columna nueva. La nota de crédito se abre desde la
+venta, exige cliente y ahora acredita lo cobrado, no el precio de lista. Los pagos de clientes entran al arqueo.
+SQL ya corrido por el dueño. Probado en Edge con H2. **No probado contra ARCA real ni contra Supabase real.**
+
+Estado Anterior (Actualizado al 2026-11-03, peticiones desde el sistema en vez de códigos por mail,
 diseño para celular y notificaciones):
 
 **Peticiones (detalle y SQL en `plan-migracion.md` sección 29)**: se eliminó el flujo de código OTP por

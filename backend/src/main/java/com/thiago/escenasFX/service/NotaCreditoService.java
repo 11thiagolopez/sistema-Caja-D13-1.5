@@ -1,9 +1,12 @@
 package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,6 +97,9 @@ public class NotaCreditoService {
 
         List<DetalleNotaCredito> detalles = new ArrayList<>();
         BigDecimal montoTotal = BigDecimal.ZERO;
+        BigDecimal bruto = bruto(venta);
+        boolean hayDescuento = venta.getDescuento() != null && venta.getDescuento().signum() > 0 && bruto.signum() > 0;
+        Map<Integer, Integer> acreditadoAhora = new HashMap<>();
 
         for (DetalleNotaCreditoRequest lineaReq : lineas) {
             DetalleVenta original = detalleVentaRepo.findById(lineaReq.getIdDetalleVentaOriginal())
@@ -119,18 +125,29 @@ public class NotaCreditoService {
                 productoRepo.save(p);
             }
 
-            BigDecimal subtotal = original.getPrecioUnitario().multiply(BigDecimal.valueOf(lineaReq.getCantidad()));
+            BigDecimal precioUnitario = original.getPrecioUnitario();
+            BigDecimal subtotal = precioUnitario.multiply(BigDecimal.valueOf(lineaReq.getCantidad()));
+            if (hayDescuento) {
+                // Se acredita lo que se cobró: el descuento de la venta se reparte entre sus líneas.
+                subtotal = prorratear(subtotal, venta.getTotalVenta(), bruto);
+                precioUnitario = prorratear(precioUnitario, venta.getTotalVenta(), bruto);
+            }
 
             DetalleNotaCredito detalle = new DetalleNotaCredito();
             detalle.setDetalleVentaOriginal(original);
             detalle.setProducto(original.getProducto());
             detalle.setDescripcion(original.getDescripcion());
             detalle.setCantidad(lineaReq.getCantidad());
-            detalle.setPrecioUnitario(original.getPrecioUnitario());
+            detalle.setPrecioUnitario(precioUnitario);
             detalle.setSubtotal(subtotal);
             detalles.add(detalle);
+            acreditadoAhora.merge(original.getIdDetalle(), lineaReq.getCantidad(), Integer::sum);
 
             montoTotal = montoTotal.add(subtotal);
+        }
+
+        if (hayDescuento && !detalles.isEmpty()) {
+            montoTotal = ajustarRedondeo(venta, detalles, montoTotal, acreditadoAhora);
         }
 
         NotaCredito nc = new NotaCredito();
@@ -163,6 +180,32 @@ public class NotaCreditoService {
         movimientoRepo.save(movimiento);
 
         return guardada;
+    }
+
+    private BigDecimal bruto(Venta venta) {
+        return venta.getDetalles().stream()
+            .map(d -> d.getPrecioUnitario().multiply(BigDecimal.valueOf(d.getCantidad())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal prorratear(BigDecimal monto, BigDecimal totalVenta, BigDecimal bruto) {
+        return monto.multiply(totalVenta).divide(bruto, 2, RoundingMode.HALF_UP);
+    }
+
+    // Prorratear línea por línea puede correr unos centavos. Las notas de una venta nunca superan lo
+    // cobrado, y la que completa todas las líneas cierra justo en ese total.
+    private BigDecimal ajustarRedondeo(Venta venta, List<DetalleNotaCredito> detalles, BigDecimal montoTotal,
+            Map<Integer, Integer> acreditadoAhora) {
+        BigDecimal disponible = venta.getTotalVenta().subtract(notaCreditoRepo.sumarMontoPorVenta(venta.getIdVenta()));
+        boolean completaLaVenta = venta.getDetalles().stream().allMatch(d ->
+            detalleNotaCreditoRepo.sumarCantidadAcreditada(d.getIdDetalle())
+                + acreditadoAhora.getOrDefault(d.getIdDetalle(), 0) >= d.getCantidad());
+        if (!completaLaVenta && montoTotal.compareTo(disponible) <= 0) {
+            return montoTotal;
+        }
+        DetalleNotaCredito ultima = detalles.get(detalles.size() - 1);
+        ultima.setSubtotal(ultima.getSubtotal().add(disponible.subtract(montoTotal)));
+        return disponible;
     }
 
     public List<NotaCredito> listarPorRango(LocalDateTime desde, LocalDateTime hasta) {

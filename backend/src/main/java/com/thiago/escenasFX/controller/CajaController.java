@@ -144,7 +144,11 @@ public class CajaController {
             resumen.getGastosEfectivoCaja(),
             resumen.getGastosTransferenciaCaja(),
             resumen.getTotalTrabajosDomicilio(),
-            resumen.getTotalDelDia());
+            resumen.getTotalDelDia(),
+            resumen.getPagosClienteEfectivo(),
+            resumen.getPagosClienteTransferencia(),
+            resumen.getPagosClienteTarjeta(),
+            resumen.getVentasEnCuentaCorriente());
     }
 
     private GastoArqueoResponse toResponse(Gasto g) {

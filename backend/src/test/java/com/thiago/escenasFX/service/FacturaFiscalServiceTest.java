@@ -24,6 +24,7 @@ import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.FacturaFiscal;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.FacturaFiscalRepository;
+import com.thiago.escenasFX.repository.NotaCreditoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 import com.thiago.escenasFX.service.AfipFacturacionService.ResultadoCae;
 
@@ -36,12 +37,14 @@ class FacturaFiscalServiceTest {
     private VentaRepository ventaRepo;
     @Mock
     private AfipFacturacionService afipFacturacionService;
+    @Mock
+    private NotaCreditoRepository notaCreditoRepo;
 
     private FacturaFiscalService facturaFiscalService;
 
     @BeforeEach
     void setUp() {
-        facturaFiscalService = new FacturaFiscalService(facturaRepo, ventaRepo, afipFacturacionService, 1);
+        facturaFiscalService = new FacturaFiscalService(facturaRepo, ventaRepo, notaCreditoRepo, afipFacturacionService, 1);
         lenient().when(facturaRepo.save(any(FacturaFiscal.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(facturaRepo.findByVentaIdVenta(anyInt())).thenReturn(Optional.empty());
     }
@@ -61,7 +64,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_ventaConfirmadaConsumidorFinal_emiteYGuardaEmitida() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
@@ -78,7 +81,7 @@ class FacturaFiscalServiceTest {
     void facturar_ventaNoConfirmada_tiraIllegalStateException() {
         Venta venta = ventaConfirmada("ARTICULO");
         venta.setEstado("PENDIENTE_AUTORIZACION");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
 
         assertThatThrownBy(() -> facturaFiscalService.facturar(10, 99, null, null, null))
             .isInstanceOf(IllegalStateException.class);
@@ -87,7 +90,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_yaTieneFacturaEmitida_tiraIllegalStateException() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         FacturaFiscal existente = new FacturaFiscal();
         existente.setEstado("EMITIDA");
         when(facturaRepo.findByVentaIdVenta(10)).thenReturn(Optional.of(existente));
@@ -99,7 +102,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_clienteConCuitSinDocNro_tiraIllegalArgumentException() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
 
         assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, null, "Juan Pérez", 6))
             .isInstanceOf(IllegalArgumentException.class);
@@ -108,7 +111,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_clienteConCuitSinNombre_tiraIllegalArgumentException() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
 
         assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", null, 6))
             .isInstanceOf(IllegalArgumentException.class);
@@ -117,7 +120,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_clienteConCuit_guardaNombreYDocumento() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
@@ -130,7 +133,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_consumidorFinalConNombre_ignoraElNombre() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 7, "70099998887776", LocalDate.of(2026, 8, 29), null));
 
@@ -142,7 +145,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_arcaRechaza_guardaEstadoErrorConDetalle() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(false, null, null, null, "10015 - Observación de ARCA"));
 
@@ -156,7 +159,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_fallaLaConexion_guardaEstadoErrorSinPropagarLaExcepcion() {
         Venta venta = ventaConfirmada("ARTICULO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any()))
             .thenThrow(new com.thiago.escenasFX.exception.AfipIntegracionException("timeout"));
 
@@ -169,7 +172,7 @@ class FacturaFiscalServiceTest {
     @Test
     void facturar_ventaSoloConServicios_usaConceptoServicios() {
         Venta venta = ventaConfirmada("SERVICIO");
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(venta));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(venta));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 1, "cae", LocalDate.now(), null));
 
@@ -183,7 +186,7 @@ class FacturaFiscalServiceTest {
 
     private AfipFacturacionService.DatosFactura facturarYCapturar(Integer docTipo, String docNro, String nombre,
             Integer condicion, FacturaFiscal[] resultado) {
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
         when(afipFacturacionService.emitirFacturaC(any())).thenReturn(
             new ResultadoCae(true, 1, "cae", LocalDate.now(), null));
 
@@ -223,7 +226,7 @@ class FacturaFiscalServiceTest {
 
     @Test
     void facturar_cuitSinCondicion_rechazaSinLlamarAArca() {
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
 
         assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez", null))
             .isInstanceOf(IllegalArgumentException.class)
@@ -234,7 +237,7 @@ class FacturaFiscalServiceTest {
 
     @Test
     void facturar_condicionInexistente_rechazaSinLlamarAArca() {
-        when(ventaRepo.findById(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
+        when(ventaRepo.buscarPorIdConLock(10)).thenReturn(Optional.of(ventaConfirmada("ARTICULO")));
 
         assertThatThrownBy(() -> facturaFiscalService.facturar(10, 80, "20300238379", "Juan Pérez", 2))
             .isInstanceOf(IllegalArgumentException.class)

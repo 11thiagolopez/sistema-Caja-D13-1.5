@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +20,7 @@ import com.thiago.escenasFX.model.FacturaFiscal;
 import com.thiago.escenasFX.service.ClienteService;
 import com.thiago.escenasFX.service.FacturaFiscalService;
 import com.thiago.escenasFX.service.FacturaPdfService;
+import com.thiago.escenasFX.service.VentaService;
 
 import jakarta.validation.Valid;
 
@@ -33,22 +35,40 @@ public class FacturaFiscalController {
     private final EmailService emailService;
     private final ClienteService clienteService;
 
+    private final VentaService ventaService;
+
     public FacturaFiscalController(FacturaFiscalService facturaFiscalService, FacturaPdfService facturaPdfService, EmailService emailService,
-            ClienteService clienteService) {
+            ClienteService clienteService, VentaService ventaService) {
         this.facturaFiscalService = facturaFiscalService;
         this.facturaPdfService = facturaPdfService;
         this.emailService = emailService;
         this.clienteService = clienteService;
+        this.ventaService = ventaService;
     }
 
     @PostMapping
-    public FacturaFiscalResponse facturar(@PathVariable Integer idVenta, @Valid @RequestBody FacturarVentaRequest request) {
+    public FacturaFiscalResponse facturar(@PathVariable Integer idVenta, @Valid @RequestBody FacturarVentaRequest request,
+            Authentication authentication) {
+        exigirAccesoALaVenta(idVenta, authentication);
+        if (request.getIdCliente() != null) {
+            return VentaMapper.toFacturaResponse(
+                facturaFiscalService.facturarACliente(idVenta, clienteService.obtenerPorId(request.getIdCliente())));
+        }
+        if (request.getClienteDocTipo() == null) {
+            throw new IllegalArgumentException("Falta el cliente o el tipo de documento");
+        }
         FacturaFiscal factura = facturaFiscalService.facturar(idVenta, request.getClienteDocTipo(),
             request.getClienteDocNro(), request.getClienteNombre(), request.getCondicionIvaReceptor());
         if ("EMITIDA".equals(factura.getEstado())) {
             registrarCliente(factura);
         }
-        return toResponse(factura);
+        return VentaMapper.toFacturaResponse(factura);
+    }
+
+    private void exigirAccesoALaVenta(Integer idVenta, Authentication authentication) {
+        if (!RolAutenticado.esAdmin(authentication)) {
+            RolAutenticado.exigirVentaPropiaConfirmada(ventaService.obtenerPorId(idVenta), authentication);
+        }
     }
 
     // Después del commit de la factura y sin propagar errores: un CAE ya obtenido es irreversible,
@@ -64,7 +84,7 @@ public class FacturaFiscalController {
     @GetMapping
     public ResponseEntity<FacturaFiscalResponse> obtener(@PathVariable Integer idVenta) {
         return facturaFiscalService.obtenerPorVenta(idVenta)
-            .map(f -> ResponseEntity.ok(toResponse(f)))
+            .map(f -> ResponseEntity.ok(VentaMapper.toFacturaResponse(f)))
             .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
@@ -72,7 +92,9 @@ public class FacturaFiscalController {
     // resto de la API) y cualquier falla generando el PDF la atrapa el handler genérico de
     // GlobalExceptionHandler — antes esto devolvía un 500 vacío sin loguear nada útil.
     @GetMapping("/pdf")
-    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer idVenta) throws Exception {
+    public ResponseEntity<byte[]> descargarPdf(@PathVariable Integer idVenta, Authentication authentication)
+            throws Exception {
+        exigirAccesoALaVenta(idVenta, authentication);
         FacturaFiscal factura = facturaFiscalService.obtenerPorVenta(idVenta)
             .orElseThrow(() -> new IllegalArgumentException("Factura no encontrada para la venta: " + idVenta));
 
@@ -85,12 +107,7 @@ public class FacturaFiscalController {
 
         return ResponseEntity.ok().headers(headers).body(pdfBytes);
     }
-    
-    private FacturaFiscalResponse toResponse(FacturaFiscal f) {
-        return new FacturaFiscalResponse(f.getIdFactura(), f.getVenta().getIdVenta(), f.getPuntoVenta(),
-            f.getTipoComprobante(), f.getNumero(), f.getClienteDocTipo(), f.getClienteDocNro(), f.getClienteNombre(),
-            f.getCondicionIvaReceptor(), f.getCae(), f.getCaeVencimiento(), f.getImporte(), f.getEstado(), f.getErrorDetalle());
-    }
+
     // Antes tomaba el email como @RequestParam sin validar (a diferencia de
     // VentaController.enviarComprobante, la operación equivalente para el comprobante interno,
     // que ya usaba este mismo DTO con @Email) — una dirección mal formada llegaba directo a

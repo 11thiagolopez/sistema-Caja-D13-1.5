@@ -35,6 +35,7 @@ import com.thiago.escenasFX.model.SolicitudRetiro;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.GastoRepository;
 import com.thiago.escenasFX.repository.MovimientoCajaRepository;
+import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteClienteRepository;
 import com.thiago.escenasFX.repository.MovimientoCuentaCorrienteProveedorRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.SesionCajaRepository;
@@ -58,6 +59,8 @@ class CajaServiceTest {
     private ProductoRepository productoRepo;
     @Mock
     private MovimientoCuentaCorrienteProveedorRepository movimientoProveedorRepo;
+    @Mock
+    private MovimientoCuentaCorrienteClienteRepository movimientoClienteRepo;
     @Mock
     private GastoRepository gastoRepo;
     // abrirSesion() maneja su propia transacción a mano (TransactionTemplate) para poder tenerla

@@ -29,6 +29,7 @@ import com.thiago.escenasFX.repository.FacturaFiscalRepository;
 import com.thiago.escenasFX.service.FacturaPdfService;
 import com.thiago.escenasFX.service.NotaCreditoFiscalService;
 import com.thiago.escenasFX.service.NotaCreditoService;
+import com.thiago.escenasFX.service.ZonaNegocio;
 
 import jakarta.validation.Valid;
 
@@ -64,7 +65,7 @@ public class NotaCreditoController {
     public List<NotaCreditoResponse> listar(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
-        return notaCreditoService.listarPorRango(desde.atStartOfDay(), hasta.atTime(23, 59, 59)).stream()
+        return notaCreditoService.listarPorRango(ZonaNegocio.inicioDelDia(desde), ZonaNegocio.finDelDia(hasta)).stream()
             .map(this::toResponse)
             .toList();
     }

@@ -37,7 +37,7 @@ class ClienteControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void crearCliente_comoVendedor_devuelve403() throws Exception {
+    void crearCliente_comoVendedor_permitidoDesdeCobros() throws Exception {
         Empleado vendedor = crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
         String token = login(vendedor.getUsuario(), "clave123");
 
@@ -49,7 +49,7 @@ class ClienteControllerIntegrationTest extends AbstractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .content(body))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isCreated());
     }
 
     @Test

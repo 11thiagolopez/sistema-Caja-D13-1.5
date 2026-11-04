@@ -2,15 +2,25 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
-import { getCuentaCorrienteCliente } from '../api/clientes'
+import { getSaldoCliente } from '../api/clientes'
+import { descargarPdfFactura, facturarVenta } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { useAutorizaciones } from '../components/AutorizacionesPendientes'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
-import { BuscadorClienteSelect } from '../components/BuscadorClienteSelect'
+import { ModalFacturacion } from '../components/ModalFacturacion'
+import { SelectorCliente } from '../components/SelectorCliente'
 import { useCarrito } from '../hooks/useCarrito'
 import { verBlob } from '../utils/descargarBlob'
-import type { ClienteResponse, DetalleVentaRequest, MedioPago, Producto, VentaResponse } from '../types/api'
+import { numeroComprobante, textoSaldo } from '../utils/formato'
+import type {
+  ClienteResponse,
+  DetalleVentaRequest,
+  FacturaFiscalResponse,
+  MedioPago,
+  Producto,
+  VentaResponse,
+} from '../types/api'
 
 interface ItemCarrito extends DetalleVentaRequest {
   descripcionProducto: string
@@ -26,11 +36,19 @@ export function RegistrarVenta() {
   const [descuento, setDescuento] = useState('')
   const [motivoDescuento, setMotivoDescuento] = useState('')
 
-  // Cuenta corriente: elegir un cliente es opcional, solo hace falta si se va a pagar (total o
-  // parcialmente) con su saldo a favor.
+  // Elegir un cliente es opcional, salvo para vender en cuenta corriente o pagar con su saldo.
   const [cliente, setCliente] = useState<ClienteResponse | null>(null)
   const [saldoDisponible, setSaldoDisponible] = useState<number | null>(null)
   const [montoSaldoAplicado, setMontoSaldoAplicado] = useState('')
+  // Por defecto no se factura, para no frenar la atención: sale el comprobante X.
+  const [emitirFactura, setEmitirFactura] = useState(false)
+  const [emitirPendiente, setEmitirPendiente] = useState(false)
+  const [clienteDeResultado, setClienteDeResultado] = useState<ClienteResponse | null>(null)
+  const [factura, setFactura] = useState<FacturaFiscalResponse | null>(null)
+  const [errorFactura, setErrorFactura] = useState<string | null>(null)
+  const [facturando, setFacturando] = useState(false)
+  const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false)
+  const [abriendoFactura, setAbriendoFactura] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -54,10 +72,49 @@ export function RegistrarVenta() {
       setSaldoDisponible(null)
       return
     }
-    getCuentaCorrienteCliente(cliente.idCliente)
-      .then((cc) => setSaldoDisponible(cc.saldoActual))
+    getSaldoCliente(cliente.idCliente)
+      .then(({ saldo }) => setSaldoDisponible(saldo))
       .catch(() => setSaldoDisponible(null))
   }, [cliente])
+
+  function onCambiarMedioPago(medio: MedioPago) {
+    setMedioPago(medio)
+    // El cargo en cuenta corriente ya descuenta lo que tenga a favor.
+    if (medio === 'CUENTA_CORRIENTE') setMontoSaldoAplicado('')
+  }
+
+  // Después de confirmar la venta y por separado: si ARCA rechaza, la venta queda cobrada y sin
+  // facturar, y se puede reintentar sin frenar el mostrador.
+  async function emitirFacturaDe(venta: VentaResponse, clienteVenta: ClienteResponse | null) {
+    setFacturando(true)
+    try {
+      const emitida = await facturarVenta(
+        venta.idVenta,
+        clienteVenta ? { idCliente: clienteVenta.idCliente } : { clienteDocTipo: 99 },
+      )
+      if (emitida.estado === 'EMITIDA') {
+        setFactura(emitida)
+      } else {
+        setErrorFactura(emitida.errorDetalle ?? 'ARCA no autorizó el comprobante')
+      }
+    } catch (err) {
+      setErrorFactura(err instanceof ApiRequestError ? err.message : 'No se pudo facturar la venta')
+    } finally {
+      setFacturando(false)
+    }
+  }
+
+  async function verFactura() {
+    if (!factura) return
+    setAbriendoFactura(true)
+    try {
+      await descargarPdfFactura(factura.idVenta)
+    } catch (err) {
+      setErrorFactura(err instanceof Error ? err.message : 'No se pudo abrir la factura')
+    } finally {
+      setAbriendoFactura(false)
+    }
+  }
 
   function agregarProductoAlCarrito(producto: Producto, cantidadAAgregar: number): boolean {
     const precioVenta = producto.precioVenta
@@ -111,6 +168,10 @@ export function RegistrarVenta() {
         montoSaldoAplicado: montoSaldoNumero,
       })
       setResultado(venta)
+      setEmitirPendiente(emitirFactura)
+      setClienteDeResultado(cliente)
+      setFactura(null)
+      setErrorFactura(null)
       vaciarCarrito()
       setDescuento('')
       setMotivoDescuento('')
@@ -118,8 +179,13 @@ export function RegistrarVenta() {
       setErrorComprobante(null)
       setCliente(null)
       setMontoSaldoAplicado('')
+      setMedioPago('EFECTIVO')
+      setEmitirFactura(false)
       if (venta.estado === 'PENDIENTE_AUTORIZACION') {
         agregarAutorizacion({ tipo: 'DESCUENTO', id: venta.idVenta, monto: venta.descuento, motivo: motivoDescuento })
+      }
+      if (emitirFactura && venta.estado === 'CONFIRMADA') {
+        await emitirFacturaDe(venta, cliente)
       }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar la venta')
@@ -158,6 +224,8 @@ export function RegistrarVenta() {
       setEnviandoComprobante(false)
     }
   }
+
+  const faltaClienteParaCuenta = medioPago === 'CUENTA_CORRIENTE' && !cliente
 
   return (
     <div>
@@ -207,12 +275,12 @@ export function RegistrarVenta() {
 
       <form onSubmit={onSubmit}>
         <section>
-          <h4>Cliente (opcional — solo para pagar con saldo de cuenta corriente)</h4>
-          <BuscadorClienteSelect idClienteSeleccionado={cliente?.idCliente ?? null} onSeleccionar={setCliente} />
+          <h4>Cliente (opcional)</h4>
+          <SelectorCliente value={cliente} onChange={setCliente} />
           {cliente && saldoDisponible != null && (
             <p>
-              Saldo disponible de {cliente.nombre}: ${saldoDisponible.toFixed(2)}
-              {saldoDisponible > 0 && (
+              Cuenta corriente: <span className={saldoDisponible < 0 ? 'saldo-deudor' : undefined}>{textoSaldo(saldoDisponible)}</span>
+              {saldoDisponible > 0 && medioPago !== 'CUENTA_CORRIENTE' && (
                 <>
                   {' — '}
                   <label>
@@ -236,12 +304,22 @@ export function RegistrarVenta() {
         </section>
         <label>
           Medio de pago
-          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+          <select value={medioPago} onChange={(e) => onCambiarMedioPago(e.target.value as MedioPago)}>
             <option value="EFECTIVO">Efectivo</option>
             <option value="TRANSFERENCIA">Transferencia</option>
             <option value="TARJETA">Tarjeta</option>
+            <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
           </select>
         </label>
+        {faltaClienteParaCuenta && <p className="error">Para vender en cuenta corriente, elegí o creá un cliente.</p>}
+        {medioPago === 'CUENTA_CORRIENTE' && cliente && (
+          <p>El total se carga a la cuenta corriente de {cliente.nombre}.</p>
+        )}
+        <label className="casilla">
+          <input type="checkbox" checked={emitirFactura} onChange={(e) => setEmitirFactura(e.target.checked)} />
+          Emitir factura ante ARCA al cobrar{cliente ? ` a ${cliente.nombre}` : ' a Consumidor Final'}
+        </label>
+        {emitirFactura && <p>Es un comprobante real y no se puede deshacer.</p>}
         <label>
           Descuento (opcional)
           <input
@@ -263,9 +341,9 @@ export function RegistrarVenta() {
           </label>
         )}
         {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={enviando || carrito.length === 0}>
+        <button type="submit" disabled={enviando || carrito.length === 0 || faltaClienteParaCuenta}>
           {enviando && <span className="spinner" />}
-          {enviando ? 'Registrando...' : 'Registrar venta'}
+          {enviando ? 'Registrando...' : emitirFactura ? 'Cobrar y facturar' : 'Registrar venta'}
         </button>
       </form>
 
@@ -282,14 +360,41 @@ export function RegistrarVenta() {
               {resultado.nombreCliente}.
             </p>
           )}
-          {resultado.estado === 'CONFIRMADA' && (
+          {resultado.estado === 'PENDIENTE_AUTORIZACION' && emitirPendiente && (
+            <p>Por el descuento pendiente no se emitió la factura: un administrador puede hacerlo desde el historial cuando se apruebe.</p>
+          )}
+          {facturando && (
+            <p>
+              <span className="spinner" /> Facturando ante ARCA...
+            </p>
+          )}
+          {factura && (
+            <div>
+              <p>
+                Factura C Nº {numeroComprobante(factura.puntoVenta, factura.numero)}
+                {factura.clienteNombre ? ` a ${factura.clienteNombre}` : ' a Consumidor Final'}. CAE {factura.cae}
+              </p>
+              <button type="button" onClick={verFactura} disabled={abriendoFactura}>
+                {abriendoFactura ? 'Abriendo...' : 'Ver factura'}
+              </button>
+            </div>
+          )}
+          {errorFactura && (
+            <p className="error">La venta quedó cobrada, pero no se pudo facturar: {errorFactura}</p>
+          )}
+          {resultado.estado === 'CONFIRMADA' && !factura && !facturando && (
+            <button type="button" onClick={() => setModalFacturaAbierto(true)}>
+              {errorFactura ? 'Reintentar factura' : 'Facturar esta venta'}
+            </button>
+          )}
+          {resultado.estado === 'CONFIRMADA' && !factura && (
             <button type="button" onClick={verComprobante} disabled={viendoComprobante}>
               {viendoComprobante && <span className="spinner" />}
               {viendoComprobante ? 'Abriendo...' : 'Ver comprobante'}
             </button>
           )}
           {errorComprobanteVer && <p className="error">{errorComprobanteVer}</p>}
-          {resultado.estado === 'CONFIRMADA' && (
+          {resultado.estado === 'CONFIRMADA' && !factura && (
             <div>
               <h4>Enviar comprobante por email</h4>
               <input
@@ -319,6 +424,19 @@ export function RegistrarVenta() {
         </div>
       )}
 
+      {modalFacturaAbierto && resultado && (
+        <ModalFacturacion
+          venta={resultado}
+          cliente={clienteDeResultado}
+          onCerrar={() => setModalFacturaAbierto(false)}
+          onResultado={(intento) => {
+            if (intento.estado === 'EMITIDA') {
+              setFactura(intento)
+              setErrorFactura(null)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

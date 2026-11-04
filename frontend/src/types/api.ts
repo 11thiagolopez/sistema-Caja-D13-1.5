@@ -4,7 +4,8 @@ export type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO'
 
 // SALDO_CUENTA_CORRIENTE: nunca se elige a mano en el <select> de medio de pago — el backend lo
 // fuerza solo cuando montoSaldoAplicado cubre el total completo de la venta (ver VentaRequest).
-export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'SALDO_CUENTA_CORRIENTE'
+// CUENTA_CORRIENTE: se elige a mano, exige cliente y carga el total a su saldo.
+export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CUENTA_CORRIENTE' | 'SALDO_CUENTA_CORRIENTE'
 
 export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO' | 'ANULADA'
 
@@ -106,6 +107,7 @@ export interface ProveedorResponse {
 
 // 80 CUIT | 96 DNI | 99 sin documento — misma convención que ClienteDocTipo de Factura.
 export interface ClienteRequest {
+  // Consumidor Final con documento puede ir vacío: el backend guarda "Consumidor Final".
   nombre: string
   docTipo: ClienteDocTipo
   docNro?: string
@@ -125,6 +127,8 @@ export interface ClienteResponse {
   email: string | null
   direccion: string | null
   activo: boolean
+  // Positivo = a favor, negativo = debe. Null en la búsqueda (/buscar) y al crear.
+  saldo: number | null
 }
 
 export type TipoMovimientoCuentaCorriente = 'CREDITO' | 'DEBITO'
@@ -137,6 +141,20 @@ export interface MovimientoCuentaCorrienteClienteResponse {
   descripcion: string | null
   idNotaCredito: number | null
   idVentaAplicacion: number | null
+  // Solo en los pagos del cliente.
+  medioPago: string | null
+}
+
+export interface PagoClienteRequest {
+  monto: number
+  medioPago: 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA'
+  descripcion?: string
+}
+
+export interface PagoClienteRequest {
+  monto: number
+  medioPago: 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA'
+  descripcion?: string
 }
 
 export interface CuentaCorrienteClienteResponse {
@@ -280,13 +298,22 @@ export interface VentaResponse {
   nombreCliente: string | null
   montoSaldoAplicado: number | null
   detalles: DetalleVentaResponse[]
+  // Null en el arqueo y los trabajos, que no los usan.
+  estadoFactura: EstadoFactura | null
+  // Con un intento rechazado, la venta sigue SIN_FACTURAR y esto trae el error.
+  factura: FacturaFiscalResponse | null
+  tieneNotaCredito: boolean | null
 }
 
 // 80 = CUIT | 96 = DNI | 99 = Consumidor Final (clienteDocNro va vacío en ese caso).
 export type ClienteDocTipo = 80 | 96 | 99
 
+export type EstadoFactura = 'SIN_FACTURAR' | 'FACTURADA'
+
 export interface FacturarVentaRequest {
-  clienteDocTipo: ClienteDocTipo
+  // Cliente del catálogo: sus datos reemplazan a los de abajo. Sin cliente: clienteDocTipo 99.
+  idCliente?: number
+  clienteDocTipo?: ClienteDocTipo
   clienteDocNro?: string
   // Nombre/razón social del cliente: WSFEv1 no lo pide, pero toda factura real de ARCA lo
   // imprime — el backend lo exige junto con clienteDocNro cuando clienteDocTipo no es 99.
@@ -453,6 +480,12 @@ export interface ResumenDiaResponse {
   // Informativo, no suma a cajaTotalDelDia: ventas pagadas (total o parcialmente) con saldo de
   // cuenta corriente en vez de dinero real.
   ventasPagadasConSaldo: number
+  // Lo que los clientes pagaron de su cuenta corriente: entra al arqueo por su medio.
+  pagosClienteEfectivo: number
+  pagosClienteTransferencia: number
+  pagosClienteTarjeta: number
+  // Informativo, no suma a cajaTotalDelDia: vendido en cuenta corriente y todavía no cobrado.
+  ventasEnCuentaCorriente: number
   // Todo pago a proveedor y compra a crédito del período, salgan o no de la caja.
   movimientosProveedor: MovimientoProveedorArqueoResponse[]
   pagosProveedorEfectivoCaja: number

@@ -2705,3 +2705,69 @@ puede ver:
 SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
 WHERE conrelid = 'empleados'::regclass AND contype = 'c';
 ```
+
+## 31. Clientes, facturación y notas de crédito (2026-11-04)
+
+**Pedido del dueño**: sacar el historial duplicado, facturar como acción sobre una venta, un solo selector de
+clientes, vender en cuenta corriente y ver a cada cliente en una sola pantalla.
+
+**Decisiones del dueño**:
+
+- `estado_factura` no se guarda: se deduce de `facturas_fiscales` (`VentaConFacturacion`), para no tener dos
+  datos que se contradigan. Una factura rechazada deja la venta `SIN_FACTURAR`, con el error para reintentar.
+- La nota de crédito exige cliente siempre, y el importe se acredita en su saldo.
+- El VENDEDOR busca y crea clientes, ve el saldo del que eligió, vende en cuenta corriente y factura solo sus
+  ventas confirmadas. El listado, los movimientos, editar, dar de baja y los pagos quedan para ADMIN.
+- Los datos del emisor quedan como estaban (variables de entorno y código), sin pantalla.
+- La sección Facturación pasó a Comprobantes (facturas y notas de crédito), que es también donde se retoma una
+  nota fiscal que quedó sin emitir. Antes no había ninguna pantalla para eso.
+- Sin límite de deuda en cuenta corriente: se muestra el saldo al elegir el cliente.
+
+**Criterios**: Consumidor Final sin datos no crea un cliente, y con documento pero sin nombre se guarda como
+"Consumidor Final". El formulario ofrece 4 condiciones, y los otros códigos de ARCA se conservan. Una venta en
+cuenta corriente no admite saldo aplicado: el débito ya lo descuenta. El efectivo de un pago exige caja abierta
+para no quedar fuera del arqueo. Pagar de más deja saldo a favor. No se da de baja a un cliente con saldo.
+
+**Dinero**: lo vendido en cuenta corriente cuenta como ingreso al vender (balance y reportes), pero entra a caja
+recién cuando se paga, por el medio del pago (`movimientos_cuenta_corriente_cliente.medio_pago` e `id_sesion`).
+Esos pagos suman a "Total del día". Rechazar el descuento de una venta en cuenta corriente revierte el cargo.
+
+**Encontrado y corregido**:
+
+- La nota de crédito acreditaba a precio de lista: una venta de $1000 con $100 de descuento generaba un crédito
+  de $1000. Ahora se prorratea, y la nota que completa la venta cierra justo en lo cobrado. Las notas ya
+  emitidas no se tocaron: si hubo alguna sobre una venta con descuento, su saldo quedó de más.
+- Dos pedidos simultáneos podían obtener dos CAE para la misma venta: `FacturaFiscalService` ahora bloquea la fila.
+- Se podía facturar el total de una venta ya devuelta con nota de crédito: ahora se rechaza antes de llamar a ARCA.
+  Consecuencia: una venta con una devolución parcial tampoco se puede facturar por el resto.
+- El backend aceptaba cualquier medio de pago en `POST /api/ventas`.
+- El historial hacía un pedido de factura por venta.
+- La lista de notas de crédito filtraba en la zona de la JVM: ahora usa `ZonaNegocio`.
+
+**Lo que no es una sola transacción**: ARCA es externo y un CAE no se puede deshacer. Todo se valida antes de
+llamarlo, y el cliente y la factura se guardan juntos al responder. Al cobrar con factura, primero se confirma la
+venta y después se emite, para que un rechazo no frene el mostrador. Una venta con descuento pendiente no se
+factura hasta que la aprueben. Sigue abierto un riesgo anterior: si ARCA autoriza y se corta la respuesta, el
+reintento pide otro comprobante.
+
+**SQL, corrido por el dueño antes de desplegar**:
+
+```sql
+ALTER TABLE notas_credito ALTER COLUMN id_cliente DROP NOT NULL;
+ALTER TABLE movimientos_cuenta_corriente_cliente
+  ADD COLUMN medio_pago VARCHAR(20),
+  ADD COLUMN id_sesion INTEGER REFERENCES sesiones_caja(id_sesion);
+```
+
+La primera línea quedó innecesaria al decidir que la nota exige cliente. El código la sigue exigiendo y no molesta;
+para volver atrás: `ALTER TABLE notas_credito ALTER COLUMN id_cliente SET NOT NULL;`.
+
+**Eliminado**: `Facturar.tsx`, `NotaCredito.tsx`, `CuentaCorrienteCliente.tsx`, `BuscadorClienteSelect.tsx`.
+
+**Verificación**: tests de backend sobre H2 (`ClientesFacturacionIntegrationTest`, nuevo), `tsc`, `oxlint` y
+`vite build`. Recorrido real en Edge, en escritorio y a 390 px, contra el backend con H2 y sin certificado de ARCA:
+Cobros, alta en el lugar, cuenta corriente, factura rechazada, Historial, modales, Clientes, Comprobantes y Caja.
+**Sin verificar**: la emisión real ante ARCA (solo con ARCA simulado en los tests) y el recorrido contra Supabase.
+
+**Para correr las herramientas en un equipo sin Maven ni Node**: con Avast interceptando HTTPS, Maven necesita
+`MAVEN_OPTS=-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT` para bajar lo que no tenga en caché.
