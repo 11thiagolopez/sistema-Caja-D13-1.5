@@ -3,10 +3,11 @@ import { useAuth } from '../auth/AuthContext'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { getSaldoCliente } from '../api/clientes'
-import { descargarPdfFactura, facturarVenta } from '../api/facturas'
+import { verPdfFactura } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
 import { useAutorizaciones } from '../components/AutorizacionesPendientes'
 import { BarcodeInput } from '../components/BarcodeInput'
+import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { ModalFacturacion } from '../components/ModalFacturacion'
 import { SelectorCliente } from '../components/SelectorCliente'
@@ -40,13 +41,11 @@ export function RegistrarVenta() {
   const [cliente, setCliente] = useState<ClienteResponse | null>(null)
   const [saldoDisponible, setSaldoDisponible] = useState<number | null>(null)
   const [montoSaldoAplicado, setMontoSaldoAplicado] = useState('')
-  // Por defecto no se factura, para no frenar la atención: sale el comprobante X.
-  const [emitirFactura, setEmitirFactura] = useState(false)
-  const [emitirPendiente, setEmitirPendiente] = useState(false)
+  // Se factura después de cobrar, con "Facturar esta venta": el cliente elegido acá pasa al modal,
+  // que es donde se confirma a quién sale. Si ARCA rechaza, la venta ya quedó cobrada.
   const [clienteDeResultado, setClienteDeResultado] = useState<ClienteResponse | null>(null)
   const [factura, setFactura] = useState<FacturaFiscalResponse | null>(null)
   const [errorFactura, setErrorFactura] = useState<string | null>(null)
-  const [facturando, setFacturando] = useState(false)
   const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false)
   const [abriendoFactura, setAbriendoFactura] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,32 +82,12 @@ export function RegistrarVenta() {
     if (medio === 'CUENTA_CORRIENTE') setMontoSaldoAplicado('')
   }
 
-  // Después de confirmar la venta y por separado: si ARCA rechaza, la venta queda cobrada y sin
-  // facturar, y se puede reintentar sin frenar el mostrador.
-  async function emitirFacturaDe(venta: VentaResponse, clienteVenta: ClienteResponse | null) {
-    setFacturando(true)
-    try {
-      const emitida = await facturarVenta(
-        venta.idVenta,
-        clienteVenta ? { idCliente: clienteVenta.idCliente } : { clienteDocTipo: 99 },
-      )
-      if (emitida.estado === 'EMITIDA') {
-        setFactura(emitida)
-      } else {
-        setErrorFactura(emitida.errorDetalle ?? 'ARCA no autorizó el comprobante')
-      }
-    } catch (err) {
-      setErrorFactura(err instanceof ApiRequestError ? err.message : 'No se pudo facturar la venta')
-    } finally {
-      setFacturando(false)
-    }
-  }
-
   async function verFactura() {
     if (!factura) return
+    setErrorFactura(null)
     setAbriendoFactura(true)
     try {
-      await descargarPdfFactura(factura.idVenta)
+      await verPdfFactura(factura.idVenta)
     } catch (err) {
       setErrorFactura(err instanceof Error ? err.message : 'No se pudo abrir la factura')
     } finally {
@@ -168,7 +147,6 @@ export function RegistrarVenta() {
         montoSaldoAplicado: montoSaldoNumero,
       })
       setResultado(venta)
-      setEmitirPendiente(emitirFactura)
       setClienteDeResultado(cliente)
       setFactura(null)
       setErrorFactura(null)
@@ -180,12 +158,8 @@ export function RegistrarVenta() {
       setCliente(null)
       setMontoSaldoAplicado('')
       setMedioPago('EFECTIVO')
-      setEmitirFactura(false)
       if (venta.estado === 'PENDIENTE_AUTORIZACION') {
         agregarAutorizacion({ tipo: 'DESCUENTO', id: venta.idVenta, monto: venta.descuento, motivo: motivoDescuento })
-      }
-      if (emitirFactura && venta.estado === 'CONFIRMADA') {
-        await emitirFacturaDe(venta, cliente)
       }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar la venta')
@@ -315,11 +289,6 @@ export function RegistrarVenta() {
         {medioPago === 'CUENTA_CORRIENTE' && cliente && (
           <p>El total se carga a la cuenta corriente de {cliente.nombre}.</p>
         )}
-        <label className="casilla">
-          <input type="checkbox" checked={emitirFactura} onChange={(e) => setEmitirFactura(e.target.checked)} />
-          Emitir factura ante ARCA al cobrar{cliente ? ` a ${cliente.nombre}` : ' a Consumidor Final'}
-        </label>
-        {emitirFactura && <p>Es un comprobante real y no se puede deshacer.</p>}
         <label>
           Descuento (opcional)
           <input
@@ -343,7 +312,7 @@ export function RegistrarVenta() {
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={enviando || carrito.length === 0 || faltaClienteParaCuenta}>
           {enviando && <span className="spinner" />}
-          {enviando ? 'Registrando...' : emitirFactura ? 'Cobrar y facturar' : 'Registrar venta'}
+          {enviando ? 'Registrando...' : 'Registrar venta'}
         </button>
       </form>
 
@@ -360,14 +329,6 @@ export function RegistrarVenta() {
               {resultado.nombreCliente}.
             </p>
           )}
-          {resultado.estado === 'PENDIENTE_AUTORIZACION' && emitirPendiente && (
-            <p>Por el descuento pendiente no se emitió la factura: un administrador puede hacerlo desde el historial cuando se apruebe.</p>
-          )}
-          {facturando && (
-            <p>
-              <span className="spinner" /> Facturando ante ARCA...
-            </p>
-          )}
           {factura && (
             <div>
               <p>
@@ -377,14 +338,13 @@ export function RegistrarVenta() {
               <button type="button" onClick={verFactura} disabled={abriendoFactura}>
                 {abriendoFactura ? 'Abriendo...' : 'Ver factura'}
               </button>
+              <BotonDescargarFactura factura={factura} onError={setErrorFactura} />
+              {errorFactura && <p className="error">{errorFactura}</p>}
             </div>
           )}
-          {errorFactura && (
-            <p className="error">La venta quedó cobrada, pero no se pudo facturar: {errorFactura}</p>
-          )}
-          {resultado.estado === 'CONFIRMADA' && !factura && !facturando && (
+          {resultado.estado === 'CONFIRMADA' && !factura && (
             <button type="button" onClick={() => setModalFacturaAbierto(true)}>
-              {errorFactura ? 'Reintentar factura' : 'Facturar esta venta'}
+              Facturar esta venta
             </button>
           )}
           {resultado.estado === 'CONFIRMADA' && !factura && (

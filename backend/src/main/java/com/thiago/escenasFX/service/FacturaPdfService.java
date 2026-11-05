@@ -40,7 +40,8 @@ public class FacturaPdfService {
         Venta venta = factura.getVenta();
         List<FacturaFiscalHtmlBuilder.Linea> items = venta.getDetalles().stream()
             .map(d -> new FacturaFiscalHtmlBuilder.Linea(
-                d.getProducto().getDescripcion(),
+                // La mano de obra de un trabajo a domicilio no tiene producto, solo su descripción.
+                d.getProducto() != null ? d.getProducto().getDescripcion() : d.getDescripcion(),
                 d.getCantidad(),
                 d.getPrecioUnitario(),
                 d.getSubtotal()

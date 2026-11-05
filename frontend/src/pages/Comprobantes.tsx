@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { descargarPdfFactura } from '../api/facturas'
+import { descargarPdfFactura, verPdfFactura } from '../api/facturas'
 import {
   descargarNotaCreditoFacturaPdf,
   descargarNotaCreditoPdf,
@@ -9,7 +9,7 @@ import {
 import { getVentas } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
-import { verBlob } from '../utils/descargarBlob'
+import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import { formatoFechaHora, numeroComprobante } from '../utils/formato'
 import type { NotaCreditoResponse, VentaResponse } from '../types/api'
 
@@ -63,6 +63,12 @@ function filaNota(nota: NotaCreditoResponse): Fila {
   }
 }
 
+function pdfDeNota(nota: NotaCreditoResponse): Promise<Blob> {
+  return nota.esFiscal && nota.estado === 'EMITIDA'
+    ? descargarNotaCreditoFacturaPdf(nota.idNotaCredito)
+    : descargarNotaCreditoPdf(nota.idNotaCredito)
+}
+
 // El historial filtrado por lo fiscal: facturas emitidas y notas de crédito. También es donde se
 // retoma una nota de crédito de una venta facturada que quedó sin emitir ante ARCA.
 export function Comprobantes() {
@@ -114,11 +120,19 @@ export function Comprobantes() {
   function verPdf(fila: Fila) {
     return ejecutar(fila.clave, async () => {
       if (!fila.nota) {
-        await descargarPdfFactura(fila.idVenta)
-      } else if (fila.nota.esFiscal && fila.nota.estado === 'EMITIDA') {
-        verBlob(await descargarNotaCreditoFacturaPdf(fila.nota.idNotaCredito))
+        await verPdfFactura(fila.idVenta)
       } else {
-        verBlob(await descargarNotaCreditoPdf(fila.nota.idNotaCredito))
+        verBlob(await pdfDeNota(fila.nota))
+      }
+    })
+  }
+
+  function descargarPdf(fila: Fila) {
+    return ejecutar(fila.clave, async () => {
+      if (!fila.nota) {
+        await descargarPdfFactura(fila.idVenta, fila.numero)
+      } else {
+        descargarBlob(await pdfDeNota(fila.nota), `nota-credito-${fila.numero.replace('#', '')}.pdf`)
       }
     })
   }
@@ -193,6 +207,14 @@ export function Comprobantes() {
                 <span className="comprobante-acciones">
                   <button type="button" onClick={() => verPdf(fila)} disabled={procesando === fila.clave}>
                     Ver PDF
+                  </button>
+                  <button
+                    type="button"
+                    className="boton-secundario"
+                    onClick={() => descargarPdf(fila)}
+                    disabled={procesando === fila.clave}
+                  >
+                    Descargar PDF
                   </button>
                   {fila.nota?.esFiscal && fila.nota.estado !== 'EMITIDA' && (
                     <button type="button" onClick={() => emitirNota(fila)} disabled={procesando === fila.clave}>

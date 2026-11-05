@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getCliente } from '../api/clientes'
-import { descargarPdfFactura, facturarVenta } from '../api/facturas'
+import { facturarVenta, verPdfFactura } from '../api/facturas'
 import { getVentas } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { hoyIso } from '../utils/date'
 import { formatoFechaHora, numeroComprobante } from '../utils/formato'
+import { BotonDescargarFactura } from './BotonDescargarFactura'
 import { Modal } from './Modal'
 import { SelectorCliente } from './SelectorCliente'
 import type { ClienteResponse, FacturaFiscalResponse, VentaResponse } from '../types/api'
@@ -26,8 +27,8 @@ function ventaFacturable(venta: VentaResponse, idCliente: number | undefined): b
   )
 }
 
-// Único lugar donde se emite una factura desde el sistema, salvo al cobrar. Recibe una venta, un
-// cliente o ambos, y pide lo que falte. Sin cliente, sale a Consumidor Final.
+// Único lugar donde se emite una factura desde el sistema. Recibe una venta, un cliente o ambos, y
+// pide lo que falte. Sin cliente, sale a Consumidor Final.
 export function ModalFacturacion({ venta: ventaInicial, cliente: clienteInicial, onCerrar, onResultado }: ModalFacturacionProps) {
   const [cliente, setCliente] = useState<ClienteResponse | null>(clienteInicial ?? null)
   const [venta, setVenta] = useState<VentaResponse | null>(ventaInicial ?? null)
@@ -108,7 +109,7 @@ export function ModalFacturacion({ venta: ventaInicial, cliente: clienteInicial,
     if (!emitida) return
     setAbriendoPdf(true)
     try {
-      await descargarPdfFactura(emitida.idVenta)
+      await verPdfFactura(emitida.idVenta)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir el PDF')
     } finally {
@@ -129,6 +130,7 @@ export function ModalFacturacion({ venta: ventaInicial, cliente: clienteInicial,
           <button type="button" onClick={onVerPdf} disabled={abriendoPdf}>
             {abriendoPdf ? 'Abriendo...' : 'Ver PDF'}
           </button>
+          <BotonDescargarFactura factura={emitida} onError={setError} />
           <button type="button" className="boton-secundario" onClick={onCerrar}>
             Cerrar
           </button>

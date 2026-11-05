@@ -56,11 +56,6 @@ const SECCIONES: NavSection[] = [
     items: [{ label: 'Vendedores', to: '/vendedores' }],
   },
   {
-    label: 'Clientes',
-    roles: ['ADMIN'],
-    items: [{ label: 'Clientes', to: '/clientes' }],
-  },
-  {
     label: 'Facturación',
     roles: ['ADMIN'],
     items: [{ label: 'Comprobantes', to: '/comprobantes' }],
@@ -94,6 +89,7 @@ const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Presupuestos', to: '/presupuestos' },
   { label: 'Historial de ventas', to: '/ventas/historial', roles: ['ADMIN'] },
   { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
+  { label: 'Clientes', to: '/clientes', roles: ['ADMIN'] },
 ]
 
 // En celular el menú flota sobre el contenido: arranca cerrado y se cierra solo al elegir una opción.

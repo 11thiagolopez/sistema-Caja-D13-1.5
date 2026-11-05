@@ -9,7 +9,16 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-04, clientes, facturación y notas de crédito):
+Estado Actual (Actualizado al 2026-11-05, descarga de la factura y ajustes de Cobros y Clientes):
+
+**Descarga de la factura (detalle en `plan-migracion.md` sección 32)**: guardar una Factura C ya emitida fallaba con
+un error de red del navegador, porque la URL del PDF se revocaba al abrirlo. Ahora la URL queda viva y hay un botón
+"Descargar PDF" en Cobros, el modal de factura, Historial y Comprobantes. El PDF de una factura con mano de obra daba
+500 y se corrigió. Cobros ya no tiene la casilla de ARCA: se factura solo con "Facturar esta venta". Clientes es un
+enlace directo del menú y "Nuevo cliente" quedó alineado con el buscador. Sin SQL nuevo. Backend: **380 tests** verdes.
+Probado en Edge con API falsa. **No probado contra ARCA real ni contra Supabase real.**
+
+Estado Anterior (Actualizado al 2026-11-04, clientes, facturación y notas de crédito):
 
 **Clientes y facturación (detalle en `plan-migracion.md` sección 31, contrato en `plan-frontend.md`)**: el
 historial es la única lista de ventas. Facturar se hace con `ModalFacturacion`, desde el historial, desde un

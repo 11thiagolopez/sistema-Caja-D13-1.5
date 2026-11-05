@@ -134,6 +134,24 @@ class TrabajoDomicilioConciliacionIntegrationTest extends AbstractIntegrationTes
         return crear(cuerpo).get("idVenta").asInt();
     }
 
+    @Test
+    void pdfDeFactura_conManoDeObraSinProducto_seGenera() throws Exception {
+        int id = crearId(trabajo("EFECTIVO", true, List.of(articulo(1), manoDeObra(500))));
+
+        mockMvc.perform(post("/api/ventas/" + id + "/factura")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .content("{\"clienteDocTipo\": 99}"))
+            .andExpect(status().isOk());
+
+        byte[] pdf = mockMvc.perform(get("/api/ventas/" + id + "/factura/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsByteArray();
+
+        assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+    }
+
     private int crearDevolviendoStatus(Map<String, Object> cuerpo) throws Exception {
         return mockMvc.perform(post("/api/ventas/trabajo-domicilio")
                 .contentType(MediaType.APPLICATION_JSON)

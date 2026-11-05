@@ -201,11 +201,21 @@
   overflow: auto;
 }
 
+/* Alineado abajo y sin el margen de los label: los campos llevan el título arriba, así que centrando
+   el botón quedaba más alto que el campo. El borde transparente le da al botón la altura del input. */
 .agregar-producto {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
   margin-bottom: 16px;
+}
+
+.agregar-producto > label {
+  margin-bottom: 0;
+}
+
+.agregar-producto > button {
+  border: 1px solid transparent;
 }
 
 /* Código de colores de stock, rangos exactos pedidos por el dueño (ver utils/stockColor.ts). El
@@ -1144,6 +1154,12 @@ section {
     flex-wrap: wrap;
   }
 
+  /* Misma altura mínima que los botones, para que sigan parejos con el campo de al lado. */
+  .agregar-producto input,
+  .agregar-producto select {
+    min-height: 40px;
+  }
+
   .pantalla-login form {
     width: min(320px, calc(100vw - 32px));
     padding: 20px;
@@ -1293,16 +1309,4 @@ section {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.casilla {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.casilla input {
-  width: auto;
-  margin: 0;
 }

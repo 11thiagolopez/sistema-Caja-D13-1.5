@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { descargarVentaPdf, enviarComprobanteEmail, getVenta, getVentas } from '../api/ventas'
 import { resolverPeticion } from '../api/autorizaciones'
 import { getEmpleados } from '../api/empleados'
-import { descargarPdfFactura, enviarFacturaEmail } from '../api/facturas'
+import { enviarFacturaEmail, verPdfFactura } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
+import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { ModalFacturacion } from '../components/ModalFacturacion'
 import { ModalNotaCredito } from '../components/ModalNotaCredito'
 import { hoyIso } from '../utils/date'
@@ -403,21 +404,21 @@ function EstadoFacturacion({ venta, onFacturar }: EstadoFacturacionProps) {
 }
 
 function DetalleFactura({ factura }: { factura: FacturaFiscalResponse }) {
-  const [descargando, setDescargando] = useState(false)
+  const [abriendoPdf, setAbriendoPdf] = useState(false)
   const [enviandoMail, setEnviandoMail] = useState(false)
   const [emailCliente, setEmailCliente] = useState('')
   const [mensajeExito, setMensajeExito] = useState<string | null>(null)
   const [errorFactura, setErrorFactura] = useState<string | null>(null)
 
-  async function onDescargarPdf() {
-    setDescargando(true)
+  async function onVerPdf() {
+    setAbriendoPdf(true)
     setErrorFactura(null)
     try {
-      await descargarPdfFactura(factura.idVenta)
+      await verPdfFactura(factura.idVenta)
     } catch (err) {
       setErrorFactura(err instanceof Error ? err.message : 'Error al abrir el PDF')
     } finally {
-      setDescargando(false)
+      setAbriendoPdf(false)
     }
   }
 
@@ -444,10 +445,11 @@ function DetalleFactura({ factura }: { factura: FacturaFiscalResponse }) {
         {factura.clienteNombre ? ` a ${factura.clienteNombre}` : ' a Consumidor Final'}. CAE {factura.cae}
       </p>
       <span className="confirmar-descuento">
-        <button type="button" onClick={onDescargarPdf} disabled={descargando}>
-          {descargando && <span className="spinner" />}
-          {descargando ? 'Abriendo...' : 'Ver PDF fiscal'}
+        <button type="button" onClick={onVerPdf} disabled={abriendoPdf}>
+          {abriendoPdf && <span className="spinner" />}
+          {abriendoPdf ? 'Abriendo...' : 'Ver PDF fiscal'}
         </button>
+        <BotonDescargarFactura factura={factura} onError={setErrorFactura} />
         <input
           type="email"
           placeholder="Email del cliente"

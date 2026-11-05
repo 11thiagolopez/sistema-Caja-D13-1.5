@@ -6,7 +6,8 @@ export function descargarBlob(blob: Blob, nombreArchivo: string): void {
   enlace.href = url
   enlace.download = nombreArchivo
   enlace.click()
-  URL.revokeObjectURL(url)
+  // Con margen: revocarla antes de que el navegador termine de leerla cancela la descarga.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 /**

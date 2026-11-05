@@ -412,6 +412,14 @@ Componentes: `SelectorCliente` y `FormularioCliente` (único alta y búsqueda de
 servidor porque VENDEDOR no ve el listado), `ModalFacturacion` y `ModalNotaCredito`. El rol VENDEDOR sigue
 sin ver el historial: solo puede facturar la venta que acaba de cobrar en Cobros.
 
+**Actualizado 2026-11-05** (detalle en `plan-migracion.md` sección 32): Cobros ya no tiene la casilla "Emitir
+factura ante ARCA": se cobra y después se aprieta "Facturar esta venta", que abre `ModalFacturacion` con el
+cliente elegido al cobrar. `api/facturas.ts` separa `verPdfFactura` (pestaña nueva) de `descargarPdfFactura`
+(guarda `factura-C-0004-00000123.pdf`); `BotonDescargarFactura` es el botón compartido. "Descargar PDF" está en
+Cobros, `ModalFacturacion`, Historial y Comprobantes. Una URL de `verBlob` nunca se revoca mientras el visor la
+use: su botón de guardar la vuelve a pedir. Clientes pasó a ser un enlace directo del menú, sin desplegable.
+`.agregar-producto` alinea abajo sus campos y botones.
+
 ### Gastos (`/api/gastos`) — ADMIN
 
 | Método | Ruta | Body | Devuelve |

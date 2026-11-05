@@ -2771,3 +2771,36 @@ Cobros, alta en el lugar, cuenta corriente, factura rechazada, Historial, modale
 
 **Para correr las herramientas en un equipo sin Maven ni Node**: con Avast interceptando HTTPS, Maven necesita
 `MAVEN_OPTS=-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT` para bajar lo que no tenga en caché.
+
+## 32. Descarga de la factura y ajustes de Cobros y Clientes (2026-11-05)
+
+**Pedido del dueño**: una Factura C ya emitida e impresa no se podía guardar para mandarla por WhatsApp ("error de
+conexión"). Además: sacar la casilla redundante de Cobros, dejar Clientes como un solo enlace del menú y alinear
+"Nuevo cliente" con el buscador.
+
+**Causa de la descarga**: el mensaje no sale del sistema, sale del navegador. `descargarPdfFactura` abría el PDF en
+otra pestaña y revocaba su URL `blob:` en el mismo momento. El visor ya lo tenía cargado, por eso se podía ver e
+imprimir, pero su botón de guardar vuelve a pedir esa URL y falla como error de red. Reproducido en Edge: con la URL
+revocada la descarga termina `canceled`; viva, `completed`. Además, no había ningún botón que guardara la factura.
+
+**Cambios**:
+
+- `verPdfFactura` abre el PDF sin revocar la URL, igual que el resto de los comprobantes (`verBlob`).
+- `descargarPdfFactura` ahora sí guarda el archivo, como `factura-C-0004-00000123.pdf`. "Descargar PDF" está en Cobros,
+  el modal de factura emitida, Historial y Comprobantes (ahí también para notas de crédito).
+- `descargarBlob` revoca la URL a los 60 segundos, no en el mismo instante.
+- Cobros: sin casilla, se factura solo con "Facturar esta venta". Reemplaza a lo dicho en la sección 31 sobre "cobrar
+  con factura". Sigue valiendo que la venta se confirma primero y que un rechazo de ARCA no frena el mostrador; ahora
+  el rechazo se ve y se reintenta en el modal. El cliente elegido al cobrar pasa al modal.
+- Menú: Clientes es un enlace directo. Vendedores sigue teniendo el mismo desplegable de un solo ítem: no se pidió.
+- `.agregar-producto` alinea abajo, sin el margen de los `label`: se corrigen también los filtros de Historial y del
+  modal de factura. En celular, campos y botones tienen la misma altura mínima.
+
+**Encontrado y corregido**: `FacturaPdfService` leía `d.getProducto().getDescripcion()`, y la mano de obra de un
+trabajo a domicilio no tiene producto. El PDF de esa factura daba 500 (`NullPointerException`) al verlo, descargarlo
+o mandarlo por mail. Test nuevo en `TrabajoDomicilioConciliacionIntegrationTest`, que falla sin el arreglo.
+
+**Verificación**: backend **380 tests** verdes; `tsc -b`, `oxlint` (sin errores) y `vite build`. Recorrido en Edge
+headless, a 1400 y 390 px, contra una API falsa: las 4 descargas guardan el archivo con el nombre correcto, y botón y
+buscador coinciden al píxel. **Sin verificar**: el clic en el botón de guardar del visor de PDF, que no se puede
+automatizar (se comprobó guardando la misma URL desde la página), ni el recorrido contra ARCA o Supabase reales.

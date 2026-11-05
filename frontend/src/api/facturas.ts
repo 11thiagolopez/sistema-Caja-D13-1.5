@@ -1,4 +1,5 @@
 import { request, requestBlob } from './client'
+import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import type { FacturaFiscalResponse, FacturarVentaRequest } from '../types/api'
 
 export function facturarVenta(idVenta: number, req: FacturarVentaRequest): Promise<FacturaFiscalResponse> {
@@ -13,21 +14,17 @@ export function getFactura(idVenta: number): Promise<FacturaFiscalResponse | nul
   return request<FacturaFiscalResponse | null>(`/api/ventas/${idVenta}/factura`)
 }
 
-// A diferencia de descargarVentaPdf/descargarPresupuestoPdf (que fuerzan la descarga), esta abre
-// el PDF fiscal en una pestaña nueva — deliberado: es el comprobante legal, útil poder verlo antes
-// de guardarlo/imprimirlo.
-export async function descargarPdfFactura(idVenta: number): Promise<void> {
-  const blob = await requestBlob(`/api/ventas/${idVenta}/factura/pdf`)
+// Abre el PDF fiscal en una pestaña nueva. La URL queda viva (ver verBlob): el visor la vuelve a
+// pedir al apretar su botón de guardar. Antes se revocaba enseguida: se podía ver e imprimir, pero
+// guardar fallaba con un error de red del navegador.
+export async function verPdfFactura(idVenta: number): Promise<void> {
+  verBlob(await requestBlob(`/api/ventas/${idVenta}/factura/pdf`))
+}
 
-  const blobUrl = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = blobUrl
-  link.target = '_blank'
-
-  document.body.appendChild(link)
-  link.click()
-  link.parentNode?.removeChild(link)
-  URL.revokeObjectURL(blobUrl)
+// Guarda el PDF en la computadora, para compartirlo por WhatsApp u otro medio. numero es el que
+// devuelve numeroComprobante, para que el archivo se reconozca en la carpeta de descargas.
+export async function descargarPdfFactura(idVenta: number, numero: string): Promise<void> {
+  descargarBlob(await requestBlob(`/api/ventas/${idVenta}/factura/pdf`), `factura-C-${numero}.pdf`)
 }
 
 export async function enviarFacturaEmail(idVenta: number, email: string): Promise<void> {
