@@ -37,11 +37,6 @@ const SECCIONES: NavSection[] = [
     ],
   },
   {
-    label: 'Gastos',
-    roles: ['ADMIN'],
-    items: [{ label: 'Gastos operativos', to: '/gastos' }],
-  },
-  {
     label: 'Compras',
     roles: ['ADMIN'],
     items: [
@@ -49,16 +44,6 @@ const SECCIONES: NavSection[] = [
       { label: 'Consultar compras', to: '/compras' },
       { label: 'Cuenta corriente de proveedores', to: '/proveedores/cuenta-corriente' },
     ],
-  },
-  {
-    label: 'Vendedores',
-    roles: ['ADMIN'],
-    items: [{ label: 'Vendedores', to: '/vendedores' }],
-  },
-  {
-    label: 'Facturación',
-    roles: ['ADMIN'],
-    items: [{ label: 'Comprobantes', to: '/comprobantes' }],
   },
   {
     label: 'Reportes',
@@ -90,6 +75,9 @@ const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Historial de ventas', to: '/ventas/historial', roles: ['ADMIN'] },
   { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
   { label: 'Clientes', to: '/clientes', roles: ['ADMIN'] },
+  { label: 'Vendedores', to: '/vendedores', roles: ['ADMIN'] },
+  { label: 'Gastos', to: '/gastos', roles: ['ADMIN'] },
+  { label: 'Facturación', to: '/comprobantes', roles: ['ADMIN'] },
 ]
 
 // En celular el menú flota sobre el contenido: arranca cerrado y se cierra solo al elegir una opción.
@@ -171,7 +159,8 @@ function LayoutContenido() {
         <div className="sidebar-marca">Sistema D13</div>
         <nav>
           {ENLACES_SUELTOS.filter((item) => puedeVer(item.roles, sesion?.rol)).map((item) => (
-            <NavLink key={item.to} to={item.to!} className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
+            // end: /vendedores no tiene que quedar marcado en /vendedores/ventas, que es de Reportes.
+            <NavLink key={item.to} to={item.to!} end className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
               {item.label}
               {item.to === '/autorizaciones' && peticiones.length > 0 && (
                 <span className="sidebar-contador">{peticiones.length}</span>

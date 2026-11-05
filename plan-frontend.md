@@ -417,7 +417,8 @@ factura ante ARCA": se cobra y después se aprieta "Facturar esta venta", que ab
 cliente elegido al cobrar. `api/facturas.ts` separa `verPdfFactura` (pestaña nueva) de `descargarPdfFactura`
 (guarda `factura-C-0004-00000123.pdf`); `BotonDescargarFactura` es el botón compartido. "Descargar PDF" está en
 Cobros, `ModalFacturacion`, Historial y Comprobantes. Una URL de `verBlob` nunca se revoca mientras el visor la
-use: su botón de guardar la vuelve a pedir. Clientes pasó a ser un enlace directo del menú, sin desplegable.
+use: su botón de guardar la vuelve a pedir. Clientes, Vendedores, Gastos y Facturación (lleva a `/comprobantes`)
+pasaron a ser enlaces directos del menú, sin desplegable.
 `.agregar-producto` alinea abajo sus campos y botones.
 
 ### Gastos (`/api/gastos`) — ADMIN

@@ -2792,7 +2792,9 @@ revocada la descarga termina `canceled`; viva, `completed`. Además, no había n
 - Cobros: sin casilla, se factura solo con "Facturar esta venta". Reemplaza a lo dicho en la sección 31 sobre "cobrar
   con factura". Sigue valiendo que la venta se confirma primero y que un rechazo de ARCA no frena el mostrador; ahora
   el rechazo se ve y se reintenta en el modal. El cliente elegido al cobrar pasa al modal.
-- Menú: Clientes es un enlace directo. Vendedores sigue teniendo el mismo desplegable de un solo ítem: no se pidió.
+- Menú: Clientes, Vendedores, Gastos y Facturación son enlaces directos, sin desplegable de un solo ítem. Mantienen
+  el nombre que tenían en el menú; Facturación lleva a la pantalla Comprobantes. Los enlaces sueltos usan `end`, para
+  que Vendedores no quede marcado en `/vendedores/ventas` ni `/vendedores/comisiones`, que son de Reportes.
 - `.agregar-producto` alinea abajo, sin el margen de los `label`: se corrigen también los filtros de Historial y del
   modal de factura. En celular, campos y botones tienen la misma altura mínima.
 
