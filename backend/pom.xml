@@ -136,11 +136,16 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Base H2 en memoria para los tests de integración (repositorios/controladores) -->
+        <!-- Base H2 en memoria: usada por los tests de integración y por el perfil "demo" (ver
+             application-demo.properties), que corre el sistema completo con datos inventados sin
+             depender de Supabase. Scope "runtime" (no "test") a propósito, para que el JAR
+             empaquetado para desplegar también la incluya y el perfil demo funcione en un
+             servidor real, no solo localmente. No afecta producción: ahí el datasource sigue
+             apuntando a PostgreSQL. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Autenticación de requests en los tests de integración con Spring Security -->
