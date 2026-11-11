@@ -400,14 +400,10 @@ public class VentaService {
      * arregla.
      */
     private String construirHtmlComprobante(Venta venta) {
-        List<ComprobanteHtmlBuilder.Linea> lineas = new ArrayList<>(venta.getDetalles().stream()
-            .map(d -> new ComprobanteHtmlBuilder.Linea(d.getDescripcion(), d.getCantidad(), d.getPrecioUnitario(),
-                d.getSubtotal()))
-            .toList());
-        if (venta.getRecargoTarjeta() != null && venta.getRecargoTarjeta().signum() > 0) {
-            lineas.add(new ComprobanteHtmlBuilder.Linea(textoRecargo(venta), 1, venta.getRecargoTarjeta(),
-                venta.getRecargoTarjeta()));
-        }
+        // Con tarjeta, los precios ya incluyen el recargo repartido (sin renglón aparte): ver LineasComprobante.
+        List<ComprobanteHtmlBuilder.Linea> lineas = LineasComprobante.de(venta).stream()
+            .map(l -> new ComprobanteHtmlBuilder.Linea(l.descripcion(), l.cantidad(), l.precioUnitario(), l.subtotal()))
+            .toList();
 
         boolean esDomicilio = "DOMICILIO".equals(venta.getTipoVenta());
 
@@ -433,15 +429,6 @@ public class VentaService {
 
         return TicketHtmlBuilder.construir(info, lineas, venta.totalCobrado(),
             "Comprobante interno, no válido como factura fiscal.", pdfService.logoDataUri());
-    }
-
-    /** Renglón del recargo en ticket y factura, ej. "Recargo tarjeta de crédito (20%)". */
-    public static String textoRecargo(Venta venta) {
-        String medio = RecargoService.TARJETA_DEBITO.equals(venta.getMedioPago()) ? "débito" : "crédito";
-        String porcentaje = venta.getPorcentajeRecargo() != null
-            ? " (" + venta.getPorcentajeRecargo().stripTrailingZeros().toPlainString() + "%)"
-            : "";
-        return "Recargo tarjeta de " + medio + porcentaje;
     }
 
     private static String etiquetaMedioPago(String medio) {

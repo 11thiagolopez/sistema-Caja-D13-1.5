@@ -38,19 +38,10 @@ public class FacturaPdfService {
         }
 
         Venta venta = factura.getVenta();
-        List<FacturaFiscalHtmlBuilder.Linea> items = venta.getDetalles().stream()
-            .map(d -> new FacturaFiscalHtmlBuilder.Linea(
-                // La mano de obra de un trabajo a domicilio no tiene producto, solo su descripción.
-                d.getProducto() != null ? d.getProducto().getDescripcion() : d.getDescripcion(),
-                d.getCantidad(),
-                d.getPrecioUnitario(),
-                d.getSubtotal()
-            )).collect(Collectors.toList());
-        // El importe facturado incluye el recargo de tarjeta: va como renglón para que cierre la suma.
-        if (venta.getRecargoTarjeta() != null && venta.getRecargoTarjeta().signum() > 0) {
-            items.add(new FacturaFiscalHtmlBuilder.Linea(VentaService.textoRecargo(venta), 1,
-                venta.getRecargoTarjeta(), venta.getRecargoTarjeta()));
-        }
+        // Con tarjeta, los precios ya incluyen el recargo repartido (sin renglón aparte): ver LineasComprobante.
+        List<FacturaFiscalHtmlBuilder.Linea> items = LineasComprobante.de(venta).stream()
+            .map(l -> new FacturaFiscalHtmlBuilder.Linea(l.descripcion(), l.cantidad(), l.precioUnitario(), l.subtotal()))
+            .collect(Collectors.toList());
 
         String titulo = String.format("Factura Nro: %04d-%08d", factura.getPuntoVenta(), factura.getNumero());
 

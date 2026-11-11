@@ -2831,8 +2831,10 @@ automatizar (se comprobó guardando la misma URL desde la página), ni el recorr
   en trabajos y pagos de clientes, y en ventas viejas). El arqueo suma los tres en el mismo bucket de tarjeta.
 - El recargo lo calcula `VentaService.aplicarRecargoTarjeta`, nunca el frontend: sobre total − descuento − saldo
   aplicado (lo pagado con saldo a favor no pasa por el posnet).
-- Ticket (`construirHtmlComprobante`) y PDF de la factura (`FacturaPdfService`) agregan el renglón "Recargo tarjeta de
-  crédito (20%)" para que la suma cierre. `FacturaFiscalService` informa a ARCA `totalCobrado()`.
+- Ticket y PDF de la factura **no muestran el recargo** (pedido del dueño, misma fecha): `LineasComprobante` lo
+  reparte entre los renglones en proporción al precio, en centavos enteros por unidad (los centavos de redondeo van
+  a un renglón de cantidad 1, o al último), así los precios impresos ya lo incluyen y la suma da el total cobrado.
+  `DetalleVenta` no se toca. `FacturaFiscalService` informa a ARCA `totalCobrado()`.
 
 **Ojo con notas de crédito**: siguen acreditando sobre `totalVenta` (sin recargo). Para una venta con tarjeta, la
 nota de crédito máxima es menor que la factura: el recargo no se devuelve. Si el dueño quiere devolverlo, es un cambio
