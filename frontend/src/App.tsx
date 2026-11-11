@@ -24,6 +24,7 @@ import { Presupuestos } from './pages/Presupuestos'
 import { TrabajoDomicilio } from './pages/TrabajoDomicilio'
 import { Clientes } from './pages/Clientes'
 import { Comprobantes } from './pages/Comprobantes'
+import { Recargos } from './pages/Recargos'
 import { CuentaCorrienteProveedores } from './pages/CuentaCorrienteProveedores'
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
             <Route path="/ventas/historial" element={<HistorialVentas />} />
             <Route path="/ventas/domicilio" element={<TrabajoDomicilio />} />
             <Route path="/comprobantes" element={<Comprobantes />} />
+            <Route path="/configuracion/recargos" element={<Recargos />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/reportes" element={<Reportes />} />
             <Route path="/reportes/marcas" element={<VentasPorMarca />} />

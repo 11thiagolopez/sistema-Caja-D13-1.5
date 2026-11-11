@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { getRecargos } from '../api/recargos'
+import { calcularRecargo } from '../utils/recargo'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { getSaldoCliente } from '../api/clientes'
@@ -13,7 +16,7 @@ import { ModalFacturacion } from '../components/ModalFacturacion'
 import { SelectorCliente } from '../components/SelectorCliente'
 import { useCarrito } from '../hooks/useCarrito'
 import { verBlob } from '../utils/descargarBlob'
-import { numeroComprobante, textoSaldo } from '../utils/formato'
+import { formatoPesos, numeroComprobante, textoSaldo } from '../utils/formato'
 import type {
   ClienteResponse,
   DetalleVentaRequest,
@@ -60,10 +63,16 @@ export function RegistrarVenta() {
   const [enviandoComprobante, setEnviandoComprobante] = useState(false)
   const [errorComprobante, setErrorComprobante] = useState<string | null>(null)
 
+  // % que se lleva el posnet por medio. Si no cargan, se ve sin vista previa: el backend igual cobra el recargo.
+  const [recargos, setRecargos] = useState<Partial<Record<MedioPago, number>>>({})
+
   useEffect(() => {
     getProductos()
       .then(setProductos)
       .catch(() => setError('No se pudieron cargar los productos'))
+    getRecargos()
+      .then((lista) => setRecargos(Object.fromEntries(lista.map((r) => [r.medioPago, r.porcentaje]))))
+      .catch(() => setRecargos({}))
   }, [])
 
   useEffect(() => {
@@ -201,6 +210,12 @@ export function RegistrarVenta() {
 
   const faltaClienteParaCuenta = medioPago === 'CUENTA_CORRIENTE' && !cliente
 
+  // Vista previa del recargo: sobre lo que pasa por el posnet (sin descuento ni lo pagado con saldo).
+  const esTarjeta = medioPago === 'TARJETA_CREDITO' || medioPago === 'TARJETA_DEBITO'
+  const porcentajeRecargo = esTarjeta ? (recargos[medioPago] ?? null) : null
+  const netoPorPosnet = Math.max(total - (Number(descuento) || 0) - (Number(montoSaldoAplicado) || 0), 0)
+  const recargoPrevio = porcentajeRecargo != null ? calcularRecargo(netoPorPosnet, porcentajeRecargo) : 0
+
   return (
     <div>
       <h2>Registrar venta</h2>
@@ -281,10 +296,31 @@ export function RegistrarVenta() {
           <select value={medioPago} onChange={(e) => onCambiarMedioPago(e.target.value as MedioPago)}>
             <option value="EFECTIVO">Efectivo</option>
             <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA">Tarjeta</option>
+            <option value="TARJETA_CREDITO">
+              Tarjeta de crédito{recargos.TARJETA_CREDITO != null ? ` (+ recargo ${recargos.TARJETA_CREDITO}%)` : ''}
+            </option>
+            <option value="TARJETA_DEBITO">
+              Tarjeta de débito{recargos.TARJETA_DEBITO != null ? ` (+ recargo ${recargos.TARJETA_DEBITO}%)` : ''}
+            </option>
             <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
           </select>
         </label>
+        {esTarjeta && netoPorPosnet > 0 && porcentajeRecargo != null && (
+          <div className="cobro-posnet">
+            <span>Cobrar con el posnet</span>
+            <strong>{formatoPesos(netoPorPosnet + recargoPrevio)}</strong>
+            <small>
+              Precio {formatoPesos(netoPorPosnet)} + recargo {formatoPesos(recargoPrevio)}. El posnet se queda con el{' '}
+              {porcentajeRecargo}% y quedan {formatoPesos(netoPorPosnet)}, que es lo que se registra en caja.
+              {sesion?.rol === 'ADMIN' && (
+                <>
+                  {' '}
+                  <Link to="/configuracion/recargos">Cambiar porcentajes</Link>
+                </>
+              )}
+            </small>
+          </div>
+        )}
         {faltaClienteParaCuenta && <p className="error">Para vender en cuenta corriente, elegí o creá un cliente.</p>}
         {medioPago === 'CUENTA_CORRIENTE' && cliente && (
           <p>El total se carga a la cuenta corriente de {cliente.nombre}.</p>
@@ -323,6 +359,16 @@ export function RegistrarVenta() {
               ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: le llegó al administrador. Podés seguir cobrando; la respuesta aparece en "Mis peticiones", abajo a la derecha.`
               : `Venta #${resultado.idVenta} confirmada.`}
           </p>
+          {resultado.recargoTarjeta != null && resultado.recargoTarjeta > 0 && (
+            <div className="cobro-posnet">
+              <span>Cobrar con el posnet</span>
+              <strong>{formatoPesos(resultado.totalCobrado)}</strong>
+              <small>
+                Incluye {formatoPesos(resultado.recargoTarjeta)} de recargo ({resultado.porcentajeRecargo}%). En caja
+                queda registrada por {formatoPesos(resultado.totalVenta - (resultado.montoSaldoAplicado ?? 0))}.
+              </small>
+            </div>
+          )}
           {resultado.montoSaldoAplicado != null && resultado.montoSaldoAplicado > 0 && (
             <p>
               Se pagaron ${resultado.montoSaldoAplicado.toFixed(2)} con el saldo de cuenta corriente de{' '}

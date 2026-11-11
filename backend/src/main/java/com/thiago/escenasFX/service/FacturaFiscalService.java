@@ -95,7 +95,8 @@ public class FacturaFiscalService {
         factura.setClienteDocNro(clienteDocTipo == DOC_CONSUMIDOR_FINAL ? null : clienteDocNro);
         factura.setClienteNombre(clienteDocTipo == DOC_CONSUMIDOR_FINAL ? null : clienteNombre);
         factura.setCondicionIvaReceptor(condicionIva);
-        factura.setImporte(venta.getTotalVenta());
+        // Por lo que pagó el cliente: con tarjeta incluye el recargo del posnet (Venta.totalCobrado).
+        factura.setImporte(venta.totalCobrado());
         factura.setEstado("PENDIENTE");
         factura.setErrorDetalle(null);
 
@@ -104,7 +105,7 @@ public class FacturaFiscalService {
         AfipFacturacionService.DatosFactura datos = new AfipFacturacionService.DatosFactura(
             puntoVenta, TIPO_FACTURA_C, concepto, clienteDocTipo,
             clienteDocTipo == DOC_CONSUMIDOR_FINAL ? "0" : clienteDocNro,
-            venta.getTotalVenta(), fecha,
+            venta.totalCobrado(), fecha,
             concepto != 1 ? fecha : null, concepto != 1 ? fecha : null, concepto != 1 ? fecha : null,
             null, null, null, condicionIva);
 

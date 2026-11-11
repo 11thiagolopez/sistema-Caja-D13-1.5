@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { ETIQUETA_MEDIO_PAGO } from '../utils/recargo'
 import { descargarVentaPdf, enviarComprobanteEmail, getVenta, getVentas } from '../api/ventas'
 import { resolverPeticion } from '../api/autorizaciones'
 import { getEmpleados } from '../api/empleados'
@@ -238,8 +239,13 @@ export function HistorialVentas() {
                     ? `${venta.clienteNombre ?? '—'}${venta.nombreTecnico ? ` / ${venta.nombreTecnico}` : ''}`
                     : (venta.nombreCliente ?? '—')}
                 </td>
-                <td>{venta.medioPago}</td>
-                <td>{venta.totalVenta.toFixed(2)}</td>
+                <td>{ETIQUETA_MEDIO_PAGO[venta.medioPago] ?? venta.medioPago}</td>
+                <td>
+                  {venta.totalVenta.toFixed(2)}
+                  {venta.recargoTarjeta != null && venta.recargoTarjeta > 0 && (
+                    <small className="recargo-nota">Cobrado {venta.totalCobrado.toFixed(2)} con recargo</small>
+                  )}
+                </td>
                 <td>{venta.descuento.toFixed(2)}</td>
                 <td>
                   {venta.estado}

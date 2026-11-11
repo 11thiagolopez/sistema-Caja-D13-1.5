@@ -127,7 +127,7 @@ de la tabla (Enter guarda, Escape cancela, click afuera guarda).
 ```ts
 {
   idEmpleado: number;
-  medioPago: string;        // "EFECTIVO" | "TRANSFERENCIA" | "TARJETA"
+  medioPago: string;        // "EFECTIVO" | "TRANSFERENCIA" | "TARJETA_CREDITO" | "TARJETA_DEBITO" | "CUENTA_CORRIENTE" (desde 2026-11-11 Cobros no acepta "TARJETA" a secas)
   tipoComprobante?: string;
   detalles: {
     idProducto?: number;    // línea de catálogo, descuenta stock
@@ -278,6 +278,20 @@ manejan con `POST /api/empleados/tecnicos` y `PUT /api/empleados/tecnicos/{id}` 
 `tipo`: `RETIRO` o `DESCUENTO`. `estado`: `PENDIENTE`, `APROBADA` o `RECHAZADA`.
 
 `GET /api/ventas/{id}/pdf` admite VENDEDOR, solo para sus propias ventas `CONFIRMADA` (si no, 403).
+
+### Recargos de tarjeta (`/api/recargos`) — nuevo 2026-11-11
+
+| Método | Ruta | Rol | Body | Devuelve |
+|---|---|---|---|---|
+| GET | `/api/recargos` | ADMIN, VENDEDOR | — | `[{medioPago, porcentaje}]` (`TARJETA_CREDITO`, `TARJETA_DEBITO`) |
+| PUT | `/api/recargos/{medioPago}` | **solo ADMIN** | `{porcentaje}` (0 a 90) | `{medioPago, porcentaje}` |
+
+El % es la comisión del posnet. Al cobrar con crédito o débito, el backend calcula
+`recargoTarjeta = neto / (1 - %) - neto` (redondeado para arriba al centavo) sobre lo que pasa por el posnet: total
+menos descuento menos saldo aplicado. `VentaResponse` suma `recargoTarjeta`, `porcentajeRecargo` y `totalCobrado`.
+**`totalVenta` no incluye el recargo**: caja, reportes y ganancias registran el precio original; el ticket y la
+Factura C salen por `totalCobrado`. La vista previa de Cobros (`utils/recargo.ts`) es solo informativa. Pantalla de
+edición: `/configuracion/recargos` (`Recargos.tsx`, ADMIN).
 
 ### Cotización (`/api/cotizacion`) — dolarización, nuevo 2026-08-14
 

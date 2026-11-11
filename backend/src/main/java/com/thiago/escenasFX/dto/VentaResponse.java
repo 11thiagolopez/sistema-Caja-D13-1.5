@@ -36,6 +36,11 @@ public class VentaResponse {
     private Integer idCliente;
     private String nombreCliente;
     private BigDecimal montoSaldoAplicado;
+    // Recargo de tarjeta (crédito/débito en Cobros): fuera de totalVenta. totalCobrado = lo que pagó
+    // el cliente, que es por lo que salen ticket y factura.
+    private BigDecimal recargoTarjeta;
+    private BigDecimal porcentajeRecargo;
+    private BigDecimal totalCobrado;
     private List<DetalleVentaResponse> detalles;
     // SIN_FACTURAR | FACTURADA. Los tres de facturación son null en el arqueo y los trabajos, que no
     // los usan (ver VentaConFacturacion). Con un intento rechazado, sigue SIN_FACTURAR y factura trae

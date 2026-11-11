@@ -2806,3 +2806,56 @@ o mandarlo por mail. Test nuevo en `TrabajoDomicilioConciliacionIntegrationTest`
 headless, a 1400 y 390 px, contra una API falsa: las 4 descargas guardan el archivo con el nombre correcto, y botón y
 buscador coinciden al píxel. **Sin verificar**: el clic en el botón de guardar del visor de PDF, que no se puede
 automatizar (se comprobó guardando la misma URL desde la página), ni el recorrido contra ARCA o Supabase reales.
+
+## 33. Recargo por pagar con tarjeta en Cobros (2026-11-11)
+
+**Pedido del dueño**: en Cobros, crédito y débito tienen que cobrarle al cliente la comisión del posnet (20% crédito,
+15% débito) para que al negocio le quede el precio original. En las cuentas internas la venta queda sin ese recargo.
+
+**Decisiones confirmadas con el dueño**:
+
+1. **Que quede exacto**: se cobra `precio / (1 - comisión)`, no `precio + %`. Con 20%, $100 se cobran $125; el posnet
+   se lleva $25 y quedan $100. Con 15%, $117,65. Redondeo para arriba al centavo: nunca se pierde por redondeo.
+2. **Ticket y Factura C por el total cobrado** (con recargo), que es lo que pasó por el posnet; caja, reportes,
+   ganancias y comisiones por el precio original.
+3. **Solo Cobros**. Trabajos a domicilio y pagos de clientes siguen con "Tarjeta" a secas, sin recargo.
+4. **Porcentajes editables por ADMIN** (`/configuracion/recargos`).
+
+**Modelo**:
+
+- `ventas.recargo_tarjeta` y `ventas.porcentaje_recargo` (nullable). `totalVenta` **no** incluye el recargo; por eso
+  caja (`CajaService`), reportes, notas de crédito y comisiones no cambiaron. `Venta.totalCobrado()` = total + recargo.
+  El % se guarda por venta para que cambiarlo no altere ventas pasadas.
+- Tabla `recargos_medio_pago` (`medio_pago` PK, `porcentaje`). Sin fila, `RecargoService` usa 20/15 por defecto.
+- Medios nuevos `TARJETA_CREDITO` y `TARJETA_DEBITO`. `registrarVenta` ya no acepta `TARJETA` a secas (sigue válido
+  en trabajos y pagos de clientes, y en ventas viejas). El arqueo suma los tres en el mismo bucket de tarjeta.
+- El recargo lo calcula `VentaService.aplicarRecargoTarjeta`, nunca el frontend: sobre total − descuento − saldo
+  aplicado (lo pagado con saldo a favor no pasa por el posnet).
+- Ticket (`construirHtmlComprobante`) y PDF de la factura (`FacturaPdfService`) agregan el renglón "Recargo tarjeta de
+  crédito (20%)" para que la suma cierre. `FacturaFiscalService` informa a ARCA `totalCobrado()`.
+
+**Ojo con notas de crédito**: siguen acreditando sobre `totalVenta` (sin recargo). Para una venta con tarjeta, la
+nota de crédito máxima es menor que la factura: el recargo no se devuelve. Si el dueño quiere devolverlo, es un cambio
+aparte.
+
+**Endpoints**: `GET /api/recargos` (ADMIN, VENDEDOR: Cobros muestra cuánto cobrar), `PUT /api/recargos/{medio}`
+(ADMIN). `VentaResponse` suma `recargoTarjeta`, `porcentajeRecargo` y `totalCobrado`.
+
+**SQL pendiente del dueño, y sin él el backend no arranca** (`ddl-auto=validate`):
+
+```sql
+ALTER TABLE ventas
+  ADD COLUMN recargo_tarjeta numeric(12,2),
+  ADD COLUMN porcentaje_recargo numeric(5,2);
+
+CREATE TABLE recargos_medio_pago (
+  medio_pago varchar(255) PRIMARY KEY,
+  porcentaje numeric(5,2) NOT NULL
+);
+INSERT INTO recargos_medio_pago (medio_pago, porcentaje) VALUES
+  ('TARJETA_CREDITO', 20.00),
+  ('TARJETA_DEBITO', 15.00);
+
+-- Igual que las demás tablas nuevas: sin políticas, solo el backend (dueño de la tabla) la usa.
+ALTER TABLE recargos_medio_pago ENABLE ROW LEVEL SECURITY;
+```

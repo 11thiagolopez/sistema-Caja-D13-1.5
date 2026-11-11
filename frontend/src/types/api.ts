@@ -5,7 +5,20 @@ export type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO'
 // SALDO_CUENTA_CORRIENTE: nunca se elige a mano en el <select> de medio de pago — el backend lo
 // fuerza solo cuando montoSaldoAplicado cubre el total completo de la venta (ver VentaRequest).
 // CUENTA_CORRIENTE: se elige a mano, exige cliente y carga el total a su saldo.
-export type MedioPago = 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CUENTA_CORRIENTE' | 'SALDO_CUENTA_CORRIENTE'
+// 'TARJETA' queda para trabajos a domicilio, pagos de clientes y ventas viejas; Cobros usa crédito o débito.
+export type MedioPago =
+  | 'EFECTIVO'
+  | 'TRANSFERENCIA'
+  | 'TARJETA'
+  | 'TARJETA_CREDITO'
+  | 'TARJETA_DEBITO'
+  | 'CUENTA_CORRIENTE'
+  | 'SALDO_CUENTA_CORRIENTE'
+
+export interface RecargoResponse {
+  medioPago: 'TARJETA_CREDITO' | 'TARJETA_DEBITO'
+  porcentaje: number
+}
 
 export type EstadoVenta = 'CONFIRMADA' | 'PENDIENTE_AUTORIZACION' | 'EN_PROGRESO' | 'ANULADA'
 
@@ -297,6 +310,11 @@ export interface VentaResponse {
   idCliente: number | null
   nombreCliente: string | null
   montoSaldoAplicado: number | null
+  // Recargo del posnet (crédito/débito en Cobros). No suma a totalVenta, que es lo que nos queda;
+  // totalCobrado es lo que pagó el cliente, y por eso salen el ticket y la factura.
+  recargoTarjeta: number | null
+  porcentajeRecargo: number | null
+  totalCobrado: number
   detalles: DetalleVentaResponse[]
   // Null en el arqueo y los trabajos, que no los usan.
   estadoFactura: EstadoFactura | null

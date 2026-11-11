@@ -46,6 +46,11 @@ public class FacturaPdfService {
                 d.getPrecioUnitario(),
                 d.getSubtotal()
             )).collect(Collectors.toList());
+        // El importe facturado incluye el recargo de tarjeta: va como renglón para que cierre la suma.
+        if (venta.getRecargoTarjeta() != null && venta.getRecargoTarjeta().signum() > 0) {
+            items.add(new FacturaFiscalHtmlBuilder.Linea(VentaService.textoRecargo(venta), 1,
+                venta.getRecargoTarjeta(), venta.getRecargoTarjeta()));
+        }
 
         String titulo = String.format("Factura Nro: %04d-%08d", factura.getPuntoVenta(), factura.getNumero());
 

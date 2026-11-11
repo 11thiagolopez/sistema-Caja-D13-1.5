@@ -122,6 +122,21 @@ public class Venta {
     @Column(name = "monto_saldo_aplicado", precision = 12, scale = 2)
     private BigDecimal montoSaldoAplicado;
 
+    // Recargo por pagar con tarjeta en Cobros (lo que se lleva el posnet). NO suma a totalVenta: la
+    // venta queda por el precio original en caja, reportes y ganancias. Ticket y factura salen por
+    // totalCobrado(). Null si el medio no lleva recargo (ver RecargoService).
+    @Column(name = "recargo_tarjeta", precision = 12, scale = 2)
+    private BigDecimal recargoTarjeta;
+
+    // El % de comisión vigente al momento de la venta, para que un cambio posterior no la altere.
+    @Column(name = "porcentaje_recargo", precision = 5, scale = 2)
+    private BigDecimal porcentajeRecargo;
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleVenta> detalles = new ArrayList<>();
+
+    /** Lo que pagó el cliente: el total más el recargo de tarjeta, si lo hubo. */
+    public BigDecimal totalCobrado() {
+        return recargoTarjeta != null ? totalVenta.add(recargoTarjeta) : totalVenta;
+    }
 }
