@@ -1052,6 +1052,133 @@ section {
   font-size: 14px;
 }
 
+/* Resumen de caja del día (Caja.tsx). */
+.caja-tarjeta-destacada {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+.caja-tarjeta-destacada strong {
+  color: var(--accent);
+}
+
+.caja-aclaracion {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #3d4250;
+  background: #e3edf6;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+}
+
+.caja-resumen .tabla-scroll {
+  overflow-x: auto;
+}
+
+.caja-resumen .grafico-tarjeta th,
+.caja-resumen .grafico-tarjeta td {
+  border-width: 0 0 1px;
+  border-color: var(--border);
+  padding: 8px 10px;
+}
+
+.caja-resumen .grafico-tarjeta th {
+  font-size: 13px;
+  font-weight: 600;
+  color: #52514e;
+  background: #f5f6f7;
+}
+
+.caja-arqueo td:not(:first-child),
+.caja-arqueo th:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.caja-arqueo tfoot td {
+  font-weight: 600;
+  border-top: 2px solid var(--table-border);
+}
+
+.caja-fila-total td,
+.caja-fila-total dt,
+.caja-fila-total dd {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.caja-monto-positivo {
+  color: var(--ok);
+}
+
+.caja-monto-negativo {
+  color: var(--error);
+}
+
+.caja-monto-cero {
+  color: var(--apagado);
+}
+
+.caja-desglose {
+  margin: 0;
+}
+
+.caja-desglose > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.caja-desglose > div:last-child {
+  border-bottom: none;
+}
+
+.caja-desglose dd {
+  margin: 0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.caja-desglose small {
+  color: var(--apagado);
+  font-size: 12px;
+}
+
+.caja-desglose-info {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--aviso);
+}
+
+.caja-seccion {
+  margin-top: 16px;
+}
+
+.caja-vacio {
+  padding: 20px 10px;
+  text-align: center;
+  color: var(--apagado);
+}
+
+.caja-etiqueta {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--apagado);
+  background: #eef0f2;
+  border-radius: 999px;
+}
+
+.caja-etiqueta-resta {
+  color: #8a1f14;
+  background: #fbe3e0;
+}
+
 @media (max-width: 900px) {
   .reportes-tarjetas {
     grid-template-columns: repeat(2, minmax(0, 1fr));
