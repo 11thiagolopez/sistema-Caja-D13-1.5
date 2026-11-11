@@ -15,6 +15,8 @@ export const COLORES_MEDIO_PAGO: Record<string, string> = {
   Efectivo: '#2a78d6',
   Transferencia: '#eb6834',
   Tarjeta: '#1baf7a',
+  'Tarjeta de crédito': '#0e8a5f',
+  'Tarjeta de débito': '#5cc99b',
   'Saldo cuenta corriente': '#eda100',
   'Sin especificar': TEMA.sinEspecificar,
 }

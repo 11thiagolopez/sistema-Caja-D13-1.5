@@ -99,6 +99,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/cotizacion/actual").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/cotizacion/cargar").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.POST, "/api/cotizacion/manual").hasRole("ADMIN")
+                // Cobros necesita los % para mostrar cuánto se cobra por posnet; cambiarlos es del ADMIN.
+                .requestMatchers(HttpMethod.GET, "/api/recargos").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers("/api/recargos/**").hasRole("ADMIN")
                 // Peticiones de autorización: el VENDEDOR solo consulta cómo quedaron las suyas.
                 .requestMatchers(HttpMethod.GET, "/api/autorizaciones/estado").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/autorizaciones/**").hasRole("ADMIN")

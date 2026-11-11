@@ -9,7 +9,19 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-05, descarga de la factura y ajustes de Cobros y Clientes):
+Estado Actual (Actualizado al 2026-11-11, recargo de tarjeta en Cobros + resumen de caja con gráficos):
+
+**Recargo de tarjeta (detalle y SQL en `plan-migracion.md` sección 33, contrato en `plan-frontend.md`)**: Cobros
+tiene "Tarjeta de crédito" y "Tarjeta de débito" en vez de "Tarjeta". Se cobra `precio / (1 - comisión del posnet)`
+(20% crédito, 15% débito, editables por ADMIN en `/configuracion/recargos`) para que quede el precio original. La venta
+queda por el precio original en caja, reportes y ganancias (`totalVenta` sin recargo); ticket y Factura C salen por
+`totalCobrado`. Trabajos a domicilio y pagos de clientes siguen con "Tarjeta" sin recargo. **SQL pendiente del dueño,
+y sin él el backend no arranca** (`ddl-auto=validate`). Las notas de crédito no devuelven el recargo.
+**Resumen de caja**: tarjetas, arqueo por columnas y dona por medio de pago; aclara por qué "Vendido hoy" y "Total en
+caja" no coinciden (monto inicial, retiros, pagos, gastos). Backend: **390 tests** verdes. Frontend: `tsc -b` limpio
+(con el runtime de VS Code: este equipo no tiene Node). **No probado en un navegador ni contra Supabase real.**
+
+Estado Anterior (Actualizado al 2026-11-05, descarga de la factura y ajustes de Cobros y Clientes):
 
 **Descarga de la factura (detalle en `plan-migracion.md` sección 32)**: guardar una Factura C ya emitida fallaba con
 un error de red del navegador, porque la URL del PDF se revocaba al abrirlo. Ahora la URL queda viva y hay un botón

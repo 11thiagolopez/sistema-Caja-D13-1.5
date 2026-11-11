@@ -78,6 +78,7 @@ const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Vendedores', to: '/vendedores', roles: ['ADMIN'] },
   { label: 'Gastos', to: '/gastos', roles: ['ADMIN'] },
   { label: 'Facturación', to: '/comprobantes', roles: ['ADMIN'] },
+  { label: 'Recargos de tarjeta', to: '/configuracion/recargos', roles: ['ADMIN'] },
 ]
 
 // En celular el menú flota sobre el contenido: arranca cerrado y se cierra solo al elegir una opción.

@@ -295,7 +295,10 @@ public class CajaService {
             List<MovimientoCuentaCorrienteCliente> pagosCliente, BigDecimal montoInicial) {
         BigDecimal ventasEfectivo = sumarVentasPorMedio(ventas, "EFECTIVO");
         BigDecimal ventasTransferencia = sumarVentasPorMedio(ventas, "TRANSFERENCIA");
-        BigDecimal ventasTarjeta = sumarVentasPorMedio(ventas, "TARJETA");
+        // Crédito y débito van al mismo bucket por su precio original: el recargo es del posnet, no nuestro.
+        BigDecimal ventasTarjeta = sumarVentasPorMedio(ventas, "TARJETA")
+            .add(sumarVentasPorMedio(ventas, RecargoService.TARJETA_CREDITO))
+            .add(sumarVentasPorMedio(ventas, RecargoService.TARJETA_DEBITO));
         // Informativo: una venta pagada 100% con saldo ya queda afuera de los tres buckets de
         // arriba (su medioPago es "SALDO_CUENTA_CORRIENTE", no matchea ninguno) — esto es la
         // suma total de saldo aplicado (ventas pagadas del todo o en parte con saldo), para que

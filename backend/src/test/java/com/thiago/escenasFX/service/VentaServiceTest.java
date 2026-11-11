@@ -64,6 +64,8 @@ class VentaServiceTest {
     private com.thiago.escenasFX.repository.FacturaFiscalRepository facturaRepo;
     @Mock
     private com.thiago.escenasFX.repository.NotaCreditoRepository notaCreditoRepo;
+    @Mock
+    private RecargoService recargoService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -520,5 +522,56 @@ class VentaServiceTest {
         assertThatThrownBy(() -> ventaService.guardarTrabajoDomicilio(req, empleado))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("no es un trabajo a domicilio");
+    }
+
+    private Venta ventaDe100(String medioPago) {
+        Producto p = producto(1, 10);
+        when(productoRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(p));
+        Venta venta = ventaCon(detalle(p, 1, new BigDecimal("100.00")));
+        venta.setMedioPago(medioPago);
+        return venta;
+    }
+
+    @Test
+    void registrarVenta_conCredito_cobraParaQueQuedeElPrecioOriginal() {
+        when(recargoService.porcentajeDe(RecargoService.TARJETA_CREDITO)).thenReturn(new BigDecimal("20.00"));
+
+        Venta guardada = ventaService.registrarVenta(ventaDe100("TARJETA_CREDITO"), true);
+
+        // $125 cobrados, el posnet se queda con el 20% ($25): quedan $100, que es lo que registra la venta.
+        assertThat(guardada.getTotalVenta()).isEqualByComparingTo("100.00");
+        assertThat(guardada.getRecargoTarjeta()).isEqualByComparingTo("25.00");
+        assertThat(guardada.totalCobrado()).isEqualByComparingTo("125.00");
+        assertThat(guardada.getPorcentajeRecargo()).isEqualByComparingTo("20");
+    }
+
+    @Test
+    void registrarVenta_conDebito_redondeaElRecargoParaArriba() {
+        when(recargoService.porcentajeDe(RecargoService.TARJETA_DEBITO)).thenReturn(new BigDecimal("15.00"));
+
+        Venta guardada = ventaService.registrarVenta(ventaDe100("tarjeta_debito"), true);
+
+        // 100 / 0,85 = 117,647... → 117,65: nunca queda por debajo de $100 después de la comisión.
+        assertThat(guardada.getMedioPago()).isEqualTo("TARJETA_DEBITO");
+        assertThat(guardada.getTotalVenta()).isEqualByComparingTo("100.00");
+        assertThat(guardada.getRecargoTarjeta()).isEqualByComparingTo("17.65");
+    }
+
+    @Test
+    void registrarVenta_enEfectivo_noLlevaRecargo() {
+        Venta guardada = ventaService.registrarVenta(ventaDe100("EFECTIVO"), true);
+
+        assertThat(guardada.getRecargoTarjeta()).isNull();
+        assertThat(guardada.totalCobrado()).isEqualByComparingTo("100.00");
+        verify(recargoService, never()).porcentajeDe(anyString());
+    }
+
+    @Test
+    void registrarVenta_conTarjetaSinEspecificar_seRechaza() {
+        Venta venta = ventaDe100("TARJETA");
+
+        assertThatThrownBy(() -> ventaService.registrarVenta(venta, true))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Medio de pago inválido");
     }
 }

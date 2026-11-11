@@ -48,6 +48,8 @@ public class ReporteGraficosService {
         "EFECTIVO", "Efectivo",
         "TRANSFERENCIA", "Transferencia",
         "TARJETA", "Tarjeta",
+        RecargoService.TARJETA_CREDITO, "Tarjeta de crédito",
+        RecargoService.TARJETA_DEBITO, "Tarjeta de débito",
         "CUENTA_CORRIENTE", "Cuenta corriente",
         MEDIO_SALDO, "Saldo cuenta corriente");
 

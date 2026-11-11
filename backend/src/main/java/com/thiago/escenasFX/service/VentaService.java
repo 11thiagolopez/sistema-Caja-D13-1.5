@@ -32,8 +32,11 @@ public class VentaService {
     private static final String NOMBRE_LOCAL = "D13 Distribuidora";
     private static final String MEDIO_PAGO_SALDO = "SALDO_CUENTA_CORRIENTE";
     private static final String MEDIO_PAGO_CUENTA_CORRIENTE = "CUENTA_CORRIENTE";
+    // Cobros ya no acepta "TARJETA" a secas: crédito y débito llevan recargos distintos. Trabajos a
+    // domicilio y pagos de clientes siguen usando "TARJETA" (MEDIOS_DE_COBRO), sin recargo.
     private static final List<String> MEDIOS_PAGO_VALIDOS = List.of(
-        "EFECTIVO", "TRANSFERENCIA", "TARJETA", MEDIO_PAGO_CUENTA_CORRIENTE, MEDIO_PAGO_SALDO);
+        "EFECTIVO", "TRANSFERENCIA", RecargoService.TARJETA_CREDITO, RecargoService.TARJETA_DEBITO,
+        MEDIO_PAGO_CUENTA_CORRIENTE, MEDIO_PAGO_SALDO);
     private static final Set<String> MEDIOS_DE_COBRO = Set.of("EFECTIVO", "TRANSFERENCIA", "TARJETA");
     private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CURSO", "COMPLETADO");
 
@@ -48,12 +51,15 @@ public class VentaService {
     private final MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo;
     private final FacturaFiscalRepository facturaRepo;
     private final NotaCreditoRepository notaCreditoRepo;
+    private final RecargoService recargoService;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
             EmpleadoRepository empleadoRepo, EmailService emailService,
             SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService,
             ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo,
-            FacturaFiscalRepository facturaRepo, NotaCreditoRepository notaCreditoRepo) {
+            FacturaFiscalRepository facturaRepo, NotaCreditoRepository notaCreditoRepo,
+            RecargoService recargoService) {
+        this.recargoService = recargoService;
         this.facturaRepo = facturaRepo;
         this.notaCreditoRepo = notaCreditoRepo;
         this.ventaRepo = ventaRepo;
@@ -130,6 +136,7 @@ public class VentaService {
         resolverCliente(venta);
         validarMedioSegunCliente(venta);
         BigDecimal montoSaldoAplicado = validarYAplicarSaldoCliente(venta);
+        aplicarRecargoTarjeta(venta, montoSaldoAplicado);
 
         boolean requiereAutorizacion = descuento.compareTo(BigDecimal.ZERO) > 0 && !autorizadoPorAdmin;
         venta.setEstado(requiereAutorizacion ? "PENDIENTE_AUTORIZACION" : "CONFIRMADA");
@@ -138,6 +145,22 @@ public class VentaService {
         registrarDebitoCuentaCorrienteSiCorresponde(guardada, montoSaldoAplicado);
         registrarCargoCuentaCorrienteSiCorresponde(guardada);
         return guardada;
+    }
+
+    // El recargo se calcula acá, nunca se confía en el frontend. Solo sobre la parte que pasa por el
+    // posnet: lo pagado con saldo a favor no lleva comisión. Va después del descuento.
+    private void aplicarRecargoTarjeta(Venta venta, BigDecimal montoSaldoAplicado) {
+        venta.setRecargoTarjeta(null);
+        venta.setPorcentajeRecargo(null);
+        if (!RecargoService.llevaRecargo(venta.getMedioPago())) {
+            return;
+        }
+        BigDecimal porcentaje = recargoService.porcentajeDe(venta.getMedioPago());
+        BigDecimal recargo = RecargoService.calcularRecargo(venta.getTotalVenta().subtract(montoSaldoAplicado), porcentaje);
+        if (recargo.signum() > 0) {
+            venta.setRecargoTarjeta(recargo);
+            venta.setPorcentajeRecargo(porcentaje);
+        }
     }
 
     // El backend aceptaba cualquier texto: una venta en CUENTA_CORRIENTE se habría guardado sin cargarle
@@ -377,10 +400,14 @@ public class VentaService {
      * arregla.
      */
     private String construirHtmlComprobante(Venta venta) {
-        List<ComprobanteHtmlBuilder.Linea> lineas = venta.getDetalles().stream()
+        List<ComprobanteHtmlBuilder.Linea> lineas = new ArrayList<>(venta.getDetalles().stream()
             .map(d -> new ComprobanteHtmlBuilder.Linea(d.getDescripcion(), d.getCantidad(), d.getPrecioUnitario(),
                 d.getSubtotal()))
-            .toList();
+            .toList());
+        if (venta.getRecargoTarjeta() != null && venta.getRecargoTarjeta().signum() > 0) {
+            lineas.add(new ComprobanteHtmlBuilder.Linea(textoRecargo(venta), 1, venta.getRecargoTarjeta(),
+                venta.getRecargoTarjeta()));
+        }
 
         boolean esDomicilio = "DOMICILIO".equals(venta.getTipoVenta());
 
@@ -400,12 +427,37 @@ public class VentaService {
             }
         } else {
             info = venta.getDescuento() != null && venta.getDescuento().compareTo(BigDecimal.ZERO) > 0
-                ? List.of("Medio de pago: " + venta.getMedioPago(), "Descuento: $" + venta.getDescuento())
-                : List.of("Medio de pago: " + venta.getMedioPago());
+                ? List.of("Medio de pago: " + etiquetaMedioPago(venta.getMedioPago()), "Descuento: $" + venta.getDescuento())
+                : List.of("Medio de pago: " + etiquetaMedioPago(venta.getMedioPago()));
         }
 
-        return TicketHtmlBuilder.construir(info, lineas, venta.getTotalVenta(),
+        return TicketHtmlBuilder.construir(info, lineas, venta.totalCobrado(),
             "Comprobante interno, no válido como factura fiscal.", pdfService.logoDataUri());
+    }
+
+    /** Renglón del recargo en ticket y factura, ej. "Recargo tarjeta de crédito (20%)". */
+    public static String textoRecargo(Venta venta) {
+        String medio = RecargoService.TARJETA_DEBITO.equals(venta.getMedioPago()) ? "débito" : "crédito";
+        String porcentaje = venta.getPorcentajeRecargo() != null
+            ? " (" + venta.getPorcentajeRecargo().stripTrailingZeros().toPlainString() + "%)"
+            : "";
+        return "Recargo tarjeta de " + medio + porcentaje;
+    }
+
+    private static String etiquetaMedioPago(String medio) {
+        if (medio == null) {
+            return "—";
+        }
+        return switch (medio) {
+            case "EFECTIVO" -> "Efectivo";
+            case "TRANSFERENCIA" -> "Transferencia";
+            case "TARJETA" -> "Tarjeta";
+            case RecargoService.TARJETA_CREDITO -> "Tarjeta de crédito";
+            case RecargoService.TARJETA_DEBITO -> "Tarjeta de débito";
+            case MEDIO_PAGO_CUENTA_CORRIENTE -> "Cuenta corriente";
+            case MEDIO_PAGO_SALDO -> "Saldo de cuenta corriente";
+            default -> medio;
+        };
     }
 
     /**
