@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getProductos } from '../api/productos'
 import { getEmpleados } from '../api/empleados'
 import {
+  agregarNotaTrabajoDomicilio,
   anularTrabajoDomicilio,
   cobrarTrabajoTerminado,
   descargarOrdenTrabajo,
   descargarVentaPdf,
+  getAgendaTrabajos,
   getNotasTrabajoDomicilio,
   getVenta,
   guardarTrabajoDomicilio,
@@ -16,6 +18,9 @@ import {
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { AgendaSemanal } from '../components/AgendaSemanal'
+import { HistorialCliente } from '../components/HistorialCliente'
+import { trabajosSuperpuestos } from '../utils/superposicion'
+import { linkWhatsapp, mensajeConfirmacion, numeroWhatsapp } from '../utils/whatsapp'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
 import { FotosTrabajo } from '../components/FotosTrabajo'
 import { getFotosTrabajo } from '../api/fotosTrabajo'
@@ -99,6 +104,8 @@ export function TrabajoDomicilio() {
   const [observacionesTecnico, setObservacionesTecnico] = useState('')
   const [notas, setNotas] = useState<NotaTrabajoResponse[]>([])
   const [fotos, setFotos] = useState<FotoTrabajoResponse[]>([])
+  const [notaTexto, setNotaTexto] = useState('')
+  const [agregandoNota, setAgregandoNota] = useState(false)
   // Vacío solo en trabajos cobrados antes de que se pidiera el medio de pago.
   const [medioPago, setMedioPago] = useState<MedioPago | ''>('EFECTIVO')
   const [comisionGuardada, setComisionGuardada] = useState<number | null>(null)
@@ -245,6 +252,22 @@ export function TrabajoDomicilio() {
 
   // La orden sale con lo último guardado en el backend, así que con cambios pendientes se frena
   // para no imprimir una orden distinta de lo que se ve en pantalla.
+  async function agregarNota(e: FormEvent) {
+    e.preventDefault()
+    if (idVenta == null || !notaTexto.trim()) return
+    setError(null)
+    setAgregandoNota(true)
+    try {
+      const nota = await agregarNotaTrabajoDomicilio(idVenta, notaTexto.trim())
+      setNotas((actuales) => [...actuales, nota])
+      setNotaTexto('')
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo agregar la nota')
+    } finally {
+      setAgregandoNota(false)
+    }
+  }
+
   async function cobrarTerminado() {
     if (idVenta == null || !medioPago) return
     setError(null)
@@ -400,6 +423,7 @@ export function TrabajoDomicilio() {
   // Terminado por el jefe y sin cobrar: bloqueado, solo queda "Cerrar y cobrar" o "Reabrir".
   const terminado = estadoVenta === 'EN_PROGRESO' && estadoTrabajoGuardado === 'TERMINADO'
   const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA' || terminado
+  const numeroCliente = clienteTelefono ? numeroWhatsapp(clienteTelefono) : null
   const hayCambios =
     firmaDe(
       [
@@ -444,6 +468,30 @@ export function TrabajoDomicilio() {
       )
     ) {
       return
+    }
+    // Aviso (no bloqueo) si el técnico ya tiene otro trabajo abierto que se pisa en ese horario.
+    if (!cerrar && idEmpleadoTecnico && horaDesde) {
+      try {
+        const delDia = await getAgendaTrabajos(fechaProgramada, fechaProgramada)
+        const pisados = trabajosSuperpuestos(delDia, {
+          idVenta,
+          idEmpleadoTecnico: Number(idEmpleadoTecnico),
+          fechaProgramada,
+          horaDesde,
+          horaHasta: horaHasta || null,
+        })
+        const detalle = pisados
+          .map((t) => `#${t.idVenta} ${t.horaDesde?.slice(0, 5)}${t.horaHasta ? `–${t.horaHasta.slice(0, 5)}` : ''} en ${t.direccionTrabajo ?? 'sin dirección'}`)
+          .join('\n')
+        if (
+          pisados.length > 0 &&
+          !window.confirm(`Ojo: ${pisados[0].nombreTecnico ?? 'el técnico'} ya tiene trabajos que se superponen con este horario:\n\n${detalle}\n\n¿Guardar igual?`)
+        ) {
+          return
+        }
+      } catch {
+        // Si no se pudo revisar la agenda, se guarda igual: el chequeo es solo una ayuda.
+      }
     }
     setError(null)
     setMensaje(null)
@@ -597,19 +645,35 @@ export function TrabajoDomicilio() {
 
       {error && <p className="error">{error}</p>}
 
-      {idVenta != null && notas.length > 0 && (
+      {idVenta != null && estadoVenta !== 'ANULADA' && (
         <section>
-          <h3>Notas del técnico</h3>
+          <h3>Notas</h3>
           <div className="trabajo-notas">
+            {notas.length === 0 && <p className="peticion-detalle">Todavía no hay notas.</p>}
             {notas.map((n) => (
               <div key={n.idNota} className="trabajo-nota">
-                <span>{n.texto}</span>
+                <span className="texto-con-saltos">{n.texto}</span>
                 <small>
-                  {n.nombreEmpleado} — {n.creadoEn.slice(0, 16).replace('T', ' ')}
+                  {n.nombreEmpleado} — {formatoFechaHora(n.creadoEn)}
                 </small>
               </div>
             ))}
           </div>
+          {/* Las notas del jefe le llegan al técnico como aviso; las del técnico, al jefe. */}
+          {!soloLectura && (
+            <form className="trabajo-nota-form" onSubmit={agregarNota}>
+              <textarea
+                value={notaTexto}
+                onChange={(e) => setNotaTexto(e.target.value)}
+                placeholder="Ej: llevá la escalera grande, el cliente pidió que llames antes de llegar..."
+                rows={2}
+              />
+              <button type="submit" disabled={agregandoNota || !notaTexto.trim()}>
+                {agregandoNota && <span className="spinner" />}
+                Agregar nota (le avisa al técnico)
+              </button>
+            </form>
+          )}
         </section>
       )}
 
@@ -665,6 +729,26 @@ export function TrabajoDomicilio() {
             onChange={(e) => setClienteTelefono(e.target.value)}
           />
         </label>
+        {/* Confirmación al cliente en un toque (Etapa 3): abre WhatsApp con el mensaje armado, sin
+            usar la API. La manda el jefe, que es quien habla con el cliente. */}
+        {numeroCliente && fechaProgramada && (
+          <a
+            className="boton-whatsapp"
+            href={linkWhatsapp(
+              numeroCliente,
+              mensajeConfirmacion({ clienteNombre, fechaProgramada, horaDesde, horaHasta, direccionTrabajo }),
+            )}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Confirmar turno por WhatsApp
+          </a>
+        )}
+        {clienteTelefono.trim() && !numeroCliente && (
+          <small className="peticion-detalle">
+            Para el botón de WhatsApp cargá el teléfono con código de área (ej: 11 5555-1234).
+          </small>
+        )}
         <label>
           Dirección
           <input
@@ -673,6 +757,7 @@ export function TrabajoDomicilio() {
             onChange={(e) => setDireccionTrabajo(e.target.value)}
           />
         </label>
+        <HistorialCliente telefono={clienteTelefono} direccion={direccionTrabajo} idVentaActual={idVenta} />
         <label>
           Descripción del trabajo
           <textarea

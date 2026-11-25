@@ -16,8 +16,12 @@ con el documento y el prompt original — caja de trabajos aparte, **sin cobro e
 (cobra siempre el jefe), stock como está, materiales los carga el jefe, fotos en la base,
 Reprogramado no es estado. **"Terminado" del técnico = `TERMINADO_TECNICO`, solo aviso; `TERMINADO`
 lo pone solo el jefe y bloquea todo** (datos, ítems, precios, notas, fotos, eliminar) — quedan
-`POST .../{id}/cobrar` y `POST .../{id}/reabrir`. Sin SQL. **Próximo, de a una parte:** notas del
-jefe, aviso de superposición, fotos Antes/Después; después Etapa 3 partes 3.1 a 3.4.
+`POST .../{id}/cobrar` y `POST .../{id}/reabrir`. Sin SQL.
+
+**Sección 38 (hecha):** notas del jefe (avisan al técnico), aviso de trabajos superpuestos (al
+guardar y en la agenda semanal), Etapa 3.1 confirmación por WhatsApp (wa.me) y 3.2 historial del
+cliente/dirección. 470 tests. **Próximo:** fotos Antes/Después (SQL pendiente de aprobación del
+dueño), Etapa 3.3 reportes (por mes + tiempo promedio) y 3.4 resumen mensual de comisiones.
 
 Estado Anterior (Actualizado al 2026-11-25, noche — ETAPA 2 COMPLETA):
 

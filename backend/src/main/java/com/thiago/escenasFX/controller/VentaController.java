@@ -25,6 +25,7 @@ import com.thiago.escenasFX.dto.CobrarTrabajoRequest;
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.FotoTrabajoResponse;
+import com.thiago.escenasFX.dto.NotaTrabajoRequest;
 import com.thiago.escenasFX.dto.NotaTrabajoResponse;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.dto.VentaRequest;
@@ -41,6 +42,8 @@ import com.thiago.escenasFX.repository.NotaTrabajoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 import com.thiago.escenasFX.service.FotoTrabajoService;
+import com.thiago.escenasFX.service.HistorialClienteService;
+import com.thiago.escenasFX.service.NotaTrabajoJefeService;
 import com.thiago.escenasFX.service.PushService;
 import com.thiago.escenasFX.service.VentaService;
 import com.thiago.escenasFX.service.ZonaNegocio;
@@ -60,12 +63,17 @@ public class VentaController {
     private final VentaConFacturacion ventaConFacturacion;
     private final NotaTrabajoRepository notaTrabajoRepo;
     private final FotoTrabajoService fotoTrabajoService;
+    private final NotaTrabajoJefeService notaTrabajoJefeService;
+    private final HistorialClienteService historialClienteService;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
             EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
             PushService pushService, VentaConFacturacion ventaConFacturacion, NotaTrabajoRepository notaTrabajoRepo,
-            FotoTrabajoService fotoTrabajoService) {
+            FotoTrabajoService fotoTrabajoService, NotaTrabajoJefeService notaTrabajoJefeService,
+            HistorialClienteService historialClienteService) {
+        this.historialClienteService = historialClienteService;
         this.fotoTrabajoService = fotoTrabajoService;
+        this.notaTrabajoJefeService = notaTrabajoJefeService;
         this.pushService = pushService;
         this.ventaConFacturacion = ventaConFacturacion;
         this.ventaService = ventaService;
@@ -184,9 +192,25 @@ public class VentaController {
             .body(pdf);
     }
 
+    // Trabajos anteriores del mismo teléfono o dirección, para mostrarlos al cargar uno (Etapa 3).
+    @GetMapping("/trabajo-domicilio/historial-cliente")
+    public List<VentaResponse> historialDelCliente(@RequestParam(required = false) String telefono,
+            @RequestParam(required = false) String direccion, @RequestParam(required = false) Integer excluir) {
+        return historialClienteService.buscar(telefono, direccion, excluir).stream().map(VentaMapper::toResponse).toList();
+    }
+
     @GetMapping("/trabajo-domicilio/{id}/notas")
     public List<NotaTrabajoResponse> notasDelTrabajo(@PathVariable Integer id) {
         return notaTrabajoRepo.findByVentaIdVentaOrderByCreadoEnAsc(id).stream().map(this::toResponse).toList();
+    }
+
+    // Nota del jefe: misma lista que las del técnico; le avisa al técnico asignado.
+    @PostMapping("/trabajo-domicilio/{id}/notas")
+    public ResponseEntity<NotaTrabajoResponse> agregarNota(@PathVariable Integer id,
+            @Valid @RequestBody NotaTrabajoRequest request, Authentication authentication) {
+        NotaTrabajo nota = notaTrabajoJefeService.agregar(id, request.getTexto(),
+            RolAutenticado.empleado(authentication, empleadoRepo));
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(nota));
     }
 
     // Fotos del trabajo (ADMIN, por el matcher de trabajo-domicilio). Las mismas que ve el técnico.

@@ -44,6 +44,10 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
         + "AND v.estado <> 'ANULADA' ORDER BY v.fechaProgramada ASC, v.idVenta ASC")
     List<Venta> buscarTrabajosDelTecnico(@Param("idTecnico") Integer idTecnico);
 
+    // Historial del cliente (HistorialClienteService): todos los trabajos no eliminados, del más
+    // reciente al más viejo. Son pocos (decenas por año), el filtro por teléfono/dirección va en Java.
+    List<Venta> findByTipoVentaAndEstadoNotOrderByFechaProgramadaDescIdVentaDesc(String tipoVenta, String estado);
+
     // Candidatos al recordatorio de 1h antes: agendados (el técnico todavía no salió), con técnico y
     // hora de inicio, sin aviso dado. La ventana exacta de la hora se filtra en RecordatorioTrabajoService.
     @Query("SELECT v FROM Venta v WHERE v.tipoVenta = 'DOMICILIO' AND v.estado = 'EN_PROGRESO' "

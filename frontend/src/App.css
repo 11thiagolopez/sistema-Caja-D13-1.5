@@ -2041,3 +2041,64 @@ section {
 .trabajo-terminado label {
   margin-bottom: 0;
 }
+
+/* Confirmación del turno por WhatsApp (link wa.me, sin API). */
+.boton-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  margin: -4px 0 12px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: #1e7e34;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Trabajos anteriores del mismo cliente o dirección. */
+.historial-cliente {
+  margin: -4px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  font-size: 14px;
+}
+
+.historial-cliente ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historial-cliente li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.historial-cliente-encabezado {
+  font-weight: 600;
+}
+
+.historial-cliente-items {
+  color: var(--text-muted);
+}
+
+/* Agenda semanal: trabajo que se pisa con otro del mismo técnico. */
+.agenda-trabajo-pisado {
+  outline: 2px solid var(--aviso);
+}
+
+.agenda-trabajo-aviso {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--aviso);
+}
