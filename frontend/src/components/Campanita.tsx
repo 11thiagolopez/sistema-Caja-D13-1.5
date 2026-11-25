@@ -11,6 +11,18 @@ function urlDelAviso(idVenta: number, rol: Rol | undefined): string {
   return rol === 'TECNICO' ? `/mis-trabajos/${idVenta}` : `/ventas/domicilio?id=${idVenta}`
 }
 
+// Cada uno ve solo sus propios avisos, y son de sentido opuesto: el jefe recibe lo que hace el
+// técnico (en camino, llegó, terminado, nota nueva); el técnico recibe lo que le asigna el jefe
+// (trabajo nuevo, reprogramado, cancelado). El nombre del botón lo deja claro para cada uno.
+function textos(rol: Rol | undefined): { boton: string; vacio: string } {
+  return rol === 'TECNICO'
+    ? { boton: 'Mis avisos', vacio: 'Acá te avisamos cuando te asignen un trabajo nuevo, lo reprogramen o lo cancelen.' }
+    : {
+        boton: 'Avisos de técnicos',
+        vacio: 'Acá te avisamos cuando un técnico sale para un trabajo, llega, lo termina o deja una nota.',
+      }
+}
+
 /**
  * Avisos de trabajos a domicilio (ver plan-migracion.md sección 34, Parte 3): cada cambio de
  * estado, nota o reprogramación deja una fila acá, además del push. Sondea el contador cada 15s,
@@ -57,8 +69,8 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
 
   return (
     <div className="campanita">
-      <button type="button" className="campanita-boton" onClick={abrir} aria-label={`Avisos: ${cantidad} sin leer`}>
-        Avisos
+      <button type="button" className="campanita-boton" onClick={abrir} aria-label={`${textos(rol).boton}: ${cantidad} sin leer`}>
+        {textos(rol).boton}
         {cantidad > 0 && <span className="sidebar-contador">{cantidad}</span>}
       </button>
       {abierta && (
@@ -66,13 +78,13 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
           <button type="button" className="campanita-fondo" aria-label="Cerrar avisos" onClick={() => setAbierta(false)} />
           <div className="campanita-panel">
             <header className="campanita-panel-titulo">
-              <strong>Avisos</strong>
+              <strong>{textos(rol).boton}</strong>
               <button type="button" className="modal-cerrar" aria-label="Cerrar" onClick={() => setAbierta(false)}>
                 ×
               </button>
             </header>
             {cargando && <p className="peticion-detalle">Cargando...</p>}
-            {!cargando && notificaciones.length === 0 && <p className="peticion-detalle">No hay avisos todavía.</p>}
+            {!cargando && notificaciones.length === 0 && <p className="peticion-detalle">{textos(rol).vacio}</p>}
             <div className="campanita-lista">
               {notificaciones.map((n) => (
                 <button

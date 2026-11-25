@@ -397,6 +397,26 @@ public class VentaService {
         return pdfService.generarPdf(construirHtmlComprobante(obtenerPorId(idVenta)));
     }
 
+    /**
+     * Orden de trabajo para la impresora térmica (Etapa 1, Parte 5): lo que el técnico se lleva
+     * impreso. Se imprime a pedido desde la pantalla del jefe, nunca automática. Un trabajo
+     * eliminado (ANULADA) no tiene orden: no hay nada que hacer en el domicilio.
+     */
+    public byte[] generarOrdenTrabajoPdf(Integer idVenta) {
+        Venta venta = obtenerPorId(idVenta);
+        if (!"DOMICILIO".equals(venta.getTipoVenta())) {
+            throw new IllegalArgumentException("La venta #" + idVenta + " no es un trabajo a domicilio");
+        }
+        if ("ANULADA".equals(venta.getEstado())) {
+            throw new IllegalStateException("El trabajo #" + idVenta + " está eliminado: no tiene orden para imprimir");
+        }
+        List<ComprobanteHtmlBuilder.Linea> lineas = LineasComprobante.de(venta).stream()
+            .map(l -> new ComprobanteHtmlBuilder.Linea(l.descripcion(), l.cantidad(), l.precioUnitario(), l.subtotal()))
+            .toList();
+        return pdfService.generarPdf(
+            OrdenTrabajoHtmlBuilder.construir(venta, lineas, venta.totalCobrado(), pdfService.logoDataUri()));
+    }
+
     public Venta obtenerPorId(Integer idVenta) {
         return ventaRepo.findById(idVenta)
             .orElseThrow(() -> new IllegalArgumentException("Venta no existe: " + idVenta));

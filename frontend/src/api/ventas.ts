@@ -42,6 +42,11 @@ export function anularTrabajoDomicilio(id: number): Promise<VentaResponse> {
   return request<VentaResponse>(`/api/ventas/trabajo-domicilio/${id}/anular`, { method: 'POST' })
 }
 
+/** Orden de trabajo en PDF de 58mm para la impresora térmica (solo ADMIN). */
+export function descargarOrdenTrabajo(id: number): Promise<Blob> {
+  return requestBlob(`/api/ventas/trabajo-domicilio/${id}/orden`)
+}
+
 export function getNotasTrabajoDomicilio(id: number): Promise<NotaTrabajoResponse[]> {
   return request<NotaTrabajoResponse[]>(`/api/ventas/trabajo-domicilio/${id}/notas`)
 }

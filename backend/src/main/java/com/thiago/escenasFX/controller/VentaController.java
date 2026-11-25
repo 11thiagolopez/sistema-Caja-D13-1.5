@@ -164,6 +164,17 @@ public class VentaController {
             .stream().map(VentaMapper::toResponse).toList();
     }
 
+    /** Orden de trabajo en PDF de 58mm para la Xprinter (ADMIN, por el matcher de trabajo-domicilio). */
+    @GetMapping("/trabajo-domicilio/{id}/orden")
+    public ResponseEntity<byte[]> descargarOrdenTrabajo(@PathVariable Integer id) {
+        byte[] pdf = ventaService.generarOrdenTrabajoPdf(id);
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_PDF)
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.inline().filename("orden-trabajo-" + id + ".pdf").build().toString())
+            .body(pdf);
+    }
+
     @GetMapping("/trabajo-domicilio/{id}/notas")
     public List<NotaTrabajoResponse> notasDelTrabajo(@PathVariable Integer id) {
         return notaTrabajoRepo.findByVentaIdVentaOrderByCreadoEnAsc(id).stream().map(this::toResponse).toList();

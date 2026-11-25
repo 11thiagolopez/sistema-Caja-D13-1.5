@@ -10,7 +10,7 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
 Estado Actual (Actualizado al 2026-11-25, nuevo flujo de trabajos a domicilio con rol TECNICO —
-Etapa 1 COMPLETA salvo impresión térmica):
+Etapa 1 COMPLETA, incluida la impresión térmica de la orden):
 
 **Reemplaza el chat de WhatsApp Business de Meta** que se había empezado en la sesión anterior
 (Meta no lo permitía para este caso de uso) **por un sistema de tickets 100% interno** — ver el
@@ -35,15 +35,57 @@ jefe — campanita y push funcionando en los dos sentidos, con el click llevando
 en cada pantalla. Bug de datos encontrado y corregido de paso: `sql/demo-data.sql` tenía un estado
 viejo (`COBRADO` en vez de `CERRADO_Y_COBRADO`).
 
-**Falta, para más adelante**: Parte 5 (impresión térmica de la orden, 58mm) — la única pieza de la
-Etapa 1 original sin hacer; después, las Etapas 2 y 3 del documento del dueño (materiales con
+**Parte 5 terminada** (impresión térmica de la orden, ver `plan-migracion.md` sección 34):
+`OrdenTrabajoHtmlBuilder` (58mm, reusa `TicketHtmlBuilder.estilos()`), `GET
+/api/ventas/trabajo-domicilio/{id}/orden` (ADMIN; 409 si está eliminado) y botón "Imprimir orden de
+trabajo" en `TrabajoDomicilio.tsx` (a pedido; si hay cambios sin guardar pide guardar primero).
+**No probada contra la Xprinter física** — falta que el dueño imprima una orden de prueba.
+
+**Alta de técnicos con acceso (2026-11-25, pedido del dueño)**: la pantalla `Tecnicos.tsx` nunca
+mandaba usuario/contraseña, así que ningún técnico podía entrar. Ahora el alta tiene "Puede entrar
+al sistema" + usuario + contraseña, y cada fila muestra si tiene acceso y permite "Darle acceso" o
+cambiar usuario/contraseña. Backend: exige contraseña al dar acceso (antes `encode(null)` reventaba
+o dejaba la contraseña al azar), y reserva el prefijo `tecnico-` (el de los técnicos sin acceso).
+"Técnicos" pasó de estar escondido en "Reportes de trabajos a domicilio" a enlace suelto junto a
+"Vendedores". La campanita se llama "Avisos de técnicos" para ADMIN y "Mis avisos" para TECNICO.
+Backend: **452 tests** verdes.
+
+**Falta, para más adelante**: las Etapas 2 y 3 del documento del dueño (materiales con
 descuento de stock, recordatorio push 1h antes, fotos, agenda semanal, cobro en el domicilio,
 comisiones automáticas, reportes). Pendiente de limpieza: borrar las tablas
 `conversaciones`/`mensajes` del intento de WhatsApp (el `DROP TABLE` fue rechazado por el gate de
 operaciones destructivas del MCP de Supabase, hay que correrlo a mano); y que cada dispositivo ya
 suscripto a push (2 en producción, de antes de la Parte 3) reactive las notificaciones una vez,
-para sumar `p256dh`/`auth`. Backend: **438 tests** verdes. Frontend: `tsc -b`, `oxlint` y
+para sumar `p256dh`/`auth`. Backend: **445 tests** verdes. Frontend: `tsc -b`, `oxlint` y
 `vite build` sin errores.
+
+Estado Anterior (Actualizado al 2026-11-12, padrón ARCA listo + arranque de la integración con Mercado Libre):
+
+**Autocompletado de razón social (padrón ARCA) — LISTO**: el certificado ya está autorizado en ARCA para
+`ws_sr_constancia_inscripcion` además de `wsfe` (ver `AfipPadronService`, `GET /api/clientes/padron/{cuit}`,
+`FormularioCliente.tsx`). Guía paso a paso del certificado: https://claude.ai/artifact/RJKzorwwyNE4XaMBArFnnM
+
+**Integración con Mercado Libre — EN PLANIFICACIÓN, sin código todavía.** Objetivo: descontar stock automáticamente
+con cada venta de ML, actualizar `available_quantity` en ML cuando se vende en el local, avisos push (venta nueva,
+pregunta sin responder, stock bajo) reutilizando el Web Push existente, y registrar esas ventas en historial/reportes.
+Diseño acordado (falta el plan detallado en `plan-migracion.md` antes de codear):
+- OAuth 2.0 de ML con `offline_access`; guardar access/refresh token en la base y renovarlos solos. App ID y Client
+  Secret van a variables de entorno de Railway (nunca commitear).
+- Endpoints ya comprometidos en el documento para el dueño (respetar estas rutas exactas, y deben ser públicos en
+  `SecurityConfig`, sin JWT): `GET /api/mercadolibre/callback` (redirect URI de OAuth) y
+  `POST /api/mercadolibre/notificaciones` (webhooks; responder 200 rápido y procesar después).
+- Topics: `orders_v2`, `items`, `questions`, `messages`, `shipments`.
+- Vinculación producto ↔ publicación por **SKU** de la publicación = código del producto en el sistema (por variante
+  si hay variantes). Idempotencia por id de orden de ML (ML reenvía notificaciones). Cancelaciones/devoluciones
+  devuelven stock. Publicaciones con Full se tratan aparte (stock en depósito de ML).
+- Botón "Conectar Mercado Libre" (ADMIN) que inicia el OAuth.
+**Esperando al dueño** (documento enviado: https://claude.ai/artifact/RX1dUdkZAy8JQeJrJVBR3e): (1) crear la app en
+developers.mercadolibre.com.ar y pasar App ID + Client Secret; (2) cargar SKU en las publicaciones; (3) responder:
+cantidad de publicaciones activas, si usa Full, si hay variantes, si el stock baja al pagarse o al despacharse, y
+quién recibe los avisos. **Falta pasarle al dueño la URL real del backend en Railway** (no está en el repo).
+**Próximo paso nuestro**: escribir el plan técnico (tablas, endpoints, servicio de tokens, mapeo SKU, tests) en
+`plan-migracion.md` y el contrato en `plan-frontend.md`; los detalles de la API de ML (nombres de topics, vencimiento
+de tokens, stock de Full) se explicaron de memoria y hay que verificarlos contra la documentación oficial.
 
 Estado Anterior (Actualizado al 2026-11-11, recargo de tarjeta en Cobros + resumen de caja con gráficos):
 
@@ -707,3 +749,4 @@ Pendiente (por prioridad):
 5. Row Level Security deshabilitado en la mayoría de las tablas de Supabase — señalado al dueño,
    pendiente de que decida si se atiende.
 6. Flyway (opcional, reemplazaría el manejo manual del esquema en Supabase).
+7. Integración con Mercado Libre: ver "Estado Anterior" (2026-11-12) — esperando datos del dueño y plan técnico.
