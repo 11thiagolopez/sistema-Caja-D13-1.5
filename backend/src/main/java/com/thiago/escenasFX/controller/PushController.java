@@ -36,7 +36,8 @@ public class PushController {
     @PostMapping("/suscripcion")
     public ResponseEntity<Void> guardarSuscripcion(@Valid @RequestBody SuscripcionPushRequest request,
             Authentication authentication) {
-        pushService.guardarSuscripcion(request.getEndpoint(), RolAutenticado.empleado(authentication, empleadoRepo));
+        pushService.guardarSuscripcion(request.getEndpoint(), request.getP256dh(), request.getAuth(),
+            RolAutenticado.empleado(authentication, empleadoRepo));
         return ResponseEntity.noContent().build();
     }
 }

@@ -31,9 +31,7 @@ public class EmpleadoService {
 
     @Transactional
     public Empleado crear(EmpleadoRequest req) {
-        if (empleadoRepo.findByUsuario(req.getUsuario()).isPresent()) {
-            throw new IllegalArgumentException("El usuario ya existe: " + req.getUsuario());
-        }
+        validarUsuarioLibre(req.getUsuario(), null);
 
         Empleado empleado = new Empleado();
         empleado.setNombre(req.getNombre());
@@ -49,12 +47,7 @@ public class EmpleadoService {
     @Transactional
     public Empleado actualizar(Integer id, EmpleadoUpdateRequest req) {
         Empleado empleado = obtenerPorId(id);
-
-        empleadoRepo.findByUsuario(req.getUsuario())
-            .filter(otro -> !otro.getIdEmpleado().equals(id))
-            .ifPresent(otro -> {
-                throw new IllegalArgumentException("El usuario ya existe: " + req.getUsuario());
-            });
+        validarUsuarioLibre(req.getUsuario(), id);
 
         empleado.setNombre(req.getNombre());
         empleado.setUsuario(req.getUsuario());
@@ -68,15 +61,21 @@ public class EmpleadoService {
     }
 
     /**
-     * Un técnico no entra al sistema: se le generan usuario y contraseña al azar, que nadie conoce,
-     * solo porque la tabla los exige.
+     * Por default un técnico no entra al sistema: se le generan usuario y contraseña al azar, que
+     * nadie conoce, solo porque la tabla los exige. Si el pedido trae usuario/password (ej.
+     * Fabián, para "Mis trabajos" desde el celular), se usan esos en su lugar.
      */
     @Transactional
     public Empleado crearTecnico(TecnicoRequest req) {
+        boolean conAcceso = req.getUsuario() != null && !req.getUsuario().isBlank();
+        if (conAcceso) {
+            validarUsuarioLibre(req.getUsuario(), null);
+        }
+
         Empleado tecnico = new Empleado();
         tecnico.setNombre(req.getNombre());
-        tecnico.setUsuario("tecnico-" + UUID.randomUUID());
-        tecnico.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        tecnico.setUsuario(conAcceso ? req.getUsuario() : "tecnico-" + UUID.randomUUID());
+        tecnico.setPasswordHash(passwordEncoder.encode(conAcceso ? req.getPassword() : UUID.randomUUID().toString()));
         tecnico.setRol("TECNICO");
         tecnico.setComision(req.getComision());
         tecnico.setActivo(true);
@@ -91,7 +90,22 @@ public class EmpleadoService {
         }
         tecnico.setNombre(req.getNombre());
         tecnico.setComision(req.getComision());
+        if (req.getUsuario() != null && !req.getUsuario().isBlank()) {
+            validarUsuarioLibre(req.getUsuario(), id);
+            tecnico.setUsuario(req.getUsuario());
+            if (req.getPassword() != null && !req.getPassword().isBlank()) {
+                tecnico.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+            }
+        }
         return empleadoRepo.save(tecnico);
+    }
+
+    private void validarUsuarioLibre(String usuario, Integer idAIgnorar) {
+        empleadoRepo.findByUsuario(usuario)
+            .filter(otro -> idAIgnorar == null || !otro.getIdEmpleado().equals(idAIgnorar))
+            .ifPresent(otro -> {
+                throw new IllegalArgumentException("El usuario ya existe: " + usuario);
+            });
     }
 
     /**

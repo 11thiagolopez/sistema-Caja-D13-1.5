@@ -1,7 +1,9 @@
 package com.thiago.escenasFX.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -38,7 +40,11 @@ public class VentaService {
         "EFECTIVO", "TRANSFERENCIA", RecargoService.TARJETA_CREDITO, RecargoService.TARJETA_DEBITO,
         MEDIO_PAGO_CUENTA_CORRIENTE, MEDIO_PAGO_SALDO);
     private static final Set<String> MEDIOS_DE_COBRO = Set.of("EFECTIVO", "TRANSFERENCIA", "TARJETA");
-    private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CURSO", "COMPLETADO");
+    // "CERRADO_Y_COBRADO" lo fija guardarTrabajoDomicilio solo con cerrar=true, y "CANCELADO" solo
+    // anularTrabajoDomicilio: ninguno de los dos se acepta en el estadoTrabajo libre del request.
+    private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CAMINO", "EN_CURSO", "TERMINADO");
+    static final String ESTADO_CERRADO_Y_COBRADO = "CERRADO_Y_COBRADO";
+    static final String ESTADO_CANCELADO = "CANCELADO";
 
     private final VentaRepository ventaRepo;
     private final ProductoRepository productoRepo;
@@ -52,13 +58,16 @@ public class VentaService {
     private final FacturaFiscalRepository facturaRepo;
     private final NotaCreditoRepository notaCreditoRepo;
     private final RecargoService recargoService;
+    private final HistorialEstadoTrabajoService historialEstadoService;
+    private final NotificacionTrabajoService notificacionTrabajoService;
 
     public VentaService(VentaRepository ventaRepo, ProductoRepository productoRepo,
             EmpleadoRepository empleadoRepo, EmailService emailService,
             SesionCajaRepository sesionRepo, PdfService pdfService, NotificacionService notificacionService,
             ClienteRepository clienteRepo, MovimientoCuentaCorrienteClienteRepository movimientoCuentaCorrienteRepo,
             FacturaFiscalRepository facturaRepo, NotaCreditoRepository notaCreditoRepo,
-            RecargoService recargoService) {
+            RecargoService recargoService, HistorialEstadoTrabajoService historialEstadoService,
+            NotificacionTrabajoService notificacionTrabajoService) {
         this.recargoService = recargoService;
         this.facturaRepo = facturaRepo;
         this.notaCreditoRepo = notaCreditoRepo;
@@ -71,6 +80,8 @@ public class VentaService {
         this.notificacionService = notificacionService;
         this.clienteRepo = clienteRepo;
         this.movimientoCuentaCorrienteRepo = movimientoCuentaCorrienteRepo;
+        this.historialEstadoService = historialEstadoService;
+        this.notificacionTrabajoService = notificacionTrabajoService;
     }
 
     /**
@@ -470,13 +481,29 @@ public class VentaService {
         }
 
         Venta venta;
-        if (req.getIdVenta() != null) {
+        boolean esNueva = req.getIdVenta() == null;
+        String estadoAnterior;
+        LocalDate fechaAnterior;
+        LocalTime horaDesdeAnterior;
+        LocalTime horaHastaAnterior;
+        Empleado tecnicoAnterior;
+        if (!esNueva) {
             venta = obtenerTrabajoEditableConLock(req.getIdVenta());
+            estadoAnterior = venta.getEstadoTrabajo();
+            fechaAnterior = venta.getFechaProgramada();
+            horaDesdeAnterior = venta.getHoraDesde();
+            horaHastaAnterior = venta.getHoraHasta();
+            tecnicoAnterior = venta.getEmpleadoTecnico();
             devolverStock(venta);
             venta.getDetalles().clear();
         } else {
             venta = new Venta();
             venta.setTipoVenta("DOMICILIO");
+            estadoAnterior = null;
+            fechaAnterior = null;
+            horaDesdeAnterior = null;
+            horaHastaAnterior = null;
+            tecnicoAnterior = null;
         }
 
         if (req.getFechaProgramada() != null) {
@@ -484,12 +511,15 @@ public class VentaService {
         } else if (venta.getFechaProgramada() == null) {
             venta.setFechaProgramada(ZonaNegocio.hoy());
         }
+        venta.setHoraDesde(req.getHoraDesde());
+        venta.setHoraHasta(req.getHoraHasta());
         venta.setMedioPago(req.getMedioPago());
         venta.setEmpleado(empleado);
         venta.setClienteNombre(req.getClienteNombre());
         venta.setClienteTelefono(req.getClienteTelefono());
         venta.setDireccionTrabajo(req.getDireccionTrabajo());
         venta.setDescripcionTrabajo(req.getDescripcionTrabajo());
+        venta.setObservacionesTecnico(req.getObservacionesTecnico());
 
         if (req.getIdEmpleadoTecnico() != null) {
             Empleado tecnico = empleadoRepo.findById(req.getIdEmpleadoTecnico())
@@ -546,15 +576,64 @@ public class VentaService {
             }
             venta.setFecha(LocalDateTime.now());
             venta.setComisionTecnico(venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getComision() : null);
-            venta.setEstadoTrabajo("COBRADO");
+            venta.setEstadoTrabajo(ESTADO_CERRADO_Y_COBRADO);
             venta.setEstado("CONFIRMADA");
         } else {
             venta.setEstadoTrabajo(req.getEstadoTrabajo() != null ? req.getEstadoTrabajo() : "AGENDADO");
             venta.setEstado("EN_PROGRESO");
         }
 
-        return ventaRepo.save(venta);
+        Venta guardada = ventaRepo.save(venta);
+
+        if (!guardada.getEstadoTrabajo().equals(estadoAnterior)) {
+            historialEstadoService.registrar(guardada, estadoAnterior, guardada.getEstadoTrabajo(), empleado, null);
+        } else if (!esNueva && huboReprogramacion(fechaAnterior, horaDesdeAnterior, horaHastaAnterior, guardada)) {
+            String detalle = "Reprogramado: %s %s-%s -> %s %s-%s".formatted(fechaAnterior, horaDesdeAnterior,
+                horaHastaAnterior, guardada.getFechaProgramada(), guardada.getHoraDesde(), guardada.getHoraHasta());
+            historialEstadoService.registrar(guardada, estadoAnterior, guardada.getEstadoTrabajo(), empleado, detalle);
+        }
+
+        avisarTecnicoSiCorresponde(guardada, esNueva, tecnicoAnterior, fechaAnterior, horaDesdeAnterior,
+            horaHastaAnterior);
+
+        return guardada;
     }
+
+    /**
+     * Al técnico le interesan tres cosas: que le asignaron un trabajo nuevo (o se lo reasignaron:
+     * desde su lado es la misma novedad), que se reprogramó, o que se lo cancelaron (esto último lo
+     * dispara anularTrabajoDomicilio, no este método). Un cambio de técnico ya cuenta como "nuevo
+     * trabajo" para el que entra, así que no avisa reprogramación aparte en ese mismo guardado.
+     */
+    private void avisarTecnicoSiCorresponde(Venta guardada, boolean esNueva, Empleado tecnicoAnterior,
+            LocalDate fechaAnterior, LocalTime horaDesdeAnterior, LocalTime horaHastaAnterior) {
+        Empleado tecnico = guardada.getEmpleadoTecnico();
+        if (tecnico == null) {
+            return;
+        }
+        boolean esTecnicoNuevo = esNueva
+            || tecnicoAnterior == null || !tecnicoAnterior.getIdEmpleado().equals(tecnico.getIdEmpleado());
+        if (esTecnicoNuevo) {
+            notificacionTrabajoService.avisarATecnico(tecnico, "TRABAJO_NUEVO",
+                "Nuevo trabajo: " + descripcionParaAviso(guardada), guardada);
+        } else if (huboReprogramacion(fechaAnterior, horaDesdeAnterior, horaHastaAnterior, guardada)) {
+            notificacionTrabajoService.avisarATecnico(tecnico, "REPROGRAMADO",
+                "Se reprogramó el trabajo #" + guardada.getIdVenta() + " para " + guardada.getFechaProgramada(),
+                guardada);
+        }
+    }
+
+    private String descripcionParaAviso(Venta venta) {
+        return venta.getDireccionTrabajo() != null ? venta.getDireccionTrabajo() : "sin dirección cargada";
+    }
+
+    private boolean huboReprogramacion(LocalDate fechaAnterior, LocalTime horaDesdeAnterior,
+            LocalTime horaHastaAnterior, Venta guardada) {
+        return !java.util.Objects.equals(fechaAnterior, guardada.getFechaProgramada())
+            || !java.util.Objects.equals(horaDesdeAnterior, guardada.getHoraDesde())
+            || !java.util.Objects.equals(horaHastaAnterior, guardada.getHoraHasta());
+    }
+
 
     /**
      * "Eliminar trabajo" en pantalla, cobrado o no: devuelve el stock y sale de la agenda y de los
@@ -574,11 +653,19 @@ public class VentaService {
             throw new IllegalStateException("El trabajo #" + idVenta
                 + " tiene una factura o nota de crédito: no se puede eliminar");
         }
+        String estadoAnterior = venta.getEstadoTrabajo();
         devolverStock(venta);
         venta.setEstado("ANULADA");
+        venta.setEstadoTrabajo(ESTADO_CANCELADO);
         venta.setResueltoPor(admin);
         venta.setResueltoEn(LocalDateTime.now());
-        return ventaRepo.save(venta);
+        Venta anulada = ventaRepo.save(venta);
+        historialEstadoService.registrar(anulada, estadoAnterior, ESTADO_CANCELADO, admin, null);
+        if (anulada.getEmpleadoTecnico() != null) {
+            notificacionTrabajoService.avisarATecnico(anulada.getEmpleadoTecnico(), ESTADO_CANCELADO,
+                "Se canceló el trabajo #" + anulada.getIdVenta(), anulada);
+        }
+        return anulada;
     }
 
     // Con lock: sin esto, dos ADMIN cerrando a la vez podían devolver dos veces el stock.

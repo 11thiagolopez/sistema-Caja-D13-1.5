@@ -110,6 +110,22 @@
             <version>1.81</version>
         </dependency>
 
+        <!-- Envío de Web Push con contenido (payload cifrado AES128GCM/RFC8291), para la campanita de
+             trabajos a domicilio. Usa BouncyCastle (ya declarado arriba) para el cifrado. Se excluye
+             async-http-client (trae Netty entero) porque solo se usa el envío síncrono, con
+             httpclient 4.x (que sí queda, vía httpasyncclient de abajo). -->
+        <dependency>
+            <groupId>nl.martijndwars</groupId>
+            <artifactId>web-push</artifactId>
+            <version>5.1.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.asynchttpclient</groupId>
+                    <artifactId>async-http-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

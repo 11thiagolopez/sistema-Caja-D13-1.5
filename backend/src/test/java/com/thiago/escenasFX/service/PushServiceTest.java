@@ -23,6 +23,9 @@ import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
 import java.util.List;
 
+import org.apache.http.ProtocolVersion;
+import org.apache.http.message.BasicHttpResponse;
+import org.apache.http.message.BasicStatusLine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -30,6 +33,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.SuscripcionPush;
 import com.thiago.escenasFX.repository.SuscripcionPushRepository;
 
@@ -38,9 +42,14 @@ class PushServiceTest {
     private static final String ENDPOINT = "https://fcm.googleapis.com/fcm/send/abc";
 
     private final SuscripcionPushRepository repo = mock(SuscripcionPushRepository.class);
+    private final WebPushClient webPushClient = mock(WebPushClient.class);
     private ECPublicKey clavePublica;
     private MockRestServiceServer servidor;
     private PushService pushService;
+
+    private static org.apache.http.HttpResponse respuestaConEstado(int codigo) {
+        return new BasicHttpResponse(new BasicStatusLine(new ProtocolVersion("HTTP", 1, 1), codigo, ""));
+    }
 
     private static String base64Url(byte[] bytes) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -64,13 +73,33 @@ class PushServiceTest {
 
         RestClient.Builder builder = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(builder).build();
-        pushService = new PushService(repo, builder.build(), "clave-publica", clavePrivada, "mailto:test@test.com");
+        pushService = new PushService(repo, builder.build(), "clave-publica", clavePrivada, "mailto:test@test.com",
+            webPushClient);
     }
 
     private SuscripcionPush suscripcion() {
         SuscripcionPush s = new SuscripcionPush();
         s.setEndpoint(ENDPOINT);
         return s;
+    }
+
+    // Punto EC P-256 sin comprimir (65 bytes, prefijo 0x04) y secreto de 16 bytes, los dos
+    // base64url — la forma real de PushSubscription.keys del navegador. Un valor inválido hace que
+    // el constructor de Notification tire antes de llegar siquiera a webPushClient.enviar.
+    private static final String P256DH_VALIDO = "BITb-u6qxWS2keaXnDzAoEEXZP5k1UJDy2yTE9lZGhhdvhwGZ2FtFs_cCQFsK75EqeRt8S8a2Uq6_IpcIaIqu_E";
+    private static final String AUTH_VALIDO = "Q8IJA_aRbigEdNh-wezGQQ";
+
+    private SuscripcionPush suscripcionConClaves() {
+        SuscripcionPush s = suscripcion();
+        s.setP256dh(P256DH_VALIDO);
+        s.setAuth(AUTH_VALIDO);
+        return s;
+    }
+
+    private Empleado empleado(int id) {
+        Empleado e = new Empleado();
+        e.setIdEmpleado(id);
+        return e;
     }
 
     @Test
@@ -92,7 +121,8 @@ class PushServiceTest {
 
     @Test
     void sinClavesConfiguradas_noEnviaNadaYNoRompe() {
-        PushService sinClaves = new PushService(repo, RestClient.create(), "", "", "mailto:test@test.com");
+        PushService sinClaves = new PushService(repo, RestClient.create(), "", "", "mailto:test@test.com",
+            webPushClient);
 
         sinClaves.avisarPeticionNuevaEnSegundoPlano();
 
@@ -102,7 +132,7 @@ class PushServiceTest {
 
     @Test
     void guardarSuscripcion_rechazaUnEndpointQueNoSeaHttps() {
-        assertThatThrownBy(() -> pushService.guardarSuscripcion("http://interno:8080/x", null))
+        assertThatThrownBy(() -> pushService.guardarSuscripcion("http://interno:8080/x", "p256dh", "auth", null))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -140,5 +170,57 @@ class PushServiceTest {
         pushService.avisarPeticionNueva();
 
         verify(repo, never()).delete(suscripcion);
+    }
+
+    // --- Push con contenido ---
+
+    @Test
+    void avisarConContenido_sinClavesConfiguradas_noEnviaNada() throws Exception {
+        PushService sinClaves = new PushService(repo, RestClient.create(), "", "", "mailto:test@test.com",
+            webPushClient);
+
+        sinClaves.avisarConContenido(empleado(1), "{}");
+
+        verify(repo, never()).findByEmpleado_IdEmpleado(1);
+        verify(webPushClient, never()).enviar(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void avisarConContenido_suscripcionSinClavesDeCifrado_laSaltea() throws Exception {
+        when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(suscripcion()));
+
+        pushService.avisarConContenido(empleado(1), "{\"tipo\":\"TRABAJO_NUEVO\"}");
+
+        verify(webPushClient, never()).enviar(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void avisarConContenido_envioExitoso_mandaElPayloadASuDispositivo() throws Exception {
+        when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(suscripcionConClaves()));
+        when(webPushClient.enviar(org.mockito.ArgumentMatchers.any())).thenReturn(respuestaConEstado(201));
+
+        pushService.avisarConContenido(empleado(1), "{\"tipo\":\"TRABAJO_NUEVO\"}");
+
+        verify(webPushClient).enviar(org.mockito.ArgumentMatchers.any());
+        verify(repo, never()).delete(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void avisarConContenido_suscripcionVencida_laBorra() throws Exception {
+        SuscripcionPush vencida = suscripcionConClaves();
+        when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(vencida));
+        when(webPushClient.enviar(org.mockito.ArgumentMatchers.any())).thenReturn(respuestaConEstado(410));
+
+        pushService.avisarConContenido(empleado(1), "{}");
+
+        verify(repo).delete(vencida);
+    }
+
+    @Test
+    void avisarConContenido_elEnvioTiraExcepcion_noPropaga() throws Exception {
+        when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(suscripcionConClaves()));
+        when(webPushClient.enviar(org.mockito.ArgumentMatchers.any())).thenThrow(new RuntimeException("sin red"));
+
+        pushService.avisarConContenido(empleado(1), "{}");
     }
 }

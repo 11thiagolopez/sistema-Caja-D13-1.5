@@ -2861,3 +2861,276 @@ INSERT INTO recargos_medio_pago (medio_pago, porcentaje) VALUES
 -- Igual que las demás tablas nuevas: sin políticas, solo el backend (dueño de la tabla) la usa.
 ALTER TABLE recargos_medio_pago ENABLE ROW LEVEL SECURITY;
 ```
+
+## 34. Nuevo flujo de trabajos a domicilio con rol TECNICO (2026-11-24, EN CURSO — Etapa 1, Parte 1
+   de varias: hecho el técnico con acceso real + estados ampliados + historial; falta "Mis
+   trabajos" del técnico, notas, campanita/push con contenido y el frontend del jefe)
+
+**Reemplaza el intento anterior con la API de WhatsApp Business de Meta** (documentado y revertido
+en esta misma sesión, sin dejar rastro en el código ni en Supabase — Meta no lo permitía para este
+caso de uso). El dueño adjuntó un documento nuevo, "Nuevo flujo de trabajos a domicilio.md", que
+reemplaza esa idea por un sistema de tickets 100% interno: Fabián (el técnico) pasa a tener su
+propio usuario, ve sus trabajos desde el celular (PWA, ya instalable — no hace falta nada nuevo
+para eso) y actualiza el estado él mismo; el cliente sigue escribiendo al WhatsApp del local como
+siempre, sin API.
+
+**Decisiones del dueño, confirmadas antes de tocar código:**
+- Fabián **sí** ve el precio del trabajo en su vista.
+- La plata de los trabajos a domicilio **no** entra al arqueo de caja de mostrador — es una caja
+  aparte. Esto ya era el comportamiento real (`VentaService.guardarTrabajoDomicilio` nunca le
+  asigna una `SesionCaja`), así que no hubo que tocar nada.
+- Push con contenido real (texto distinto por aviso + abre el ticket correcto): usar la librería
+  `nl.martijndwars:web-push` en vez de escribir el cifrado AES128GCM/RFC8291 a mano (pendiente,
+  Parte 3).
+- Lo demás, mis defaults: impresión de la orden a pedido (no automática); permisos centralizados
+  en un solo lugar para poder sumar VENDEDOR más adelante.
+
+**SQL ya corrido contra producción (vía MCP de Supabase, proyecto `jyumiicapspsxgucirjd`)**, antes
+de escribir código — igual que pide `CLAUDE.md`:
+```sql
+CREATE TABLE historial_estado_trabajo (
+    id_historial    SERIAL PRIMARY KEY,
+    id_venta        INTEGER NOT NULL REFERENCES ventas(id_venta),
+    estado_anterior VARCHAR(30),
+    estado_nuevo    VARCHAR(30) NOT NULL,
+    id_empleado     INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    detalle         TEXT,
+    creado_en       TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE TABLE notas_trabajo (
+    id_nota      SERIAL PRIMARY KEY,
+    id_venta     INTEGER NOT NULL REFERENCES ventas(id_venta),
+    id_empleado  INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    texto        TEXT NOT NULL,
+    creado_en    TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE TABLE notificaciones (
+    id_notificacion SERIAL PRIMARY KEY,
+    id_empleado     INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    tipo            VARCHAR(40) NOT NULL,
+    texto           VARCHAR(255) NOT NULL,
+    id_venta        INTEGER REFERENCES ventas(id_venta),
+    leida           BOOLEAN NOT NULL DEFAULT FALSE,
+    creada_en       TIMESTAMP NOT NULL DEFAULT now()
+);
+ALTER TABLE ventas ADD COLUMN hora_desde TIME;
+ALTER TABLE ventas ADD COLUMN hora_hasta TIME;
+ALTER TABLE ventas ADD COLUMN observaciones_tecnico TEXT;
+-- Migra los valores viejos de estado_trabajo a los nuevos nombres (ver más abajo):
+UPDATE ventas SET estado_trabajo = 'TERMINADO' WHERE estado_trabajo = 'COMPLETADO';
+UPDATE ventas SET estado_trabajo = 'CERRADO_Y_COBRADO' WHERE estado_trabajo = 'COBRADO';
+UPDATE ventas SET estado_trabajo = 'CANCELADO' WHERE estado = 'ANULADA' AND estado_trabajo IS NOT NULL;
+```
+De paso se borraron (pedido del dueño) las tablas `conversaciones`/`mensajes` del intento de
+WhatsApp — **el `DROP TABLE` fue rechazado dos veces por el gate de operaciones destructivas del
+propio conector de Supabase**, pendiente de que el dueño lo corra a mano o lo reintente.
+
+**Parte 1 de la Etapa 1, hecha esta sesión:**
+
+1. **Técnico con acceso real, sin romper a los que no lo tienen.** `TecnicoRequest` ganó `usuario`/
+   `password`, ambos opcionales. Sin ellos, `EmpleadoService.crearTecnico` sigue generando
+   usuario/contraseña al azar (como siempre); con ellos, el técnico queda con un login real
+   (`ROLE_TECNICO` ya sale gratis del JWT, el mapeo `"ROLE_" + rol` es genérico). `actualizarTecnico`
+   admite agregarle acceso a un técnico que no lo tenía, o cambiarle la contraseña, sin tocar nada
+   si el request no trae usuario. Se descubrió de paso que `EmpleadoRequest`/`EmpleadoUpdateRequest`
+   (los endpoints genéricos `/api/empleados`) **ya aceptaban** rol TECNICO con usuario/password de
+   siempre — la pantalla `Tecnicos.tsx` simplificada es una decisión de UI, no una limitación del
+   backend.
+2. **Estados del ticket ampliados**: `AGENDADO | EN_CAMINO | EN_CURSO | TERMINADO |
+   CERRADO_Y_COBRADO | CANCELADO` (antes `AGENDADO | EN_CURSO | COMPLETADO | COBRADO`, sin
+   `CANCELADO` separado). `anularTrabajoDomicilio` ahora también fija `estado_trabajo =
+   'CANCELADO'` (antes solo tocaba `estado = 'ANULADA'`, dejando `estado_trabajo` en lo que
+   estuviera). Frontend actualizado en el mismo cambio (`types/api.ts`, `estadoTrabajo.ts`,
+   `TrabajoDomicilio.tsx`, `HistorialVentas.tsx`) para no quedar roto contra el backend nuevo —
+   **la pantalla del jefe sigue funcionando igual que antes**, todavía no tiene nada del flujo
+   nuevo (eso es la Parte 4, frontend).
+3. **Historial de estados** (`HistorialEstadoTrabajo`, tabla `historial_estado_trabajo`): cada vez
+   que cambia `estadoTrabajo` (incluida la cancelación) queda una fila con quién, cuándo y el
+   estado anterior/nuevo. Una reprogramación (cambia `fechaProgramada`/`horaDesde`/`horaHasta` sin
+   cambiar el estado) también deja una fila, con el detalle en texto ("Reprogramado: ... -> ...").
+   Sin esto no se podía calcular el futuro "tiempo promedio por trabajo" del reporte (mejora
+   "Pronto" del documento).
+4. **Horario y observaciones del jefe**: `Venta` ganó `horaDesde`/`horaHasta` (franja horaria, ej.
+   "entre 10 y 12" — antes solo había `fechaProgramada`, sin hora) y `observacionesTecnico` (texto
+   libre del jefe al cargar el ticket, ej. "tocar timbre del portero"). Expuestos en
+   `TrabajoDomicilioRequest`/`VentaResponse`. Necesario para el push del recordatorio 1h antes
+   (Etapa 2): sin una hora concreta no se puede calcular cuándo avisar.
+5. **Notas del trabajo** (`NotaTrabajo`, tabla `notas_trabajo`): entidad y repositorio creados,
+   todavía sin endpoint ni uso — es una lista append-only (no un campo que se pisa), para que
+   jefe y técnico puedan ir dejando notas sueltas ("falta un repuesto"). Se cablea en la Parte 2,
+   junto con los endpoints de "Mis trabajos".
+
+**Pendiente, para las próximas partes (todas de la Etapa 1 todavía, salvo que se diga lo
+contrario):**
+- Parte 2: endpoints `/api/mis-trabajos/**` (hasRole TECNICO) — listar los propios, ver el
+  detalle, cambiar de estado, agregar una nota — con el filtro de propiedad en la query, no solo
+  en el frontend.
+- Parte 3: tabla `notificaciones` (campanita) + reescritura de `PushService` para mandar contenido
+  real (texto + URL del ticket) con `nl.martijndwars:web-push`, en vez del push sin contenido
+  actual que solo avisa a ADMIN con un texto fijo.
+- Parte 4: frontend — vista "Mis trabajos" mobile-first del técnico (botones grandes: Cómo llegar,
+  Llamar, estados, notas) y los cambios en la pantalla del jefe (franja horaria, observaciones,
+  nuevos estados en el calendario).
+- Parte 5: impresión térmica de la orden de trabajo (58mm, reusar `TicketHtmlBuilder`).
+- Permisos centralizados: todavía no se creó la constante compartida (back + front) — se agrega
+  junto con los endpoints de "Mis trabajos" en la Parte 2, cuando haya algo concreto que
+  centralizar.
+- Las tablas `conversaciones`/`mensajes` sin usar: el `DROP TABLE` sigue pendiente (ver arriba).
+
+Backend: **398 tests** verdes (`mvn test`). Frontend: `tsc -b` limpio. **No probado en un navegador
+real todavía** — esta parte fue solo de datos y backend, sin pantalla nueva que probar.
+
+**Parte 2 de la Etapa 1 (2026-11-25, EN CURSO — hecho el backend de "Mis trabajos"; falta la
+pantalla del técnico, que es la Parte 4):**
+
+1. **`HistorialEstadoTrabajoService` nuevo**, extraído de `VentaService` (que lo usaba solo él en
+   la Parte 1): ahora lo comparten `VentaService` (flujo del jefe) y `MisTrabajosService` (flujo
+   del técnico), para no duplicar el `INSERT` del historial en los dos lugares.
+2. **`MisTrabajosService` + `MisTrabajosController` nuevos** (`/api/mis-trabajos`, exclusivo rol
+   TECNICO vía `SecurityConfig.ROLES_MIS_TRABAJOS` — constante centralizada, espejada en el
+   frontend en `utils/permisosTrabajoDomicilio.ts`, igual que se hizo antes con el chat de
+   WhatsApp):
+   - `GET /api/mis-trabajos` — lista los trabajos asignados al técnico logueado (nunca a otro:
+     sale siempre del JWT, nunca de un id del request), excluyendo los `ANULADA` — mismo criterio
+     que la agenda del jefe.
+   - `GET /api/mis-trabajos/{id}` — el detalle de uno propio (`VentaResponse` + sus notas). Si el
+     trabajo no es suyo: **403**, no 404 (no hace falta ocultar que el id existe, ya que un id de
+     venta no es un dato sensible en sí).
+   - `POST /api/mis-trabajos/{id}/estado` (`{"estado": "EN_CAMINO"}`) — el técnico solo puede
+     fijar `EN_CAMINO | EN_CURSO | TERMINADO` (**400** para cualquier otro valor, incluidos
+     `AGENDADO`/`CERRADO_Y_COBRADO`/`CANCELADO`, que son del jefe); **409** si el trabajo ya está
+     `CERRADO_Y_COBRADO` o `CANCELADO`. Cada cambio queda en `historial_estado_trabajo` igual que
+     los del jefe.
+   - `POST /api/mis-trabajos/{id}/notas` (`{"texto": "..."}`) — agrega una nota (**201**,
+     devuelve la nota creada); también **409** si el trabajo ya está cerrado.
+   - Todos con lock pesimista en la escritura (`VentaRepository.buscarPorIdConLock`, ya existía)
+     para no duplicar un cambio con dos toques rápidos del mismo botón.
+3. **Todavía sin cablear** (a propósito, para no dejar notificaciones a medio construir): un
+   cambio de estado o una nota nueva del técnico **todavía no** generan ninguna notificación al
+   jefe — eso es la Parte 3, cuando exista `notificaciones`/`PushService` con contenido real. Hoy
+   el jefe solo se entera mirando la pantalla.
+4. **Fabián sí ve el precio** (confirmado por el dueño): `MiTrabajoResponse` reusa el
+   `VentaResponse` entero tal cual, sin esconder ningún campo — sería al revés (una lista separada
+   de campos "seguros") si se hubiera decidido lo contrario.
+
+**Bug de formato encontrado de paso, no de esta sesión**: el bloque de SQL de la sección 33 (línea
+~2848) había quedado con el ```` ```sql ```` abierto y nunca cerrado — el resto del documento,
+incluida toda la sección 34 de la Parte 1, quedaba técnicamente "dentro" de ese bloque de código
+para cualquier visor de Markdown (GitHub incluido). Corregido cerrándolo donde correspondía.
+
+Backend: **418 tests** verdes (`mvn test`). Frontend: `tsc -b` limpio. **Seguimos sin probar nada
+en un navegador real** — recién hay pantalla para probar en la Parte 4.
+
+**Parte 3 de la Etapa 1 (2026-11-25, EN CURSO — hecha la campanita + el push con contenido real;
+falta el frontend que lo use, Parte 4):**
+
+1. **Dependencia nueva**: `nl.martijndwars:web-push:5.1.1` (cifrado AES128GCM/RFC8291 del payload).
+   Se evaluó escribirlo a mano (como el JWT de VAPID) pero se optó por la librería — decisión del
+   dueño. Trae Apache HttpClient 4.x y una segunda librería de JWT (`jose4j`, que la librería usa
+   internamente para su propio VAPID, redundante con la nuestra pero interna a ella, no se toca).
+   **Se excluyó `async-http-client`** (la variante async de la librería, que no usamos, trae Netty
+   entero de yapa) — confirmado con `mvn dependency:tree` que ni Netty ni async-http-client quedan
+   en el classpath.
+2. **Bug real encontrado probando la librería**: tira `NoSuchProviderException` al leer las claves
+   `p256dh`/`auth` de una suscripción, porque necesita el proveedor JCE "BC" (BouncyCastle)
+   registrado — cosa que hoy solo pasaba de rebote porque `AfipAuthService` lo registra en un
+   `static {}`, y solo si esa clase ya se había cargado antes. Fix: el mismo `Security.addProvider`
+   se agregó también en `PushService` (no rompe si ya estaba registrado), para no depender del
+   orden de carga de clases de Spring.
+3. **`suscripciones_push` gana `p256dh`/`auth`** (SQL abajo): necesarios para cifrar un payload
+   *para* un dispositivo puntual — el push sin contenido de antes no los necesitaba. Las
+   suscripciones viejas (2 en producción) quedan con estos campos en null hasta que ese
+   dispositivo vuelva a tocar "Activar notificaciones" — mientras tanto, sigue sirviendo igual
+   para el push sin contenido de Autorizaciones, que no los usa. `/api/push/**` pasó de
+   exclusivo ADMIN a ADMIN+TECNICO (Fabián también se suscribe).
+4. **`PushService` gana un segundo camino** (`avisarConContenido`), separado del de siempre
+   (`avisarPeticionNuevaEnSegundoPlano`, sin tocar): arma un `Notification` de la librería con el
+   payload JSON y lo manda con VAPID (que la librería firma sola, no hace falta el JWT a mano de
+   `firmarJwt` para este camino). El envío real a la librería queda detrás de una interfaz chica
+   (`WebPushClient`) para poder simularlo en tests sin red, mismo criterio que ya usaba
+   `MockRestServiceServer` para el push sin contenido.
+5. **`Notificacion` (tabla `notificaciones`, ya creada en la Parte 1) + `NotificacionTrabajoService`
+   nuevo**: guarda siempre la fila (la campanita) y, encima, intenta el push — si el push falla o
+   la suscripción no tiene claves todavía, la notificación igual queda para verla entrando al
+   sistema. `/api/notificaciones` (`GET` lista las propias, `GET /no-leidas` cuenta, `POST
+   /{id}/leida` marca) — sin matcher de rol propio: cualquier autenticado ve únicamente lo suyo,
+   filtrado siempre por su propio id de empleado.
+6. **Cableado a los avisos de la tabla del documento original**: `VentaService` avisa al técnico
+   (trabajo nuevo o reasignado, reprogramado, cancelado); `MisTrabajosService` avisa a todos los
+   ADMIN activos (en camino, llegó, terminado, nota nueva). Un cambio de técnico en la misma
+   edición cuenta como "trabajo nuevo" para el que entra, no como reprogramación aparte.
+7. **`public/sw.js` actualizado** (lo mínimo para que el push con contenido sirva para algo):
+   ahora lee `event.data` si existe y muestra ese texto/abre esa URL puntual; si no hay datos
+   (el push de Autorizaciones, sin tocar), se comporta exactamente igual que antes.
+
+**SQL ya corrido contra producción:**
+```sql
+ALTER TABLE suscripciones_push ADD COLUMN p256dh TEXT;
+ALTER TABLE suscripciones_push ADD COLUMN auth TEXT;
+```
+
+Backend: **437 tests** verdes (`mvn test`, incluidos los nuevos de `PushServiceTest` con el
+`WebPushClient` simulado, `NotificacionTrabajoServiceTest` y `NotificacionControllerIntegrationTest`).
+Frontend: `tsc -b` limpio. **Sigue sin probarse en un navegador real ni con un push real en un
+Android** — no hay pantalla todavía para disparar el flujo completo de punta a punta (esa es la
+Parte 4), y las 2 suscripciones ya guardadas en producción van a necesitar que ese dispositivo
+reactive las notificaciones una vez, para sumar `p256dh`/`auth`.
+
+**Pendiente, actualizado:**
+- Parte 4: frontend — pantalla del jefe (franja horaria, observaciones, nuevos estados) y la
+  vista "Mis trabajos" del técnico, que es también lo que permite probar la campanita y el push de
+  punta a punta por primera vez.
+- Parte 5: impresión térmica de la orden.
+- Las tablas `conversaciones`/`mensajes` sin usar y el recordatorio push de 1h antes (Etapa 2 del
+  documento original) siguen sin empezar.
+
+**Parte 4 de la Etapa 1 (2026-11-25, TERMINADA — frontend, probado de punta a punta en el
+navegador contra el perfil `demo`):**
+
+1. **Login y routing de TECNICO**: `AuthContext.login` ahora devuelve el rol para poder decidir el
+   destino sin esperar el re-render; un TECNICO entra directo a `/mis-trabajos` (`Login.tsx`), la
+   ruta `/` lo manda ahí también (`App.tsx`, componente `Inicio`), y `RequireRole` ya no lo manda a
+   `/productos` (donde tampoco tiene permiso) si entra a una ruta ajena.
+2. **`Layout.tsx` esconde el sidebar entero para TECNICO** y **salta los gates de caja/cotización**
+   (`cotizacionObligatoria`/`cajaObligatoria`): ninguno de los dos aplica — bug real que se iba a
+   encontrar recién al probar en el navegador, porque esos dos `GET` ya devuelven 403 para
+   TECNICO y el estado por default de `cotizacionObligatoria` es `true`, así que se habría quedado
+   bloqueado para siempre detrás de un modal que nunca puede resolver.
+3. **`pages/MisTrabajos.tsx`** (rutas `/mis-trabajos` y `/mis-trabajos/:id`, un solo componente):
+   lista agrupada en Hoy/Próximos/Terminados, detalle con precio (confirmado: Fabián sí lo ve),
+   botones grandes "Cómo llegar"/"Llamar al cliente" (links `maps.google.com`/`tel:`, sin backend),
+   los tres botones de estado y el formulario de notas.
+4. **`components/Campanita.tsx`**: botón "Avisos" en el topbar (ADMIN y TECNICO), contador que
+   pollea `/api/notificaciones/no-leidas` cada 15s, panel con la lista completa al abrir. Se marca
+   leída **al tocar cada aviso** (no automático al abrir el panel), y navega a
+   `/ventas/domicilio?id=` (ADMIN) o `/mis-trabajos/{id}` (TECNICO) según quién mira.
+5. **`TrabajoDomicilio.tsx`** (pantalla del jefe) ganó los campos de franja horaria y
+   observaciones para el técnico, ya guarda y precarga con los estados nuevos, y agrega una
+   sección de solo lectura "Notas del técnico" — nuevo endpoint `GET
+   /api/ventas/trabajo-domicilio/{id}/notas` (ADMIN), para que el jefe pueda leer lo que Fabián
+   fue dejando sin tener que entrar a la base.
+6. **`ActivarNotificaciones.tsx`/`public/sw.js`** actualizados (ya en la Parte 3, confirmado acá
+   funcionando): la suscripción manda `p256dh`/`auth`, y el service worker muestra el texto real
+   del aviso y abre la URL correcta; el push sin contenido de Autorizaciones sigue intacto.
+
+**Probado de punta a punta en Chrome, perfil `demo` (H2, nada de esto tocó producción)**: admin
+creó un trabajo nuevo asignado al técnico de la demo con horario y observaciones → **llegó el aviso
+al técnico** (campanita con contador en 1, texto "Nuevo trabajo: Av. Ejemplo 1234", click marca
+leída y navega al detalle); como técnico se cambió el estado a "En camino" y se agregó una nota →
+**llegaron los dos avisos al admin** (campanita con contador en 2), y abrir cualquiera de los dos
+llevó al trabajo correcto en `/ventas/domicilio`, mostrando el estado actualizado y la nota del
+técnico en la sección nueva.
+
+**Bug de datos encontrado probando** (no de código nuevo): `sql/demo-data.sql` todavía tenía el
+trabajo de ejemplo con `estado_trabajo = 'COBRADO'` (el nombre viejo, de antes de la Parte 1) — se
+corrigió a `'CERRADO_Y_COBRADO'` para que la demo quede consistente con la migración real.
+
+Backend: **438 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores.
+
+**Con esto, la Etapa 1 completa del documento del dueño queda funcional de punta a punta** (rol
+TECNICO, tiquetera con historial, notas, campanita y push con contenido). Quedan, para más
+adelante: Parte 5 (impresión térmica de la orden — la única pieza de la Etapa 1 original sin
+hacer), la Etapa 2 (materiales que descuentan stock, recordatorio push 1h antes, fotos, agenda
+semanal) y la Etapa 3 del documento original, más las dos tareas de limpieza ya mencionadas
+(tablas `conversaciones`/`mensajes`, y que cada dispositivo ya suscripto reactive las
+notificaciones una vez).

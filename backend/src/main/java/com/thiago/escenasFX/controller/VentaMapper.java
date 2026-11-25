@@ -74,7 +74,10 @@ final class VentaMapper {
             detalles,
             estadoFactura,
             factura,
-            tieneNotaCredito);
+            tieneNotaCredito,
+            venta.getHoraDesde(),
+            venta.getHoraHasta(),
+            venta.getObservacionesTecnico());
     }
 
     private static DetalleVentaResponse toResponse(DetalleVenta d) {

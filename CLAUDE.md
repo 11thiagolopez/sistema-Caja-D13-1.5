@@ -9,7 +9,43 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-11, recargo de tarjeta en Cobros + resumen de caja con gráficos):
+Estado Actual (Actualizado al 2026-11-25, nuevo flujo de trabajos a domicilio con rol TECNICO —
+Etapa 1 COMPLETA salvo impresión térmica):
+
+**Reemplaza el chat de WhatsApp Business de Meta** que se había empezado en la sesión anterior
+(Meta no lo permitía para este caso de uso) **por un sistema de tickets 100% interno** — ver el
+documento del dueño y el detalle completo en `plan-migracion.md` sección 34. Fabián (técnico) tiene
+su propio usuario y ve/actualiza sus trabajos desde el celular (PWA, ya instalable); el cliente
+sigue escribiendo al WhatsApp del local, sin API. SQL ya corrido contra producción (tablas
+`historial_estado_trabajo`, `notas_trabajo`, `notificaciones` + columnas nuevas en `ventas` y
+`suscripciones_push`).
+
+**Partes 1 a 4 de la Etapa 1 terminadas**: rol TECNICO con acceso real opcional y estados del
+ticket ampliados; `/api/mis-trabajos` (el técnico lista y actualiza únicamente sus propios
+trabajos); campanita + push con contenido real (librería `nl.martijndwars:web-push`, sin
+`async-http-client`/Netty); y el frontend — `pages/MisTrabajos.tsx` (mobile-first, botones
+grandes), `components/Campanita.tsx` (topbar de ADMIN y TECNICO), `TrabajoDomicilio.tsx`
+actualizado (horario, observaciones, notas de solo lectura), login/routing de TECNICO
+(`/mis-trabajos` directo, sin sidebar ni gates de caja/cotización — esos dos 403'ban para TECNICO y
+lo habrían dejado bloqueado para siempre).
+
+**Probado de punta a punta en Chrome** (perfil `demo`, H2, nada tocó producción): un trabajo nuevo
+asignado a un técnico le avisa a él; que el técnico cambie de estado o deje una nota le avisa al
+jefe — campanita y push funcionando en los dos sentidos, con el click llevando al trabajo correcto
+en cada pantalla. Bug de datos encontrado y corregido de paso: `sql/demo-data.sql` tenía un estado
+viejo (`COBRADO` en vez de `CERRADO_Y_COBRADO`).
+
+**Falta, para más adelante**: Parte 5 (impresión térmica de la orden, 58mm) — la única pieza de la
+Etapa 1 original sin hacer; después, las Etapas 2 y 3 del documento del dueño (materiales con
+descuento de stock, recordatorio push 1h antes, fotos, agenda semanal, cobro en el domicilio,
+comisiones automáticas, reportes). Pendiente de limpieza: borrar las tablas
+`conversaciones`/`mensajes` del intento de WhatsApp (el `DROP TABLE` fue rechazado por el gate de
+operaciones destructivas del MCP de Supabase, hay que correrlo a mano); y que cada dispositivo ya
+suscripto a push (2 en producción, de antes de la Parte 3) reactive las notificaciones una vez,
+para sumar `p256dh`/`auth`. Backend: **438 tests** verdes. Frontend: `tsc -b`, `oxlint` y
+`vite build` sin errores.
+
+Estado Anterior (Actualizado al 2026-11-11, recargo de tarjeta en Cobros + resumen de caja con gráficos):
 
 **Recargo de tarjeta (detalle y SQL en `plan-migracion.md` sección 33, contrato en `plan-frontend.md`)**: Cobros
 tiene "Tarjeta de crédito" y "Tarjeta de débito" en vez de "Tarjeta". Se cobra `precio / (1 - comisión del posnet)`

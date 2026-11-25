@@ -25,6 +25,10 @@ import com.thiago.escenasFX.security.RestAuthenticationEntryPoint;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    // "Mis trabajos" del técnico: hoy exclusivo TECNICO. Para sumar VENDEDOR el día de mañana,
+    // alcanza con agregarlo acá (y su espejo en el frontend, utils/permisosTrabajoDomicilio.ts).
+    static final String[] ROLES_MIS_TRABAJOS = {"TECNICO"};
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
@@ -105,7 +109,9 @@ public class SecurityConfig {
                 // Peticiones de autorización: el VENDEDOR solo consulta cómo quedaron las suyas.
                 .requestMatchers(HttpMethod.GET, "/api/autorizaciones/estado").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/autorizaciones/**").hasRole("ADMIN")
-                .requestMatchers("/api/push/**").hasRole("ADMIN")
+                // Antes exclusivo ADMIN (Peticiones); ahora también TECNICO, que necesita
+                // suscribirse para los avisos de trabajos a domicilio.
+                .requestMatchers("/api/push/**").hasAnyRole("ADMIN", "TECNICO")
                 .requestMatchers("/api/proveedores/**").hasRole("ADMIN")
                 .requestMatchers("/api/gastos/**").hasRole("ADMIN")
                 .requestMatchers("/api/compras/**").hasRole("ADMIN")
@@ -137,6 +143,8 @@ public class SecurityConfig {
                 // controller, porque depende de la venta y no solo del rol).
                 .requestMatchers(HttpMethod.GET, "/api/ventas/*/pdf").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers("/api/ventas/trabajo-domicilio/**").hasRole("ADMIN")
+                // "Mis trabajos" del técnico: ver ROLES_MIS_TRABAJOS arriba.
+                .requestMatchers("/api/mis-trabajos/**").hasAnyRole(ROLES_MIS_TRABAJOS)
                 // Facturar al cobrar: el VENDEDOR emite y abre la factura solo de sus ventas confirmadas
                 // (lo valida el controller, igual que el comprobante).
                 .requestMatchers(HttpMethod.POST, "/api/ventas/*/factura").hasAnyRole("ADMIN", "VENDEDOR")

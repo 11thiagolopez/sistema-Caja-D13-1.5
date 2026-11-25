@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
+import java.security.Security;
 import java.security.Signature;
 import java.security.interfaces.ECPrivateKey;
 import java.security.spec.ECGenParameterSpec;
@@ -16,6 +17,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,14 +32,22 @@ import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.SuscripcionPush;
 import com.thiago.escenasFX.repository.SuscripcionPushRepository;
 
+import nl.martijndwars.webpush.Notification;
+
 /**
- * Avisa a los dispositivos de los ADMIN que hay una petición nueva, con Web Push estándar (la
- * notificación de Android llega aunque el sistema esté cerrado). El push va SIN contenido, solo
- * firmado con VAPID: así no hace falta cifrar nada ni sumar una librería, y ni montos ni motivos
- * pasan por los servidores de Google. El texto fijo lo arma public/sw.js en el dispositivo.
+ * Dos formas de avisar, ambas Web Push estándar (la notificación llega aunque el sistema esté
+ * cerrado):
+ * - {@link #avisarPeticionNuevaEnSegundoPlano()}: sin contenido, solo firmado con VAPID a mano
+ *   (RFC 8292) — ni montos ni motivos pasan por los servidores de Google. El texto fijo lo arma
+ *   public/sw.js en el dispositivo. La usan las Peticiones (Autorizaciones).
+ * - {@link #avisarConContenido}/{@link #avisarConContenidoATodosLosAdmin}: con contenido cifrado
+ *   (RFC 8291, AES128GCM) vía la librería nl.martijndwars:web-push — cada aviso tiene su propio
+ *   texto y abre un trabajo puntual. La usan los avisos de trabajos a domicilio. Necesita que la
+ *   suscripción tenga p256dh/auth (las de antes de que existiera esto no los tienen, quedan
+ *   activas solo para el aviso sin contenido hasta que ese dispositivo se vuelva a suscribir).
  *
- * Es best-effort, igual que las alertas de stock: si falla, la petición queda igual en la pantalla
- * de Peticiones. Sin claves VAPID configuradas el servicio queda desactivado, sin romper nada.
+ * Las dos son best-effort: si fallan, lo que las disparó se completa igual. Sin claves VAPID
+ * configuradas, el servicio entero queda desactivado, sin romper nada.
  */
 @Service
 public class PushService {
@@ -48,28 +58,42 @@ public class PushService {
     private static final long VIGENCIA_JWT_SEGUNDOS = 12 * 60 * 60;
     private static final int TIEMPO_DE_VIDA_SEGUNDOS = 60 * 60;
     private static final int TIMEOUT_MS = 5000;
+    private static final int HTTP_NOT_FOUND = 404;
+    private static final int HTTP_GONE = 410;
+
+    // La librería nl.martijndwars:web-push necesita el proveedor "BC" (BouncyCastle) registrado
+    // para leer las claves EC de cada suscripción (p256dh/auth) — AfipAuthService ya lo registra,
+    // pero no hay que depender del orden en que Spring cargue las clases. Security.addProvider no
+    // rompe si ya estaba registrado (devuelve -1, no tira).
+    static {
+        Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+    }
 
     private final SuscripcionPushRepository suscripcionRepo;
     private final RestClient restClient;
     private final String clavePublica;
     private final String clavePrivada;
     private final String contacto;
+    private final WebPushClient webPushClient;
 
     @Autowired
     public PushService(SuscripcionPushRepository suscripcionRepo, RestClient.Builder builder,
             @Value("${push.vapid.public-key:}") String clavePublica,
             @Value("${push.vapid.private-key:}") String clavePrivada,
             @Value("${push.vapid.contacto:mailto:admin@example.com}") String contacto) {
-        this(suscripcionRepo, builder.requestFactory(conTimeouts()).build(), clavePublica, clavePrivada, contacto);
+        this(suscripcionRepo, builder.requestFactory(conTimeouts()).build(), clavePublica, clavePrivada, contacto,
+            notification -> new nl.martijndwars.webpush.PushService(clavePublica, clavePrivada, contacto)
+                .send(notification));
     }
 
     PushService(SuscripcionPushRepository suscripcionRepo, RestClient restClient, String clavePublica,
-            String clavePrivada, String contacto) {
+            String clavePrivada, String contacto, WebPushClient webPushClient) {
         this.suscripcionRepo = suscripcionRepo;
         this.restClient = restClient;
         this.clavePublica = clavePublica;
         this.clavePrivada = clavePrivada;
         this.contacto = contacto;
+        this.webPushClient = webPushClient;
     }
 
     private static SimpleClientHttpRequestFactory conTimeouts() {
@@ -92,12 +116,14 @@ public class PushService {
 
     /** Un mismo dispositivo puede volver a registrarse: el endpoint queda a nombre del último que entró. */
     @Transactional
-    public void guardarSuscripcion(String endpoint, Empleado empleado) {
+    public void guardarSuscripcion(String endpoint, String p256dh, String auth, Empleado empleado) {
         if (!endpoint.startsWith("https://")) {
             throw new IllegalArgumentException("La suscripción de notificaciones no es válida");
         }
         SuscripcionPush suscripcion = suscripcionRepo.findByEndpoint(endpoint).orElseGet(SuscripcionPush::new);
         suscripcion.setEndpoint(endpoint);
+        suscripcion.setP256dh(p256dh);
+        suscripcion.setAuth(auth);
         suscripcion.setEmpleado(empleado);
         suscripcionRepo.save(suscripcion);
     }
@@ -165,5 +191,38 @@ public class PushService {
 
     private static String base64Url(byte[] bytes) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    // --- Push con contenido (trabajos a domicilio) ---
+
+    /** Avisa a un empleado puntual (ej. Fabián) en todos sus dispositivos suscriptos. */
+    public void avisarConContenido(Empleado destinatario, String payloadJson) {
+        if (!configurado()) {
+            return;
+        }
+        suscripcionRepo.findByEmpleado_IdEmpleado(destinatario.getIdEmpleado()).forEach(s -> enviarConContenido(s, payloadJson));
+    }
+
+    private void enviarConContenido(SuscripcionPush suscripcion, String payloadJson) {
+        if (suscripcion.getP256dh() == null || suscripcion.getAuth() == null) {
+            // Suscripción de antes de que existiera el push con contenido: no se puede cifrar para
+            // ella todavía. No es un error — el dispositivo se va a poner al día solo cuando
+            // vuelva a activar las notificaciones.
+            return;
+        }
+        try {
+            Notification notification = new Notification(suscripcion.getEndpoint(), suscripcion.getP256dh(),
+                suscripcion.getAuth(), payloadJson);
+            HttpResponse respuesta = webPushClient.enviar(notification);
+            int status = respuesta.getStatusLine().getStatusCode();
+            if (status == HTTP_NOT_FOUND || status == HTTP_GONE) {
+                suscripcionRepo.delete(suscripcion);
+            } else if (status >= 300) {
+                log.error("Push con contenido rechazado (HTTP {}) para la suscripción #{}", status,
+                    suscripcion.getIdSuscripcion());
+            }
+        } catch (Exception e) {
+            log.error("No se pudo enviar un push con contenido: {}", e.getMessage(), e);
+        }
     }
 }

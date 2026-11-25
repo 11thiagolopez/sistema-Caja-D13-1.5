@@ -20,16 +20,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
+import com.thiago.escenasFX.dto.NotaTrabajoResponse;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.dto.VentaRequest;
 import com.thiago.escenasFX.dto.VentaResponse;
 import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
+import com.thiago.escenasFX.model.NotaTrabajo;
 import com.thiago.escenasFX.model.Producto;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.ClienteRepository;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.repository.NotaTrabajoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
 import com.thiago.escenasFX.service.PushService;
@@ -49,10 +52,11 @@ public class VentaController {
     private final ClienteRepository clienteRepo;
     private final PushService pushService;
     private final VentaConFacturacion ventaConFacturacion;
+    private final NotaTrabajoRepository notaTrabajoRepo;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
             EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
-            PushService pushService, VentaConFacturacion ventaConFacturacion) {
+            PushService pushService, VentaConFacturacion ventaConFacturacion, NotaTrabajoRepository notaTrabajoRepo) {
         this.pushService = pushService;
         this.ventaConFacturacion = ventaConFacturacion;
         this.ventaService = ventaService;
@@ -60,6 +64,7 @@ public class VentaController {
         this.empleadoRepo = empleadoRepo;
         this.productoRepo = productoRepo;
         this.clienteRepo = clienteRepo;
+        this.notaTrabajoRepo = notaTrabajoRepo;
     }
 
     @PostMapping
@@ -157,6 +162,16 @@ public class VentaController {
         return ventaRepo.findByTipoVentaAndEstadoNotAndFechaProgramadaBetweenOrderByFechaProgramadaAscIdVentaAsc(
                 "DOMICILIO", "ANULADA", desde, hasta)
             .stream().map(VentaMapper::toResponse).toList();
+    }
+
+    @GetMapping("/trabajo-domicilio/{id}/notas")
+    public List<NotaTrabajoResponse> notasDelTrabajo(@PathVariable Integer id) {
+        return notaTrabajoRepo.findByVentaIdVentaOrderByCreadoEnAsc(id).stream().map(this::toResponse).toList();
+    }
+
+    private NotaTrabajoResponse toResponse(NotaTrabajo nota) {
+        return new NotaTrabajoResponse(nota.getIdNota(), nota.getTexto(), nota.getEmpleado().getNombre(),
+            nota.getCreadoEn());
     }
 
     @PostMapping("/trabajo-domicilio/{id}/anular")

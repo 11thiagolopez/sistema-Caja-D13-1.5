@@ -37,4 +37,10 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Venta v WHERE v.idVenta = :id")
     Optional<Venta> buscarPorIdConLock(@Param("id") Integer id);
+
+    // "Mis trabajos" del técnico: todo lo asignado a él salvo lo eliminado (mismo criterio que la
+    // agenda del jefe, que tampoco muestra ANULADA).
+    @Query("SELECT v FROM Venta v WHERE v.tipoVenta = 'DOMICILIO' AND v.empleadoTecnico.idEmpleado = :idTecnico "
+        + "AND v.estado <> 'ANULADA' ORDER BY v.fechaProgramada ASC, v.idVenta ASC")
+    List<Venta> buscarTrabajosDelTecnico(@Param("idTecnico") Integer idTecnico);
 }
