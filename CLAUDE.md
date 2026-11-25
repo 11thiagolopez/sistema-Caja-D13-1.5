@@ -9,7 +9,21 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-25, nuevo flujo de trabajos a domicilio con rol TECNICO —
+Estado Actual (Actualizado al 2026-11-25, tarde — ficha del técnico, fotos y recordatorio de 1h):
+
+**SQL ya corrido contra producción** (vía MCP de Supabase, con permiso del dueño): tabla
+`fotos_trabajo` + columna `ventas.recordatorio_enviado` — detalle en `plan-migracion.md` sección 35.
+
+**Sección 35 de `plan-migracion.md`** (pedido del dueño tras probar): el técnico **no se contacta
+con el cliente** — `/api/mis-trabajos/**` devuelve `TrabajoTecnicoResponse` (lista blanca sin
+teléfono/email/facturación) y la orden impresa tampoco lleva el teléfono; el jefe sí lo ve.
+Ficha del técnico rehecha en tarjetas con datos etiquetados. **Fotos** compartidas jefe ↔ técnico
+(`fotos_trabajo`, bytea; comprimidas en el navegador; un aviso por tanda). **Recordatorio push 1h
+antes** al técnico (`RecordatorioTrabajoService`, cada 5 min). Backend: **460 tests** verdes.
+Pendiente de la Etapa 2: agenda semanal del jefe y "materiales" (confirmar con el dueño si es algo
+distinto de los artículos que ya descuentan stock). No probado en navegador ni celular real.
+
+Estado Anterior (Actualizado al 2026-11-25, nuevo flujo de trabajos a domicilio con rol TECNICO —
 Etapa 1 COMPLETA, incluida la impresión térmica de la orden):
 
 **Reemplaza el chat de WhatsApp Business de Meta** que se había empezado en la sesión anterior

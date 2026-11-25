@@ -14,6 +14,8 @@ import {
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
+import { FotosTrabajo } from '../components/FotosTrabajo'
+import { getFotosTrabajo } from '../api/fotosTrabajo'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
 import { verBlob } from '../utils/descargarBlob'
@@ -24,6 +26,7 @@ import type {
   EmpleadoResponse,
   EstadoTrabajo,
   EstadoVenta,
+  FotoTrabajoResponse,
   MedioPago,
   NotaTrabajoResponse,
   Producto,
@@ -78,6 +81,7 @@ export function TrabajoDomicilio() {
   const [horaHasta, setHoraHasta] = useState('')
   const [observacionesTecnico, setObservacionesTecnico] = useState('')
   const [notas, setNotas] = useState<NotaTrabajoResponse[]>([])
+  const [fotos, setFotos] = useState<FotoTrabajoResponse[]>([])
   // Vacío solo en trabajos cobrados antes de que se pidiera el medio de pago.
   const [medioPago, setMedioPago] = useState<MedioPago | ''>('EFECTIVO')
   const [comisionGuardada, setComisionGuardada] = useState<number | null>(null)
@@ -168,8 +172,10 @@ export function TrabajoDomicilio() {
       ),
     )
     setNotas([])
+    setFotos([])
     if (venta.idVenta != null) {
       getNotasTrabajoDomicilio(venta.idVenta).then(setNotas).catch(() => {})
+      getFotosTrabajo(venta.idVenta).then(setFotos).catch(() => {})
     }
     setVista('trabajo')
   }
@@ -280,6 +286,7 @@ export function TrabajoDomicilio() {
     setHoraHasta('')
     setObservacionesTecnico('')
     setNotas([])
+    setFotos([])
     vaciarCarrito()
     setMensaje(null)
     setError(null)
@@ -488,6 +495,25 @@ export function TrabajoDomicilio() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {estadoVenta !== 'ANULADA' && (
+        <section>
+          <h3>Fotos del trabajo</h3>
+          {idVenta == null ? (
+            <p className="peticion-detalle">Guardá el trabajo para poder agregarle fotos.</p>
+          ) : (
+            <FotosTrabajo
+              lado="jefe"
+              idVenta={idVenta}
+              fotos={fotos}
+              onCambio={setFotos}
+              idEmpleadoActual={sesion?.idEmpleado}
+              puedeSubir
+              ayuda="Subí las fotos que te mande el cliente para que el técnico sepa con qué se va a encontrar. Acá también ves las que suba él."
+            />
+          )}
         </section>
       )}
 

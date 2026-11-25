@@ -183,6 +183,10 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 | PUT | `/api/ventas/trabajo-domicilio/{id}` | igual que POST (sin `idVenta`, va en la URL) | `VentaResponse` |
 | GET | `/api/ventas/trabajo-domicilio/{id}/notas` | — | `NotaTrabajoResponse[]`, nuevo 2026-11-25 |
 | GET | `/api/ventas/trabajo-domicilio/{id}/orden` | — | PDF de 58mm (orden de trabajo para la Xprinter), `inline`. 409 si el trabajo está eliminado, 400 si no es DOMICILIO. Nuevo 2026-11-25 (Parte 5) |
+| GET | `/api/ventas/trabajo-domicilio/{id}/fotos` | — | `FotoTrabajoResponse[]` (sin la imagen). Nuevo 2026-11-25 (sección 35) |
+| POST | `/api/ventas/trabajo-domicilio/{id}/fotos` | multipart, campo `fotos` (una o varias) | `201 FotoTrabajoResponse[]` (todas las del trabajo). Avisa al técnico |
+| GET | `/api/ventas/trabajo-domicilio/{id}/fotos/{idFoto}` | — | la imagen (JPG/PNG/WEBP) |
+| DELETE | `/api/ventas/trabajo-domicilio/{id}/fotos/{idFoto}` | — | 204 (el jefe borra cualquiera) |
 
 `TrabajoDomicilioRequest`:
 ```ts
@@ -218,6 +222,13 @@ imprimirlo en la Xprinter. Sale con lo último guardado: si hay cambios sin guar
 pide guardar primero en vez de imprimir una orden distinta de lo que se ve.
 
 ### Mis trabajos (`/api/mis-trabajos`) — **exclusivo TECNICO**, nuevo 2026-11-25,
+**Cambio 2026-11-25 (sección 35)**: `MiTrabajoResponse.trabajo` ya no es un `VentaResponse` sino un
+`TrabajoTecnico` (lista blanca SIN `clienteTelefono`/`clienteEmail`/facturación — el contacto con el
+cliente es del jefe), y el detalle trae `fotos: FotoTrabajoResponse[]` (vacío en la lista). Fotos del
+técnico: `POST /api/mis-trabajos/{id}/fotos` (multipart `fotos`, avisa a los ADMIN), `GET`/`DELETE
+/api/mis-trabajos/{id}/fotos/{idFoto}` (solo borra las suyas; subir/borrar exige el trabajo abierto).
+Ambas pantallas usan `components/FotosTrabajo.tsx` y comprimen antes de subir (`utils/comprimirFoto.ts`).
+
 **pantalla hecha en la Parte 4** (`pages/MisTrabajos.tsx`, rutas `/mis-trabajos` y `/mis-trabajos/:id`)
 
 El técnico (ej. Fabián) ve y actualiza únicamente los trabajos que tiene asignados — nunca otro id,

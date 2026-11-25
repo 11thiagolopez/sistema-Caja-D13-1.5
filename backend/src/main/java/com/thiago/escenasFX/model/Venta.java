@@ -110,6 +110,11 @@ public class Venta {
     @Column(name = "hora_hasta")
     private LocalTime horaHasta;
 
+    // Si ya salió el push de "en 1 hora" al técnico (RecordatorioTrabajoService). Vuelve a false al
+    // reprogramar o reasignar el trabajo, para que el aviso se repita con el horario nuevo.
+    @Column(name = "recordatorio_enviado", nullable = false, columnDefinition = "boolean default false")
+    private boolean recordatorioEnviado = false;
+
     // Instrucciones del jefe al cargar el ticket (ej. "tocar timbre del portero, llevar cerradura
     // de doble paleta") — a diferencia de las notas de NotaTrabajo, es un solo campo que se edita,
     // no una lista histórica.

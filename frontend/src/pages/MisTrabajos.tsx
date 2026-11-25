@@ -7,8 +7,10 @@ import {
   getMisTrabajos,
 } from '../api/misTrabajos'
 import { ApiRequestError } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { FotosTrabajo } from '../components/FotosTrabajo'
 import { hoyIso } from '../utils/date'
-import { formatoPesos } from '../utils/formato'
+import { formatoDiaLargo, formatoFechaHora, formatoPesos } from '../utils/formato'
 import { estadoVisibleTrabajo } from '../utils/estadoTrabajo'
 import type { EstadoTrabajoTecnico, MiTrabajoResponse } from '../types/api'
 
@@ -68,7 +70,7 @@ function Lista() {
       >
         <strong>{t.trabajo.direccionTrabajo ?? 'Sin dirección'}</strong>
         <span>
-          {t.trabajo.fechaProgramada} {horario(t.trabajo)}
+          {t.trabajo.fechaProgramada ? formatoDiaLargo(t.trabajo.fechaProgramada) : 'Sin fecha'} {horario(t.trabajo)}
         </span>
         <span className="trabajo-fila-estado">{etiqueta}</span>
       </button>
@@ -103,6 +105,7 @@ function Lista() {
 
 function Detalle({ id }: { id: number }) {
   const navigate = useNavigate()
+  const { sesion } = useAuth()
   const [trabajo, setTrabajo] = useState<MiTrabajoResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actualizando, setActualizando] = useState(false)
@@ -117,7 +120,7 @@ function Detalle({ id }: { id: number }) {
 
   useEffect(cargar, [id])
 
-  if (error) {
+  if (error && !trabajo) {
     return (
       <div className="mis-trabajos">
         <p className="error">{error}</p>
@@ -131,6 +134,7 @@ function Detalle({ id }: { id: number }) {
 
   const v = trabajo.trabajo
   const cerrado = estaCerrado(v)
+  const { clase, etiqueta } = estadoVisibleTrabajo(v)
 
   async function cambiarEstado(estado: EstadoTrabajoTecnico) {
     setActualizando(true)
@@ -162,87 +166,139 @@ function Detalle({ id }: { id: number }) {
 
   return (
     <div className="mis-trabajos mis-trabajos-detalle">
-      <button type="button" className="boton-link" onClick={() => navigate('/mis-trabajos')}>
+      <button type="button" className="boton-link mis-trabajos-volver" onClick={() => navigate('/mis-trabajos')}>
         ← Mis trabajos
       </button>
 
-      <h2>{v.clienteNombre}</h2>
-      <p className="trabajo-detalle-direccion">{v.direccionTrabajo ?? 'Sin dirección cargada'}</p>
-      <p>
-        {v.fechaProgramada} {horario(v)}
-      </p>
-      {v.descripcionTrabajo && <p>{v.descripcionTrabajo}</p>}
-      {v.observacionesTecnico && (
-        <p className="trabajo-detalle-observaciones">Observaciones del jefe: {v.observacionesTecnico}</p>
+      <header className="mi-trabajo-encabezado">
+        <h2>Trabajo #{v.idVenta}</h2>
+        <span className={`trabajo-estado ${clase}`}>{etiqueta}</span>
+      </header>
+
+      {/* Sin teléfono ni "Llamar al cliente" a propósito: el contacto con el cliente lo maneja el
+          jefe (pedido del dueño). El backend tampoco lo manda (TrabajoTecnicoResponse). */}
+      <section className="mi-trabajo-tarjeta">
+        <dl className="mi-trabajo-datos">
+          <dt>Cliente</dt>
+          <dd>{v.clienteNombre || '—'}</dd>
+          <dt>Dirección</dt>
+          <dd>
+            {v.direccionTrabajo ?? 'Sin dirección cargada'}
+            {v.direccionTrabajo && (
+              <a
+                className="boton-grande mi-trabajo-como-llegar"
+                href={`https://maps.google.com/?q=${encodeURIComponent(v.direccionTrabajo)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Cómo llegar
+              </a>
+            )}
+          </dd>
+          <dt>Fecha</dt>
+          <dd>{v.fechaProgramada ? formatoDiaLargo(v.fechaProgramada) : '—'}</dd>
+          {v.horaDesde && (
+            <>
+              <dt>Horario</dt>
+              <dd>{horario(v)}</dd>
+            </>
+          )}
+          <dt>Trabajo</dt>
+          <dd className="texto-con-saltos">{v.descripcionTrabajo || '—'}</dd>
+          {v.observacionesTecnico && (
+            <>
+              <dt>Indicaciones del jefe</dt>
+              <dd className="texto-con-saltos mi-trabajo-observaciones">{v.observacionesTecnico}</dd>
+            </>
+          )}
+        </dl>
+      </section>
+
+      {v.detalles.length > 0 && (
+        <section className="mi-trabajo-tarjeta">
+          <h3>Materiales y mano de obra</h3>
+          <ul className="mi-trabajo-items">
+            {v.detalles.map((d, i) => (
+              <li key={i}>
+                <span>
+                  {d.cantidad} × {d.descripcion}
+                </span>
+                <span>{formatoPesos(d.subtotal)}</span>
+              </li>
+            ))}
+            <li className="mi-trabajo-total">
+              <span>Total</span>
+              <span>{formatoPesos(v.totalVenta)}</span>
+            </li>
+          </ul>
+        </section>
       )}
-      <p>Total: {formatoPesos(v.totalVenta)}</p>
 
-      <div className="botones-grandes">
-        {v.direccionTrabajo && (
-          <a
-            className="boton-grande"
-            href={`https://maps.google.com/?q=${encodeURIComponent(v.direccionTrabajo)}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Cómo llegar
-          </a>
+      <section className="mi-trabajo-tarjeta">
+        <h3>Estado</h3>
+        {cerrado ? (
+          <p className="peticion-detalle">
+            Este trabajo ya está {v.estadoTrabajo === 'CANCELADO' ? 'cancelado' : 'cerrado'}: no se puede actualizar.
+          </p>
+        ) : (
+          <div className="botones-grandes">
+            {BOTONES_ESTADO.map((b) => (
+              <button
+                key={b.valor}
+                type="button"
+                className={`boton-grande${v.estadoTrabajo === b.valor ? ' boton-grande-actual' : ''}`}
+                disabled={actualizando}
+                onClick={() => cambiarEstado(b.valor)}
+              >
+                {b.etiqueta}
+              </button>
+            ))}
+          </div>
         )}
-        {v.clienteTelefono && (
-          <a className="boton-grande" href={`tel:${v.clienteTelefono}`}>
-            Llamar al cliente
-          </a>
-        )}
-      </div>
+        {error && <p className="error">{error}</p>}
+      </section>
 
-      {error && <p className="error">{error}</p>}
+      <section className="mi-trabajo-tarjeta">
+        <h3>Fotos</h3>
+        <FotosTrabajo
+          lado="tecnico"
+          idVenta={v.idVenta}
+          fotos={trabajo.fotos}
+          onCambio={(fotos) => setTrabajo((actual) => (actual ? { ...actual, fotos } : actual))}
+          idEmpleadoActual={sesion?.idEmpleado}
+          puedeSubir={!cerrado}
+          ayuda="Las que te pasa el jefe y las que subas vos (por ejemplo, cómo quedó el trabajo)."
+        />
+      </section>
 
-      {cerrado ? (
-        <p className="peticion-detalle">
-          Este trabajo ya está {v.estadoTrabajo === 'CANCELADO' ? 'cancelado' : 'cerrado'}: no se puede actualizar.
-        </p>
-      ) : (
-        <div className="botones-grandes">
-          {BOTONES_ESTADO.map((b) => (
-            <button
-              key={b.valor}
-              type="button"
-              className={`boton-grande${v.estadoTrabajo === b.valor ? ' boton-grande-actual' : ''}`}
-              disabled={actualizando}
-              onClick={() => cambiarEstado(b.valor)}
-            >
-              {b.etiqueta}
-            </button>
+      <section className="mi-trabajo-tarjeta">
+        <h3>Notas</h3>
+        <div className="trabajo-notas">
+          {trabajo.notas.length === 0 && <p className="peticion-detalle">Todavía no hay notas.</p>}
+          {trabajo.notas.map((n) => (
+            <div key={n.idNota} className="trabajo-nota">
+              <span className="texto-con-saltos">{n.texto}</span>
+              <small>
+                {n.nombreEmpleado} — {formatoFechaHora(n.creadoEn)}
+              </small>
+            </div>
           ))}
         </div>
-      )}
-
-      <h3>Notas</h3>
-      <div className="trabajo-notas">
-        {trabajo.notas.length === 0 && <p className="peticion-detalle">Todavía no hay notas.</p>}
-        {trabajo.notas.map((n) => (
-          <div key={n.idNota} className="trabajo-nota">
-            <span>{n.texto}</span>
-            <small>
-              {n.nombreEmpleado} — {n.creadoEn.slice(0, 16).replace('T', ' ')}
-            </small>
-          </div>
-        ))}
-      </div>
-      {!cerrado && (
-        <form className="trabajo-nota-form" onSubmit={agregarNota}>
-          <textarea
-            value={notaTexto}
-            onChange={(e) => setNotaTexto(e.target.value)}
-            placeholder="Ej: falta un repuesto, el cliente no estaba..."
-            rows={2}
-          />
-          <button type="submit" disabled={agregandoNota || !notaTexto.trim()}>
-            {agregandoNota && <span className="spinner" />}
-            Agregar nota
-          </button>
-        </form>
-      )}
+        {!cerrado && (
+          <form className="trabajo-nota-form" onSubmit={agregarNota}>
+            <textarea
+              value={notaTexto}
+              onChange={(e) => setNotaTexto(e.target.value)}
+              placeholder="Ej: falta un repuesto, el cliente no estaba..."
+              rows={2}
+            />
+            <button type="submit" disabled={agregandoNota || !notaTexto.trim()}>
+              {agregandoNota && <span className="spinner" />}
+              Agregar nota
+            </button>
+          </form>
+        )}
+      </section>
     </div>
   )
 }

@@ -102,6 +102,14 @@ public class MisTrabajosService {
         return guardada;
     }
 
+    /** Un trabajo propio y todavía abierto: para lo que escribe el técnico fuera de estado/notas (fotos). */
+    @Transactional(readOnly = true)
+    public Venta obtenerAbierto(Integer idVenta, Empleado tecnico) {
+        Venta venta = obtenerPropio(idVenta, tecnico);
+        exigirNoCerrado(venta);
+        return venta;
+    }
+
     private String descripcionParaAviso(Venta venta) {
         return venta.getDireccionTrabajo() != null ? venta.getDireccionTrabajo() : "sin dirección cargada";
     }

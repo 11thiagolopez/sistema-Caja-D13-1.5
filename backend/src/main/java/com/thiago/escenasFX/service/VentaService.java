@@ -403,10 +403,7 @@ public class VentaService {
      * eliminado (ANULADA) no tiene orden: no hay nada que hacer en el domicilio.
      */
     public byte[] generarOrdenTrabajoPdf(Integer idVenta) {
-        Venta venta = obtenerPorId(idVenta);
-        if (!"DOMICILIO".equals(venta.getTipoVenta())) {
-            throw new IllegalArgumentException("La venta #" + idVenta + " no es un trabajo a domicilio");
-        }
+        Venta venta = obtenerTrabajo(idVenta);
         if ("ANULADA".equals(venta.getEstado())) {
             throw new IllegalStateException("El trabajo #" + idVenta + " está eliminado: no tiene orden para imprimir");
         }
@@ -415,6 +412,15 @@ public class VentaService {
             .toList();
         return pdfService.generarPdf(
             OrdenTrabajoHtmlBuilder.construir(venta, lineas, venta.totalCobrado(), pdfService.logoDataUri()));
+    }
+
+    /** Una venta que tiene que ser un trabajo a domicilio (400 si es una venta de mostrador). */
+    public Venta obtenerTrabajo(Integer idVenta) {
+        Venta venta = obtenerPorId(idVenta);
+        if (!"DOMICILIO".equals(venta.getTipoVenta())) {
+            throw new IllegalArgumentException("La venta #" + idVenta + " no es un trabajo a domicilio");
+        }
+        return venta;
     }
 
     public Venta obtenerPorId(Integer idVenta) {
@@ -601,6 +607,16 @@ public class VentaService {
         } else {
             venta.setEstadoTrabajo(req.getEstadoTrabajo() != null ? req.getEstadoTrabajo() : "AGENDADO");
             venta.setEstado("EN_PROGRESO");
+        }
+
+        // Recordatorio de 1h antes (RecordatorioTrabajoService): si cambió cuándo empieza o quién lo
+        // hace, el aviso que ya se mandó no vale para el horario/técnico nuevo, hay que volver a darlo.
+        boolean cambioTecnico = !java.util.Objects.equals(
+            tecnicoAnterior != null ? tecnicoAnterior.getIdEmpleado() : null,
+            venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getIdEmpleado() : null);
+        if (esNueva || cambioTecnico || !java.util.Objects.equals(fechaAnterior, venta.getFechaProgramada())
+                || !java.util.Objects.equals(horaDesdeAnterior, venta.getHoraDesde())) {
+            venta.setRecordatorioEnviado(false);
         }
 
         Venta guardada = ventaRepo.save(venta);

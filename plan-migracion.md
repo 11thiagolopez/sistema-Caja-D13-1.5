@@ -3170,3 +3170,67 @@ prueba y confirme que se lee bien, igual que se hizo con el ticket (secciones 21
 (materiales que descuentan stock, recordatorio push 1h antes, fotos, agenda semanal) y la Etapa
 3 del documento original, más las dos tareas de limpieza (tablas `conversaciones`/`mensajes`, y
 que cada dispositivo ya suscripto reactive las notificaciones una vez).
+
+## 35. Ficha del técnico ordenada, sin contacto con el cliente, fotos y recordatorio de 1h (2026-11-25)
+
+Pedido del dueño después de probar la Etapa 1: (1) la ficha del trabajo en "Mis trabajos" tenía los
+datos "flotando" (párrafos sueltos sin etiqueta, con el margen por defecto); (2) **el técnico no se
+contacta con el cliente, eso es del jefe**: fuera "Llamar al cliente" y el teléfono, de la pantalla
+y de la orden impresa (el jefe lo sigue viendo en su pantalla); (3) fotos que suben el jefe (las que
+le manda el cliente) y el técnico; (4) seguir con el plan → recordatorio push 1h antes (Etapa 2).
+
+1. **`TrabajoTecnicoResponse`** (nuevo, lista blanca): lo que el backend le manda al técnico en
+   `/api/mis-trabajos/**`, en vez del `VentaResponse` entero. Sin `clienteTelefono`, `clienteEmail`
+   ni datos de facturación/cuenta corriente — esconderlo solo en el frontend no alcanzaba, viajaba
+   en el JSON. Un campo nuevo de `VentaResponse` NO le llega al técnico salvo que se agregue acá.
+   `OrdenTrabajoHtmlBuilder` tampoco imprime el teléfono.
+2. **Ficha del técnico rehecha** (`MisTrabajos.tsx`): encabezado "Trabajo #id" + estado; tarjetas
+   con datos etiquetados (Cliente, Dirección + "Cómo llegar", Fecha con día de la semana, Horario,
+   Trabajo, Indicaciones del jefe); "Materiales y mano de obra" con total (solo si hay ítems);
+   Estado; Fotos; Notas. Las fechas de la lista también salen legibles ("viernes, 21/11/2026").
+   De paso: `--text-muted` se usaba en varios estilos pero nunca estuvo definida (ahora = `--apagado`).
+3. **Fotos de trabajos** (tabla `fotos_trabajo`, `bytea` en la base — sin storage externo, para no
+   sumar otra credencial al deploy): `FotoTrabajo`, `FotoTrabajoRepository` (los listados van por
+   proyección, sin bajar los bytes), `FotoTrabajoService`, `FotosHttp`.
+   - Jefe (ADMIN): `GET/POST /api/ventas/trabajo-domicilio/{id}/fotos`, `GET/DELETE .../fotos/{idFoto}`.
+   - Técnico: `POST /api/mis-trabajos/{id}/fotos`, `GET/DELETE .../fotos/{idFoto}`; la lista viene en
+     `MiTrabajoResponse.fotos` del detalle. Ownership validado por `MisTrabajosService`; subir/borrar
+     exige el trabajo abierto (`obtenerAbierto`).
+   - Varias fotos por pedido (`fotos` multipart) → **un solo aviso** al otro lado ("subió 3 fotos").
+     Jefe sube → avisa al técnico asignado; técnico sube → avisa a los ADMIN.
+   - Tipo detectado por los primeros bytes (JPG/PNG/WEBP), no por el Content-Type del navegador.
+     Máx. 3 MB por foto, 30 por trabajo; el jefe borra cualquiera, el técnico solo las suyas.
+   - El frontend las achica antes de subir (`utils/comprimirFoto.ts`: 1600px, JPEG 0.8 → ~200-400 KB).
+     Componente compartido `components/FotosTrabajo.tsx` (miniaturas + visor), usado en la pantalla
+     del jefe (`TrabajoDomicilio.tsx`, sección "Fotos del trabajo") y en la del técnico.
+4. **Recordatorio push 1h antes** (`RecordatorioTrabajoService`, `@Scheduled` cada 5 min,
+   `SchedulingConfig`): trabajos AGENDADO con técnico y `horaDesde`, cuya hora cae dentro de la
+   próxima hora (hora de Argentina, `ZonaNegocio.ahora()`) → aviso "A las 10:00 tenés un trabajo en
+   ...", una sola vez (`ventas.recordatorio_enviado`). `VentaService` lo vuelve a `false` al
+   reprogramar (fecha/hora de inicio) o reasignar. Uno cuya hora ya pasó no recibe aviso. Se apaga
+   con `recordatorios.habilitados=false` (los tests lo hacen y llaman al servicio con un "ahora" fijo).
+
+**SQL ya corrido contra producción** (vía MCP de Supabase; el primer intento lo frenó el gate de
+permisos de la sesión, se corrió después de que el dueño agregara el permiso):
+```sql
+CREATE TABLE fotos_trabajo (
+    id_foto        SERIAL PRIMARY KEY,
+    id_venta       INTEGER NOT NULL REFERENCES ventas(id_venta),
+    id_empleado    INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    contenido      BYTEA NOT NULL,
+    tipo_contenido VARCHAR(30) NOT NULL,
+    creada_en      TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_fotos_trabajo_venta ON fotos_trabajo(id_venta);
+ALTER TABLE ventas ADD COLUMN recordatorio_enviado BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+Tests nuevos: `FotosTrabajoIntegrationTest` (5, incluido que el detalle del técnico no trae el
+teléfono), `RecordatorioTrabajoIntegrationTest` (3). Backend: **460 tests** verdes; el perfil `demo`
+arranca con las tablas nuevas. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. **No
+probado en un navegador ni con un celular real** (subida de fotos desde la cámara, push del
+recordatorio).
+
+**Sigue pendiente de la Etapa 2**: agenda semanal del jefe y "materiales" (si es algo distinto de
+los artículos que ya descuentan stock al cargarlos en el trabajo — confirmar con el dueño). Etapa 3
+sin empezar.

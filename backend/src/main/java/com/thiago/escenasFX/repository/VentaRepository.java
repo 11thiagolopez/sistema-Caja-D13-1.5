@@ -43,4 +43,11 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
     @Query("SELECT v FROM Venta v WHERE v.tipoVenta = 'DOMICILIO' AND v.empleadoTecnico.idEmpleado = :idTecnico "
         + "AND v.estado <> 'ANULADA' ORDER BY v.fechaProgramada ASC, v.idVenta ASC")
     List<Venta> buscarTrabajosDelTecnico(@Param("idTecnico") Integer idTecnico);
+
+    // Candidatos al recordatorio de 1h antes: agendados (el técnico todavía no salió), con técnico y
+    // hora de inicio, sin aviso dado. La ventana exacta de la hora se filtra en RecordatorioTrabajoService.
+    @Query("SELECT v FROM Venta v WHERE v.tipoVenta = 'DOMICILIO' AND v.estado = 'EN_PROGRESO' "
+        + "AND v.estadoTrabajo = 'AGENDADO' AND v.recordatorioEnviado = false AND v.empleadoTecnico IS NOT NULL "
+        + "AND v.horaDesde IS NOT NULL AND v.fechaProgramada BETWEEN :desde AND :hasta")
+    List<Venta> buscarParaRecordatorio(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
 }

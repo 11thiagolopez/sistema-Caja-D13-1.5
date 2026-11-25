@@ -1710,3 +1710,177 @@ section {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Ficha del trabajo para el técnico: cada dato con su etiqueta, agrupado en tarjetas, en vez de
+   párrafos sueltos con el margen por defecto (que los dejaba "flotando" sin saber qué era cada uno). */
+.mis-trabajos-detalle p {
+  margin: 0;
+}
+
+.mis-trabajos-volver {
+  align-self: flex-start;
+}
+
+.mi-trabajo-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mi-trabajo-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-alt);
+}
+
+.mi-trabajo-tarjeta h3 {
+  margin: 0;
+}
+
+.mi-trabajo-datos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.mi-trabajo-datos dt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+
+.mi-trabajo-datos dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.mi-trabajo-como-llegar {
+  min-height: 44px;
+  padding: 0 18px;
+  flex: none;
+}
+
+.mi-trabajo-observaciones {
+  padding: 8px 10px;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.texto-con-saltos {
+  white-space: pre-wrap;
+}
+
+.mi-trabajo-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mi-trabajo-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mi-trabajo-total {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+}
+
+/* Fotos del trabajo (jefe y técnico). */
+.fotos-trabajo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fotos-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.foto-miniatura {
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.foto-miniatura img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.foto-visor {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.foto-visor-fondo {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.foto-visor-contenido {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.foto-visor-contenido img {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.foto-visor-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.foto-visor-acciones {
+  display: flex;
+  gap: 8px;
+}

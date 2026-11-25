@@ -40,7 +40,8 @@ class OrdenTrabajoHtmlBuilderTest {
 
         assertThat(html)
             .contains("ORDEN DE TRABAJO", "N° 42", "26/11/2026", "10:00 a 12:00", "Fabián")
-            .contains("Pérez &amp; Hijos", "Tocar timbre &lt;2B&gt;", "Belgrano 233", "1155556666")
+            .contains("Pérez &amp; Hijos", "Tocar timbre &lt;2B&gt;", "Belgrano 233")
+            .doesNotContain("1155556666")
             .contains("Instalar termotanque", "1x Mano de obra", "TOTAL", "$5000", "Firma")
             .contains("size: 58mm 210mm")
             .doesNotContain("<2B>")
