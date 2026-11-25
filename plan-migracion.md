@@ -3234,3 +3234,40 @@ recordatorio).
 **Sigue pendiente de la Etapa 2**: agenda semanal del jefe y "materiales" (si es algo distinto de
 los artículos que ya descuentan stock al cargarlos en el trabajo — confirmar con el dueño). Etapa 3
 sin empezar.
+
+## 36. Avisos que se veían mal, precio editable en trabajos y agenda semanal (2026-11-25)
+
+Pedido del dueño tras probar en producción (su captura todavía mostraba la versión anterior — el
+deploy de Vercel no había terminado):
+
+1. **Panel de avisos roto.** En computadora tapaba toda la pantalla en blanco: la regla
+   `.topbar-usuario button` (fondo blanco para "Salir") también pintaba el fondo transparente de
+   la campanita, que es un botón `position: fixed; inset: 0` para cerrar tocando afuera. Ahora es
+   `.topbar-usuario > button` (solo los botones directos). En celular el texto quedaba cortado: el
+   panel estaba anclado al botón "Mis avisos", que no está en el borde derecho (Salir va al lado), y
+   se salía por la izquierda. Ahora es `position: fixed` pegado al borde derecho (como el panel del
+   globo de peticiones), con el `top` calculado en `Campanita.tsx` según la posición real del botón;
+   los textos hacen `overflow-wrap: anywhere`. Probado a 1280px y a 390px.
+2. **"Materiales" = los artículos del trabajo, con precio editable.** Un artículo puede cobrarse en
+   el domicilio distinto que en mostrador: la columna "Precio unitario" de `TrabajoDomicilio.tsx`
+   ahora es un input (con la referencia "Mostrador: $X" debajo cuando difiere). **El costo no se
+   toca**: el backend ya guardaba el `precioUnitario` del request y el costo sale siempre de
+   `producto.precioCompra` (`CuentasTrabajo`, `ReporteService`), así que la ganancia real refleja el
+   precio nuevo contra el mismo costo. Sin cambios de backend. `useCarrito` ganó `cambiarPrecio`.
+   Se valida precio > 0 antes de guardar (el backend exige `@DecimalMin("0.01")`).
+3. **Agenda semanal** (`components/AgendaSemanal.tsx`, Etapa 2): lunes a domingo, una tarjeta por
+   trabajo ordenada por horario (los "sin horario" al final) con dirección, cliente, técnico y
+   estado en su color; filtro por técnico; tocar un día lo elige (para "Nuevo trabajo" con esa
+   fecha). 7 columnas en pantalla ancha, un día debajo del otro hasta 900px. Selector Semana/Mes en
+   la pantalla del jefe (la vista mensual de siempre sigue), recordado en localStorage. Usa el
+   mismo `GET /api/ventas/trabajo-domicilio?desde&hasta` — sin backend nuevo.
+
+**Probado de punta a punta en Chrome contra el perfil `demo`**: panel de avisos en escritorio y a
+390px; ficha del técnico (sin teléfono ni "Llamar"); agenda semanal; artículo de catálogo a $22.000
+(mostrador $18.500) guardado y releído del backend; 2 fotos subidas por el jefe → aviso "Hay 2
+fotos nuevas…" al técnico; y el recordatorio de 1h salió solo para el trabajo de las 15:00 (no para
+el de las 10:00, ya pasado). Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. Backend sin
+cambios (460 tests).
+
+**Etapa 2 completa** (fotos, recordatorio, agenda semanal, precio de materiales). Etapa 3 del
+documento del dueño sin empezar.

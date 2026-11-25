@@ -13,6 +13,7 @@ import {
 } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
+import { AgendaSemanal } from '../components/AgendaSemanal'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
 import { FotosTrabajo } from '../components/FotosTrabajo'
 import { getFotosTrabajo } from '../api/fotosTrabajo'
@@ -51,6 +52,17 @@ function firmaDe(campos: string[], items: Pick<ItemCarrito, 'descripcionProducto
   return JSON.stringify([campos, items.map((i) => [i.descripcionProducto, i.cantidad, i.precioUnitario])])
 }
 
+// Semana o mes: se recuerda en este navegador (es solo una preferencia de vista).
+const CLAVE_VISTA_AGENDA = 'd13.vistaAgendaTrabajos'
+
+function leerVistaAgenda(): 'semana' | 'mes' {
+  try {
+    return localStorage.getItem(CLAVE_VISTA_AGENDA) === 'mes' ? 'mes' : 'semana'
+  } catch {
+    return 'semana'
+  }
+}
+
 export function TrabajoDomicilio() {
   const { sesion } = useAuth()
   const [searchParams] = useSearchParams()
@@ -60,6 +72,7 @@ export function TrabajoDomicilio() {
 
   const [vista, setVista] = useState<'lista' | 'trabajo'>('lista')
   const [fechaBuscar, setFechaBuscar] = useState(hoyIso())
+  const [vistaAgenda, setVistaAgenda] = useState<'semana' | 'mes'>(leerVistaAgenda)
   const [idVenta, setIdVenta] = useState<number | null>(null)
   const [estadoVenta, setEstadoVenta] = useState<EstadoVenta | null>(null)
   const [estadoTrabajoGuardado, setEstadoTrabajoGuardado] = useState<EstadoTrabajo | null>(null)
@@ -93,7 +106,7 @@ export function TrabajoDomicilio() {
     raiz.current?.scrollIntoView()
   }, [vista])
 
-  const { carrito, reemplazar: reemplazarCarrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
+  const { carrito, reemplazar: reemplazarCarrito, agregarOFusionar, quitar: quitarDelCarrito, cambiarPrecio, vaciar: vaciarCarrito, total } =
     useCarrito<ItemCarrito>()
   const [manualDescripcion, setManualDescripcion] = useState('')
   const [manualPrecio, setManualPrecio] = useState('')
@@ -228,6 +241,15 @@ export function TrabajoDomicilio() {
 
   // La orden sale con lo último guardado en el backend, así que con cambios pendientes se frena
   // para no imprimir una orden distinta de lo que se ve en pantalla.
+  function elegirVistaAgenda(vista: 'semana' | 'mes') {
+    setVistaAgenda(vista)
+    try {
+      localStorage.setItem(CLAVE_VISTA_AGENDA, vista)
+    } catch {
+      // Sin localStorage la vista cambia igual, solo no se recuerda al volver.
+    }
+  }
+
   async function imprimirOrden() {
     if (idVenta == null) return
     setError(null)
@@ -369,6 +391,11 @@ export function TrabajoDomicilio() {
       setError('La fecha del trabajo es obligatoria')
       return
     }
+    const sinPrecio = carrito.find((item) => !(item.precioUnitario > 0))
+    if (sinPrecio) {
+      setError(`Poné un precio mayor a cero para "${sinPrecio.descripcionProducto}"`)
+      return
+    }
     if (!medioPago) return
     setError(null)
     setMensaje(null)
@@ -422,7 +449,20 @@ export function TrabajoDomicilio() {
 
         {mensaje && <p className="resultado">{mensaje}</p>}
 
-        <CalendarioTrabajos fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        <div className="vista-agenda" role="group" aria-label="Vista de la agenda">
+          <button type="button" aria-pressed={vistaAgenda === 'semana'} onClick={() => elegirVistaAgenda('semana')}>
+            Semana
+          </button>
+          <button type="button" aria-pressed={vistaAgenda === 'mes'} onClick={() => elegirVistaAgenda('mes')}>
+            Mes
+          </button>
+        </div>
+
+        {vistaAgenda === 'semana' ? (
+          <AgendaSemanal fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        ) : (
+          <CalendarioTrabajos fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        )}
 
         <section>
           <h3>Buscar por número</h3>
@@ -653,7 +693,30 @@ export function TrabajoDomicilio() {
               <td>{item.descripcionProducto}</td>
               <td>{item.tipo === 'SERVICIO' ? 'Mano de obra' : 'Artículo'}</td>
               <td>{item.cantidad}</td>
-              <td>{item.precioUnitario.toFixed(2)}</td>
+              <td>
+                {soloLectura ? (
+                  item.precioUnitario.toFixed(2)
+                ) : (
+                  // Editable: un artículo puede cobrarse en el domicilio distinto que en mostrador.
+                  // Solo cambia lo que se cobra; el costo (y por lo tanto la ganancia real) sale
+                  // siempre del producto.
+                  <input
+                    className="precio-editable"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    aria-label={`Precio de ${item.descripcionProducto}`}
+                    value={Number.isNaN(item.precioUnitario) ? '' : item.precioUnitario}
+                    onChange={(e) => cambiarPrecio(index, e.target.value === '' ? Number.NaN : Number(e.target.value))}
+                  />
+                )}
+                {(() => {
+                  const precioMostrador = productos.find((p) => p.idProducto === item.idProducto)?.precioVenta
+                  return item.idProducto != null && precioMostrador != null && precioMostrador !== item.precioUnitario ? (
+                    <small className="precio-mostrador">Mostrador: {precioMostrador.toFixed(2)}</small>
+                  ) : null
+                })()}
+              </td>
               <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
               {!soloLectura && (
                 <td>
