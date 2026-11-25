@@ -5,21 +5,27 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.thiago.escenasFX.dto.CambiarEstadoTrabajoRequest;
+import com.thiago.escenasFX.dto.FotoTrabajoResponse;
 import com.thiago.escenasFX.dto.MiTrabajoResponse;
 import com.thiago.escenasFX.dto.NotaTrabajoRequest;
 import com.thiago.escenasFX.dto.NotaTrabajoResponse;
+import com.thiago.escenasFX.dto.TrabajoTecnicoResponse;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.NotaTrabajo;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
+import com.thiago.escenasFX.service.FotoTrabajoService;
 import com.thiago.escenasFX.service.MisTrabajosService;
 
 import jakarta.validation.Valid;
@@ -27,24 +33,31 @@ import jakarta.validation.Valid;
 /**
  * "Mis trabajos" del técnico — espejo chico de VentaController/trabajo-domicilio, pero siempre
  * acotado al propio técnico (ver MisTrabajosService). Nunca recibe un idEmpleado del body: quién
- * opera sale siempre del JWT, igual que en RolAutenticado.
+ * opera sale siempre del JWT, igual que en RolAutenticado. Devuelve {@link TrabajoTecnicoResponse},
+ * sin el teléfono ni el email del cliente: el contacto con el cliente es del jefe.
  */
 @RestController
 @RequestMapping("/api/mis-trabajos")
 public class MisTrabajosController {
 
     private final MisTrabajosService misTrabajosService;
+    private final FotoTrabajoService fotoTrabajoService;
     private final EmpleadoRepository empleadoRepo;
 
-    public MisTrabajosController(MisTrabajosService misTrabajosService, EmpleadoRepository empleadoRepo) {
+    public MisTrabajosController(MisTrabajosService misTrabajosService, FotoTrabajoService fotoTrabajoService,
+            EmpleadoRepository empleadoRepo) {
         this.misTrabajosService = misTrabajosService;
+        this.fotoTrabajoService = fotoTrabajoService;
         this.empleadoRepo = empleadoRepo;
     }
 
     @GetMapping
     public List<MiTrabajoResponse> listar(Authentication authentication) {
         Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
-        return misTrabajosService.listar(tecnico).stream().map(v -> toResponse(v, tecnico)).toList();
+        // La lista no necesita notas ni fotos: se piden al abrir el detalle.
+        return misTrabajosService.listar(tecnico).stream()
+            .map(v -> new MiTrabajoResponse(TrabajoTecnicoResponse.de(v), List.of(), List.of()))
+            .toList();
     }
 
     @GetMapping("/{id}")
@@ -68,10 +81,37 @@ public class MisTrabajosController {
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(nota));
     }
 
+    @PostMapping("/{id}/fotos")
+    public ResponseEntity<List<FotoTrabajoResponse>> subirFotos(@PathVariable Integer id,
+            @RequestParam("fotos") List<MultipartFile> fotos, Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        Venta venta = misTrabajosService.obtenerAbierto(id, tecnico);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(fotoTrabajoService.subir(venta, tecnico, FotosHttp.leer(fotos), false));
+    }
+
+    @GetMapping("/{id}/fotos/{idFoto}")
+    public ResponseEntity<byte[]> verFoto(@PathVariable Integer id, @PathVariable Integer idFoto,
+            Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        misTrabajosService.obtener(id, tecnico);
+        return FotosHttp.responder(fotoTrabajoService.obtener(id, idFoto));
+    }
+
+    @DeleteMapping("/{id}/fotos/{idFoto}")
+    public ResponseEntity<Void> borrarFoto(@PathVariable Integer id, @PathVariable Integer idFoto,
+            Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        misTrabajosService.obtenerAbierto(id, tecnico);
+        fotoTrabajoService.borrar(id, idFoto, tecnico, false);
+        return ResponseEntity.noContent().build();
+    }
+
     private MiTrabajoResponse toResponse(Venta venta, Empleado tecnico) {
         List<NotaTrabajoResponse> notas = misTrabajosService.listarNotas(venta.getIdVenta(), tecnico)
             .stream().map(this::toResponse).toList();
-        return new MiTrabajoResponse(VentaMapper.toResponse(venta), notas);
+        return new MiTrabajoResponse(TrabajoTecnicoResponse.de(venta), notas,
+            fotoTrabajoService.listar(venta.getIdVenta()));
     }
 
     private NotaTrabajoResponse toResponse(NotaTrabajo nota) {

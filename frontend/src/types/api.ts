@@ -335,9 +335,36 @@ export interface NotaTrabajoResponse {
   creadoEn: string
 }
 
+// Lo que ve el técnico de un trabajo suyo (TrabajoTecnicoResponse en el backend): a propósito SIN
+// el teléfono ni el email del cliente — el contacto con el cliente lo maneja el jefe.
+export interface TrabajoTecnico {
+  idVenta: number
+  estado: EstadoVenta
+  estadoTrabajo: EstadoTrabajo | null
+  clienteNombre: string | null
+  direccionTrabajo: string | null
+  descripcionTrabajo: string | null
+  observacionesTecnico: string | null
+  fechaProgramada: string | null
+  horaDesde: string | null
+  horaHasta: string | null
+  totalVenta: number
+  detalles: { descripcion: string | null; cantidad: number; precioUnitario: number; subtotal: number }[]
+}
+
+// Foto de un trabajo a domicilio (sin la imagen: se pide aparte por su id).
+export interface FotoTrabajoResponse {
+  idFoto: number
+  idEmpleado: number
+  nombreEmpleado: string
+  creadaEn: string
+}
+
 export interface MiTrabajoResponse {
-  trabajo: VentaResponse
+  trabajo: TrabajoTecnico
   notas: NotaTrabajoResponse[]
+  // Vacío en la lista: solo viene completo en el detalle.
+  fotos: FotoTrabajoResponse[]
 }
 
 // EN_CAMINO | EN_CURSO | TERMINADO: los únicos que el técnico puede fijar él mismo.

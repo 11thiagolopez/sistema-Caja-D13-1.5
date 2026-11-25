@@ -6,9 +6,11 @@ import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,9 +19,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
+import com.thiago.escenasFX.dto.FotoTrabajoResponse;
 import com.thiago.escenasFX.dto.NotaTrabajoResponse;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
 import com.thiago.escenasFX.dto.VentaRequest;
@@ -35,6 +39,7 @@ import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.repository.NotaTrabajoRepository;
 import com.thiago.escenasFX.repository.ProductoRepository;
 import com.thiago.escenasFX.repository.VentaRepository;
+import com.thiago.escenasFX.service.FotoTrabajoService;
 import com.thiago.escenasFX.service.PushService;
 import com.thiago.escenasFX.service.VentaService;
 import com.thiago.escenasFX.service.ZonaNegocio;
@@ -53,10 +58,13 @@ public class VentaController {
     private final PushService pushService;
     private final VentaConFacturacion ventaConFacturacion;
     private final NotaTrabajoRepository notaTrabajoRepo;
+    private final FotoTrabajoService fotoTrabajoService;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
             EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
-            PushService pushService, VentaConFacturacion ventaConFacturacion, NotaTrabajoRepository notaTrabajoRepo) {
+            PushService pushService, VentaConFacturacion ventaConFacturacion, NotaTrabajoRepository notaTrabajoRepo,
+            FotoTrabajoService fotoTrabajoService) {
+        this.fotoTrabajoService = fotoTrabajoService;
         this.pushService = pushService;
         this.ventaConFacturacion = ventaConFacturacion;
         this.ventaService = ventaService;
@@ -178,6 +186,33 @@ public class VentaController {
     @GetMapping("/trabajo-domicilio/{id}/notas")
     public List<NotaTrabajoResponse> notasDelTrabajo(@PathVariable Integer id) {
         return notaTrabajoRepo.findByVentaIdVentaOrderByCreadoEnAsc(id).stream().map(this::toResponse).toList();
+    }
+
+    // Fotos del trabajo (ADMIN, por el matcher de trabajo-domicilio). Las mismas que ve el técnico.
+    @GetMapping("/trabajo-domicilio/{id}/fotos")
+    public List<FotoTrabajoResponse> fotosDelTrabajo(@PathVariable Integer id) {
+        return fotoTrabajoService.listar(id);
+    }
+
+    @PostMapping("/trabajo-domicilio/{id}/fotos")
+    public ResponseEntity<List<FotoTrabajoResponse>> subirFotos(@PathVariable Integer id,
+            @RequestParam("fotos") List<MultipartFile> fotos, Authentication authentication) {
+        Venta venta = ventaService.obtenerTrabajo(id);
+        Empleado admin = RolAutenticado.empleado(authentication, empleadoRepo);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(fotoTrabajoService.subir(venta, admin, FotosHttp.leer(fotos), true));
+    }
+
+    @GetMapping("/trabajo-domicilio/{id}/fotos/{idFoto}")
+    public ResponseEntity<byte[]> verFoto(@PathVariable Integer id, @PathVariable Integer idFoto) {
+        return FotosHttp.responder(fotoTrabajoService.obtener(id, idFoto));
+    }
+
+    @DeleteMapping("/trabajo-domicilio/{id}/fotos/{idFoto}")
+    public ResponseEntity<Void> borrarFoto(@PathVariable Integer id, @PathVariable Integer idFoto,
+            Authentication authentication) {
+        fotoTrabajoService.borrar(id, idFoto, RolAutenticado.empleado(authentication, empleadoRepo), true);
+        return ResponseEntity.noContent().build();
     }
 
     private NotaTrabajoResponse toResponse(NotaTrabajo nota) {

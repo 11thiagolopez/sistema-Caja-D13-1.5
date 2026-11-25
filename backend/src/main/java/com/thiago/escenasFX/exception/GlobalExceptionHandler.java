@@ -80,6 +80,20 @@ public class GlobalExceptionHandler {
             .body(new ErrorResponse("Parámetro inválido: " + ex.getName()));
     }
 
+    // Fotos de trabajos: un archivo por encima de spring.servlet.multipart.max-file-size.
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleArchivoMuyGrande(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+            .body(new ErrorResponse("La foto es demasiado grande (máximo 3 MB cada una)"));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleFaltaArchivo(
+            org.springframework.web.multipart.support.MissingServletRequestPartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("No se recibió ninguna foto"));
+    }
+
     // Red de contención para cualquier excepción no mapeada arriba (NPE, error de driver JDBC,
     // etc.): antes caía en la página de error default de Spring Boot, con una forma distinta al
     // ErrorResponse que el frontend espera en todos los demás casos, y sin loguear nada. No se

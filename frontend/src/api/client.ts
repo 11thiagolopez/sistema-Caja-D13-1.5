@@ -73,3 +73,25 @@ export async function requestBlob(path: string): Promise<Blob> {
 
   return response.blob()
 }
+
+// Para subir archivos (fotos): el navegador arma el Content-Type multipart con su boundary, así que
+// acá no se fija ninguno (a diferencia de request<T>, que siempre manda JSON).
+export async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const headers = new Headers()
+  if (authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: form, headers })
+
+  if (!response.ok) {
+    manejarRespuestaNoOk(response)
+    const body = (await response.json().catch(() => null)) as ApiError | null
+    throw new ApiRequestError(
+      response.status,
+      body?.message ?? (response.status === 413 ? 'Las fotos son demasiado grandes' : response.statusText),
+    )
+  }
+
+  return (await response.json()) as T
+}

@@ -21,6 +21,11 @@ public final class ZonaNegocio {
         return LocalDate.now(ZONA);
     }
 
+    /** Fecha y hora de Argentina, comparable con fechaProgramada + horaDesde de un trabajo. */
+    public static LocalDateTime ahora() {
+        return LocalDateTime.now(ZONA);
+    }
+
     public static LocalDate diaDe(LocalDateTime guardada) {
         return guardada.atZone(ZoneId.systemDefault()).withZoneSameInstant(ZONA).toLocalDate();
     }

@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Arma el XHTML de la orden de trabajo a domicilio para la Xprinter térmica de 58mm (Etapa 1,
  * Parte 5 — ver plan-migracion.md sección 34). Es lo que el técnico se lleva impreso antes de
- * salir: cuándo, adónde, a quién llamar, qué hay que hacer y las observaciones del jefe, con
+ * salir: cuándo, adónde, qué hay que hacer y las observaciones del jefe, con
  * renglones para la firma de conformidad del cliente al terminar.
  *
  * <p>Reusa la hoja de estilos de {@link TicketHtmlBuilder} (misma medida de papel fija de
@@ -45,7 +45,8 @@ final class OrdenTrabajoHtmlBuilder {
 
         StringBuilder cliente = new StringBuilder();
         cliente.append(dato("Cliente", venta.getClienteNombre()));
-        cliente.append(dato("Tel", venta.getClienteTelefono()));
+        // Sin el teléfono del cliente a propósito: el contacto con el cliente lo maneja el jefe, no
+        // el técnico (decisión del dueño) — mismo criterio que TrabajoTecnicoResponse.
         cliente.append(dato("Dirección", venta.getDireccionTrabajo()));
 
         StringBuilder trabajo = new StringBuilder();
