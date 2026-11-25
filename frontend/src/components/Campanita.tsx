@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getNotificaciones, getNotificacionesNoLeidas, marcarNotificacionLeida } from '../api/notificaciones'
 import { formatoFechaHora } from '../utils/formato'
@@ -34,6 +34,8 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
   const [abierta, setAbierta] = useState(false)
   const [notificaciones, setNotificaciones] = useState<NotificacionResponse[]>([])
   const [cargando, setCargando] = useState(false)
+  const [top, setTop] = useState(64)
+  const botonRef = useRef<HTMLButtonElement>(null)
 
   const refrescarContador = useCallback(async () => {
     setCantidad((await getNotificacionesNoLeidas()).cantidad)
@@ -47,6 +49,8 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
   }, [refrescarContador])
 
   async function abrir() {
+    // El panel es fijo a la pantalla: se abre justo debajo del botón, esté donde esté la barra.
+    setTop((botonRef.current?.getBoundingClientRect().bottom ?? 56) + 8)
     setAbierta(true)
     setCargando(true)
     try {
@@ -69,14 +73,14 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
 
   return (
     <div className="campanita">
-      <button type="button" className="campanita-boton" onClick={abrir} aria-label={`${textos(rol).boton}: ${cantidad} sin leer`}>
+      <button ref={botonRef} type="button" className="campanita-boton" onClick={abrir} aria-label={`${textos(rol).boton}: ${cantidad} sin leer`}>
         {textos(rol).boton}
         {cantidad > 0 && <span className="sidebar-contador">{cantidad}</span>}
       </button>
       {abierta && (
         <>
           <button type="button" className="campanita-fondo" aria-label="Cerrar avisos" onClick={() => setAbierta(false)} />
-          <div className="campanita-panel">
+          <div className="campanita-panel" style={{ '--campanita-top': `${top}px` } as CSSProperties}>
             <header className="campanita-panel-titulo">
               <strong>{textos(rol).boton}</strong>
               <button type="button" className="modal-cerrar" aria-label="Cerrar" onClick={() => setAbierta(false)}>

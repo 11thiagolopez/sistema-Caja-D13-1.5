@@ -245,7 +245,16 @@ export type TipoLinea = 'ARTICULO' | 'COPIA' | 'SERVICIO'
 // MOSTRADOR = venta de catálogo (Cobros) | DOMICILIO = trabajo a domicilio.
 export type TipoVenta = 'MOSTRADOR' | 'DOMICILIO'
 
-export type EstadoTrabajo = 'AGENDADO' | 'EN_CAMINO' | 'EN_CURSO' | 'TERMINADO' | 'CERRADO_Y_COBRADO' | 'CANCELADO'
+// TERMINADO_TECNICO: el técnico avisó que terminó (solo información). TERMINADO: lo confirmó el jefe y el
+// trabajo queda bloqueado hasta cobrarlo o reabrirlo.
+export type EstadoTrabajo =
+  | 'AGENDADO'
+  | 'EN_CAMINO'
+  | 'EN_CURSO'
+  | 'TERMINADO_TECNICO'
+  | 'TERMINADO'
+  | 'CERRADO_Y_COBRADO'
+  | 'CANCELADO'
 
 // O trae idProducto (línea de catálogo, descuenta stock) o trae descripcion (mano de obra u otro
 // ítem manual, no toca stock) — viene uno de los dos.
@@ -368,7 +377,7 @@ export interface MiTrabajoResponse {
 }
 
 // EN_CAMINO | EN_CURSO | TERMINADO: los únicos que el técnico puede fijar él mismo.
-export type EstadoTrabajoTecnico = 'EN_CAMINO' | 'EN_CURSO' | 'TERMINADO'
+export type EstadoTrabajoTecnico = 'EN_CAMINO' | 'EN_CURSO' | 'TERMINADO_TECNICO'
 
 export type TipoNotificacion =
   | 'TRABAJO_NUEVO'

@@ -31,4 +31,15 @@ public class HistorialEstadoTrabajoService {
         historial.setDetalle(detalle);
         historialEstadoRepo.save(historial);
     }
+
+    /** El estado que tenía el trabajo justo antes de la última vez que pasó a {@code estado}; null si nunca pasó. */
+    public String estadoAntesDe(Integer idVenta, String estado) {
+        String anterior = null;
+        for (HistorialEstadoTrabajo h : historialEstadoRepo.findByVentaIdVentaOrderByCreadoEnAsc(idVenta)) {
+            if (estado.equals(h.getEstadoNuevo())) {
+                anterior = h.getEstadoAnterior();
+            }
+        }
+        return anterior;
+    }
 }

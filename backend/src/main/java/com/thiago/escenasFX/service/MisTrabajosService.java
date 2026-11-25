@@ -22,15 +22,16 @@ import com.thiago.escenasFX.repository.VentaRepository;
 @Service
 public class MisTrabajosService {
 
-    // AGENDADO lo fija el jefe al crear el ticket; CERRADO_Y_COBRADO y CANCELADO, "Cerrar y
-    // cobrar" y "Eliminar trabajo" — ninguno de los tres lo puede fijar el técnico.
-    static final Set<String> ESTADOS_PERMITIDOS_TECNICO = Set.of("EN_CAMINO", "EN_CURSO", "TERMINADO");
-    private static final Set<String> ESTADOS_CERRADOS = Set.of("CERRADO_Y_COBRADO", "CANCELADO");
+    // AGENDADO lo fija el jefe al crear el ticket; TERMINADO (que bloquea el trabajo),
+    // CERRADO_Y_COBRADO y CANCELADO también son del jefe. El "Terminado" del técnico es
+    // TERMINADO_TECNICO: solo un aviso para el jefe, que después confirma con su propio Terminado.
+    static final Set<String> ESTADOS_PERMITIDOS_TECNICO =
+        Set.of("EN_CAMINO", "EN_CURSO", VentaService.ESTADO_TERMINADO_TECNICO);
 
     private static final Map<String, String> TIPO_AVISO_ADMIN = Map.of(
         "EN_CAMINO", "EN_CAMINO",
         "EN_CURSO", "LLEGO",
-        "TERMINADO", "TERMINADO");
+        VentaService.ESTADO_TERMINADO_TECNICO, "TERMINADO");
 
     private final VentaRepository ventaRepo;
     private final NotaTrabajoRepository notaTrabajoRepo;
@@ -77,7 +78,8 @@ public class MisTrabajosService {
 
         String tipoAviso = TIPO_AVISO_ADMIN.get(nuevoEstado);
         String texto = tipoAviso.equals("TERMINADO")
-            ? "Trabajo #" + guardada.getIdVenta() + " terminado, listo para cobrar"
+            ? tecnico.getNombre() + " avisó que terminó el trabajo #" + guardada.getIdVenta() + " ("
+                + descripcionParaAviso(guardada) + "): revisalo y marcalo Terminado para cobrarlo"
             : tecnico.getNombre() + (tipoAviso.equals("LLEGO") ? " llegó a " : " está en camino a ")
                 + descripcionParaAviso(guardada);
         notificacionTrabajoService.avisarATodosLosAdmin(tipoAviso, texto, guardada);
@@ -138,8 +140,10 @@ public class MisTrabajosService {
         }
     }
 
+    // Terminado por el jefe, cobrado o cancelado: el técnico ya no cambia el estado ni agrega notas o
+    // fotos (decisión del dueño: "queda todo bloqueado").
     private void exigirNoCerrado(Venta venta) {
-        if ("ANULADA".equals(venta.getEstado()) || ESTADOS_CERRADOS.contains(venta.getEstadoTrabajo())) {
+        if (VentaService.estaBloqueado(venta)) {
             throw new IllegalStateException(
                 "El trabajo #" + venta.getIdVenta() + " ya está cerrado: no se puede actualizar");
         }

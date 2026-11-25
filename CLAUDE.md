@@ -9,7 +9,28 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-25, tarde — ficha del técnico, fotos y recordatorio de 1h):
+Estado Actual (Actualizado al 2026-11-25, noche — revisión contra el documento del dueño + "Terminado" que bloquea):
+
+**Sección 37 de `plan-migracion.md`** (leerla antes de seguir): decisiones del dueño tras comparar
+con el documento y el prompt original — caja de trabajos aparte, **sin cobro en el domicilio**
+(cobra siempre el jefe), stock como está, materiales los carga el jefe, fotos en la base,
+Reprogramado no es estado. **"Terminado" del técnico = `TERMINADO_TECNICO`, solo aviso; `TERMINADO`
+lo pone solo el jefe y bloquea todo** (datos, ítems, precios, notas, fotos, eliminar) — quedan
+`POST .../{id}/cobrar` y `POST .../{id}/reabrir`. Sin SQL. **Próximo, de a una parte:** notas del
+jefe, aviso de superposición, fotos Antes/Después; después Etapa 3 partes 3.1 a 3.4.
+
+Estado Anterior (Actualizado al 2026-11-25, noche — ETAPA 2 COMPLETA):
+
+**Sección 36 de `plan-migracion.md`**: panel de avisos arreglado (tapaba la pantalla en blanco en
+escritorio por la regla `.topbar-usuario button`; en celular se cortaba porque estaba anclado al
+botón — ahora `position: fixed` al borde derecho); precio editable por renglón en trabajos a
+domicilio ("materiales" = artículos; el costo sale siempre del producto, no se toca); **agenda
+semanal** (`AgendaSemanal.tsx`, selector Semana/Mes, filtro por técnico). Todo probado en Chrome
+contra el perfil `demo`, a 1280px y 390px. Sin cambios de backend ni de SQL. Próximo: Etapa 3 del
+documento del dueño (cobro en el domicilio, comisiones automáticas, reportes) — el documento
+original no está en el repo, pedírselo al dueño o confirmar el alcance antes de arrancar.
+
+Estado Anterior (Actualizado al 2026-11-25, tarde — ficha del técnico, fotos y recordatorio de 1h):
 
 **SQL ya corrido contra producción** (vía MCP de Supabase, con permiso del dueño): tabla
 `fotos_trabajo` + columna `ventas.recordatorio_enviado` — detalle en `plan-migracion.md` sección 35.

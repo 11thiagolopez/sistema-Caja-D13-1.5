@@ -5,14 +5,17 @@ import { getProductos } from '../api/productos'
 import { getEmpleados } from '../api/empleados'
 import {
   anularTrabajoDomicilio,
+  cobrarTrabajoTerminado,
   descargarOrdenTrabajo,
   descargarVentaPdf,
   getNotasTrabajoDomicilio,
   getVenta,
   guardarTrabajoDomicilio,
+  reabrirTrabajo,
 } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
+import { AgendaSemanal } from '../components/AgendaSemanal'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
 import { FotosTrabajo } from '../components/FotosTrabajo'
 import { getFotosTrabajo } from '../api/fotosTrabajo'
@@ -43,12 +46,25 @@ const ESTADOS: { valor: EstadoTrabajo; etiqueta: string }[] = [
   { valor: 'AGENDADO', etiqueta: 'Agendado' },
   { valor: 'EN_CAMINO', etiqueta: 'En camino' },
   { valor: 'EN_CURSO', etiqueta: 'En curso' },
-  { valor: 'TERMINADO', etiqueta: 'Terminado' },
+  { valor: 'TERMINADO_TECNICO', etiqueta: 'El técnico avisó que terminó' },
+  // Bloquea el trabajo: después solo se cobra o se reabre.
+  { valor: 'TERMINADO', etiqueta: 'Terminado (bloquea el trabajo)' },
 ]
 
 // Para saber si hay cambios sin guardar antes de volver a la lista.
 function firmaDe(campos: string[], items: Pick<ItemCarrito, 'descripcionProducto' | 'cantidad' | 'precioUnitario'>[]): string {
   return JSON.stringify([campos, items.map((i) => [i.descripcionProducto, i.cantidad, i.precioUnitario])])
+}
+
+// Semana o mes: se recuerda en este navegador (es solo una preferencia de vista).
+const CLAVE_VISTA_AGENDA = 'd13.vistaAgendaTrabajos'
+
+function leerVistaAgenda(): 'semana' | 'mes' {
+  try {
+    return localStorage.getItem(CLAVE_VISTA_AGENDA) === 'mes' ? 'mes' : 'semana'
+  } catch {
+    return 'semana'
+  }
 }
 
 export function TrabajoDomicilio() {
@@ -60,6 +76,7 @@ export function TrabajoDomicilio() {
 
   const [vista, setVista] = useState<'lista' | 'trabajo'>('lista')
   const [fechaBuscar, setFechaBuscar] = useState(hoyIso())
+  const [vistaAgenda, setVistaAgenda] = useState<'semana' | 'mes'>(leerVistaAgenda)
   const [idVenta, setIdVenta] = useState<number | null>(null)
   const [estadoVenta, setEstadoVenta] = useState<EstadoVenta | null>(null)
   const [estadoTrabajoGuardado, setEstadoTrabajoGuardado] = useState<EstadoTrabajo | null>(null)
@@ -93,7 +110,7 @@ export function TrabajoDomicilio() {
     raiz.current?.scrollIntoView()
   }, [vista])
 
-  const { carrito, reemplazar: reemplazarCarrito, agregarOFusionar, quitar: quitarDelCarrito, vaciar: vaciarCarrito, total } =
+  const { carrito, reemplazar: reemplazarCarrito, agregarOFusionar, quitar: quitarDelCarrito, cambiarPrecio, vaciar: vaciarCarrito, total } =
     useCarrito<ItemCarrito>()
   const [manualDescripcion, setManualDescripcion] = useState('')
   const [manualPrecio, setManualPrecio] = useState('')
@@ -228,6 +245,47 @@ export function TrabajoDomicilio() {
 
   // La orden sale con lo último guardado en el backend, así que con cambios pendientes se frena
   // para no imprimir una orden distinta de lo que se ve en pantalla.
+  async function cobrarTerminado() {
+    if (idVenta == null || !medioPago) return
+    setError(null)
+    setMensaje(null)
+    setGuardando(true)
+    try {
+      const venta = await cobrarTrabajoTerminado(idVenta, medioPago)
+      precargarDesdeVenta(venta)
+      setMensaje(`Trabajo #${venta.idVenta} cerrado y cobrado.`)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo cobrar el trabajo')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function reabrir() {
+    if (idVenta == null) return
+    setError(null)
+    setMensaje(null)
+    setGuardando(true)
+    try {
+      const venta = await reabrirTrabajo(idVenta)
+      precargarDesdeVenta(venta)
+      setMensaje(`Trabajo #${venta.idVenta} reabierto: ya se puede modificar de nuevo.`)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo reabrir el trabajo')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  function elegirVistaAgenda(vista: 'semana' | 'mes') {
+    setVistaAgenda(vista)
+    try {
+      localStorage.setItem(CLAVE_VISTA_AGENDA, vista)
+    } catch {
+      // Sin localStorage la vista cambia igual, solo no se recuerda al volver.
+    }
+  }
+
   async function imprimirOrden() {
     if (idVenta == null) return
     setError(null)
@@ -339,7 +397,9 @@ export function TrabajoDomicilio() {
   const gananciaNeta = gananciaArticulos + manoDeObraTotal - comision
 
   // Ya cobrado no se edita: guardarlo de nuevo lo sacaría de la caja en la que se cobró.
-  const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA'
+  // Terminado por el jefe y sin cobrar: bloqueado, solo queda "Cerrar y cobrar" o "Reabrir".
+  const terminado = estadoVenta === 'EN_PROGRESO' && estadoTrabajoGuardado === 'TERMINADO'
+  const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA' || terminado
   const hayCambios =
     firmaDe(
       [
@@ -369,7 +429,22 @@ export function TrabajoDomicilio() {
       setError('La fecha del trabajo es obligatoria')
       return
     }
+    const sinPrecio = carrito.find((item) => !(item.precioUnitario > 0))
+    if (sinPrecio) {
+      setError(`Poné un precio mayor a cero para "${sinPrecio.descripcionProducto}"`)
+      return
+    }
     if (!medioPago) return
+    if (
+      !cerrar &&
+      estadoTrabajo === 'TERMINADO' &&
+      estadoTrabajoGuardado !== 'TERMINADO' &&
+      !window.confirm(
+        'Al marcarlo Terminado el trabajo queda bloqueado: no se pueden cambiar datos, artículos ni precios, y el técnico ya no puede actualizarlo. Después solo se puede cobrar o reabrir. ¿Seguir?',
+      )
+    ) {
+      return
+    }
     setError(null)
     setMensaje(null)
     setGuardando(true)
@@ -422,7 +497,20 @@ export function TrabajoDomicilio() {
 
         {mensaje && <p className="resultado">{mensaje}</p>}
 
-        <CalendarioTrabajos fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        <div className="vista-agenda" role="group" aria-label="Vista de la agenda">
+          <button type="button" aria-pressed={vistaAgenda === 'semana'} onClick={() => elegirVistaAgenda('semana')}>
+            Semana
+          </button>
+          <button type="button" aria-pressed={vistaAgenda === 'mes'} onClick={() => elegirVistaAgenda('mes')}>
+            Mes
+          </button>
+        </div>
+
+        {vistaAgenda === 'semana' ? (
+          <AgendaSemanal fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        ) : (
+          <CalendarioTrabajos fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
+        )}
 
         <section>
           <h3>Buscar por número</h3>
@@ -470,6 +558,33 @@ export function TrabajoDomicilio() {
         </p>
       )}
 
+      {terminado && (
+        <section className="trabajo-terminado">
+          <p>
+            <strong>Trabajo terminado.</strong> Ya no se pueden cambiar datos, artículos, precios, notas ni fotos. Cobralo
+            con los ítems tal cual están, o reabrilo si hay que corregir algo.
+          </p>
+          <div className="comprobante-acciones">
+            <label>
+              Medio de pago
+              <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+                {!medioPago && <option value="">Elegí el medio de pago</option>}
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="TARJETA">Tarjeta</option>
+              </select>
+            </label>
+            <button type="button" onClick={cobrarTerminado} disabled={guardando || !medioPago}>
+              {guardando && <span className="spinner" />}
+              Cerrar y cobrar
+            </button>
+            <button type="button" className="boton-secundario" onClick={reabrir} disabled={guardando}>
+              Reabrir
+            </button>
+          </div>
+        </section>
+      )}
+
       {estadoVenta === 'CONFIRMADA' && (
         <section>
           <p>Este trabajo ya se cobró, por eso no se puede editar.</p>
@@ -510,7 +625,7 @@ export function TrabajoDomicilio() {
               fotos={fotos}
               onCambio={setFotos}
               idEmpleadoActual={sesion?.idEmpleado}
-              puedeSubir
+              puedeSubir={!soloLectura}
               ayuda="Subí las fotos que te mande el cliente para que el técnico sepa con qué se va a encontrar. Acá también ves las que suba él."
             />
           )}
@@ -653,7 +768,30 @@ export function TrabajoDomicilio() {
               <td>{item.descripcionProducto}</td>
               <td>{item.tipo === 'SERVICIO' ? 'Mano de obra' : 'Artículo'}</td>
               <td>{item.cantidad}</td>
-              <td>{item.precioUnitario.toFixed(2)}</td>
+              <td>
+                {soloLectura ? (
+                  item.precioUnitario.toFixed(2)
+                ) : (
+                  // Editable: un artículo puede cobrarse en el domicilio distinto que en mostrador.
+                  // Solo cambia lo que se cobra; el costo (y por lo tanto la ganancia real) sale
+                  // siempre del producto.
+                  <input
+                    className="precio-editable"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    aria-label={`Precio de ${item.descripcionProducto}`}
+                    value={Number.isNaN(item.precioUnitario) ? '' : item.precioUnitario}
+                    onChange={(e) => cambiarPrecio(index, e.target.value === '' ? Number.NaN : Number(e.target.value))}
+                  />
+                )}
+                {(() => {
+                  const precioMostrador = productos.find((p) => p.idProducto === item.idProducto)?.precioVenta
+                  return item.idProducto != null && precioMostrador != null && precioMostrador !== item.precioUnitario ? (
+                    <small className="precio-mostrador">Mostrador: {precioMostrador.toFixed(2)}</small>
+                  ) : null
+                })()}
+              </td>
               <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
               {!soloLectura && (
                 <td>
@@ -709,7 +847,7 @@ export function TrabajoDomicilio() {
         </div>
       )}
 
-      {idVenta && estadoVenta !== 'ANULADA' && (
+      {idVenta && estadoVenta !== 'ANULADA' && !terminado && (
         <div className="comprobante-acciones">
           <button type="button" className="boton-rechazar" onClick={eliminar} disabled={anulando || guardando}>
             {anulando && <span className="spinner" />}

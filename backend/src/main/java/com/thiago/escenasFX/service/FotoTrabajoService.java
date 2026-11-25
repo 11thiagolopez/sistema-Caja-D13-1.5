@@ -50,8 +50,9 @@ public class FotoTrabajoService {
         if (imagenes.isEmpty()) {
             throw new IllegalArgumentException("No se recibió ninguna foto");
         }
-        if ("ANULADA".equals(venta.getEstado())) {
-            throw new IllegalStateException("El trabajo #" + venta.getIdVenta() + " está eliminado: no se le pueden subir fotos");
+        if (VentaService.estaBloqueado(venta)) {
+            throw new IllegalStateException("El trabajo #" + venta.getIdVenta()
+                + " está terminado, cobrado o eliminado: no se le pueden agregar fotos");
         }
         long yaTiene = fotoRepo.countByVenta_IdVenta(venta.getIdVenta());
         if (yaTiene + imagenes.size() > MAX_FOTOS_POR_TRABAJO) {
@@ -100,6 +101,9 @@ public class FotoTrabajoService {
     @Transactional
     public void borrar(Integer idVenta, Integer idFoto, Empleado quien, boolean esAdmin) {
         FotoTrabajo foto = obtener(idVenta, idFoto);
+        if (VentaService.estaBloqueado(foto.getVenta())) {
+            throw new IllegalStateException("El trabajo #" + idVenta + " está terminado, cobrado o eliminado: no se le pueden borrar fotos");
+        }
         if (!esAdmin && !foto.getEmpleado().getIdEmpleado().equals(quien.getIdEmpleado())) {
             throw new AccessDeniedException("Solo podés borrar las fotos que subiste vos");
         }

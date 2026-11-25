@@ -42,7 +42,13 @@ public class VentaService {
     private static final Set<String> MEDIOS_DE_COBRO = Set.of("EFECTIVO", "TRANSFERENCIA", "TARJETA");
     // "CERRADO_Y_COBRADO" lo fija guardarTrabajoDomicilio solo con cerrar=true, y "CANCELADO" solo
     // anularTrabajoDomicilio: ninguno de los dos se acepta en el estadoTrabajo libre del request.
-    private static final Set<String> ESTADOS_DE_BORRADOR = Set.of("AGENDADO", "EN_CAMINO", "EN_CURSO", "TERMINADO");
+    // TERMINADO lo fija solo el jefe y BLOQUEA el trabajo (no se edita más; queda "Cerrar y cobrar" o
+    // "Reabrir"). TERMINADO_TECNICO es el aviso del técnico ("terminé"): solo información para el jefe,
+    // no bloquea nada. Decisión del dueño, plan-migracion.md sección 37.
+    static final String ESTADO_TERMINADO = "TERMINADO";
+    static final String ESTADO_TERMINADO_TECNICO = "TERMINADO_TECNICO";
+    private static final Set<String> ESTADOS_DE_BORRADOR =
+        Set.of("AGENDADO", "EN_CAMINO", "EN_CURSO", ESTADO_TERMINADO_TECNICO, ESTADO_TERMINADO);
     static final String ESTADO_CERRADO_Y_COBRADO = "CERRADO_Y_COBRADO";
     static final String ESTADO_CANCELADO = "CANCELADO";
 
@@ -682,6 +688,7 @@ public class VentaService {
         if ("ANULADA".equals(venta.getEstado())) {
             throw new IllegalStateException("El trabajo #" + idVenta + " ya está eliminado");
         }
+        exigirNoTerminado(venta);
         boolean tieneFactura = facturaRepo.findByVentaIdVenta(idVenta)
             .filter(factura -> !"ERROR".equals(factura.getEstado()))
             .isPresent();
@@ -719,6 +726,68 @@ public class VentaService {
         if (!"EN_PROGRESO".equals(venta.getEstado())) {
             throw new IllegalStateException("El trabajo #" + idVenta + " ya está cobrado o anulado: no se puede modificar");
         }
+        exigirNoTerminado(venta);
         return venta;
+    }
+
+    private static void exigirNoTerminado(Venta venta) {
+        if (ESTADO_TERMINADO.equals(venta.getEstadoTrabajo())) {
+            throw new IllegalStateException("El trabajo #" + venta.getIdVenta()
+                + " está terminado: no se puede modificar. Cerralo y cobralo, o reabrilo si hay que corregir algo");
+        }
+    }
+
+    /** Terminado por el jefe, cobrado o eliminado: nadie lo modifica (ni datos, ni notas, ni fotos). */
+    public static boolean estaBloqueado(Venta venta) {
+        return !"EN_PROGRESO".equals(venta.getEstado()) || ESTADO_TERMINADO.equals(venta.getEstadoTrabajo());
+    }
+
+    /**
+     * "Cerrar y cobrar" de un trabajo que el jefe ya marcó Terminado: con los ítems tal cual
+     * quedaron (no se pueden tocar), solo elige el medio de pago. Va a la caja aparte de trabajos,
+     * igual que el cierre de siempre (sin sesión de caja de mostrador).
+     */
+    @Transactional
+    public Venta cobrarTrabajoTerminado(Integer idVenta, String medioPago, Empleado admin) {
+        Venta venta = obtenerTrabajoConLock(idVenta);
+        if (!"EN_PROGRESO".equals(venta.getEstado()) || !ESTADO_TERMINADO.equals(venta.getEstadoTrabajo())) {
+            throw new IllegalStateException("Solo se cobra así un trabajo terminado y todavía sin cobrar");
+        }
+        if (medioPago == null || !MEDIOS_DE_COBRO.contains(medioPago)) {
+            throw new IllegalArgumentException("Medio de pago inválido: " + medioPago);
+        }
+        if (venta.getDetalles().isEmpty() || venta.getTotalVenta().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Un trabajo no se puede cerrar y cobrar sin al menos un ítem");
+        }
+        venta.setMedioPago(medioPago);
+        venta.setFecha(LocalDateTime.now());
+        venta.setComisionTecnico(venta.getEmpleadoTecnico() != null ? venta.getEmpleadoTecnico().getComision() : null);
+        venta.setEstadoTrabajo(ESTADO_CERRADO_Y_COBRADO);
+        venta.setEstado("CONFIRMADA");
+        Venta cobrada = ventaRepo.save(venta);
+        historialEstadoService.registrar(cobrada, ESTADO_TERMINADO, ESTADO_CERRADO_Y_COBRADO, admin, null);
+        return cobrada;
+    }
+
+    /**
+     * Deshace un "Terminado" puesto por error: vuelve al estado que tenía antes (según el
+     * historial; si el técnico ya había avisado que terminó, queda en ese aviso) y avisa al técnico
+     * que el trabajo volvió a estar abierto.
+     */
+    @Transactional
+    public Venta reabrirTrabajo(Integer idVenta, Empleado admin) {
+        Venta venta = obtenerTrabajoConLock(idVenta);
+        if (!"EN_PROGRESO".equals(venta.getEstado()) || !ESTADO_TERMINADO.equals(venta.getEstadoTrabajo())) {
+            throw new IllegalStateException("Solo se puede reabrir un trabajo terminado y todavía sin cobrar");
+        }
+        String estadoPrevio = historialEstadoService.estadoAntesDe(idVenta, ESTADO_TERMINADO);
+        venta.setEstadoTrabajo(estadoPrevio != null && !ESTADO_TERMINADO.equals(estadoPrevio) ? estadoPrevio : "AGENDADO");
+        Venta reabierta = ventaRepo.save(venta);
+        historialEstadoService.registrar(reabierta, ESTADO_TERMINADO, reabierta.getEstadoTrabajo(), admin, "Reabierto");
+        if (reabierta.getEmpleadoTecnico() != null) {
+            notificacionTrabajoService.avisarATecnico(reabierta.getEmpleadoTecnico(), "REABIERTO",
+                "Se reabrió el trabajo #" + reabierta.getIdVenta() + " (" + descripcionParaAviso(reabierta) + ")", reabierta);
+        }
+        return reabierta;
     }
 }

@@ -11,13 +11,14 @@ import { useAuth } from '../auth/AuthContext'
 import { FotosTrabajo } from '../components/FotosTrabajo'
 import { hoyIso } from '../utils/date'
 import { formatoDiaLargo, formatoFechaHora, formatoPesos } from '../utils/formato'
-import { estadoVisibleTrabajo } from '../utils/estadoTrabajo'
+import { estadoVisibleTrabajo, trabajoBloqueado } from '../utils/estadoTrabajo'
 import type { EstadoTrabajoTecnico, MiTrabajoResponse } from '../types/api'
 
 const BOTONES_ESTADO: { valor: EstadoTrabajoTecnico; etiqueta: string }[] = [
   { valor: 'EN_CAMINO', etiqueta: 'En camino' },
   { valor: 'EN_CURSO', etiqueta: 'Llegué' },
-  { valor: 'TERMINADO', etiqueta: 'Terminado' },
+  // Es un aviso para el jefe (TERMINADO_TECNICO): el trabajo se cierra cuando él lo confirma.
+  { valor: 'TERMINADO_TECNICO', etiqueta: 'Terminé' },
 ]
 
 function horario(trabajo: MiTrabajoResponse['trabajo']): string {
@@ -27,9 +28,9 @@ function horario(trabajo: MiTrabajoResponse['trabajo']): string {
   return hasta ? `${desde} a ${hasta}` : `desde las ${desde}`
 }
 
+// Terminado por el jefe, cobrado o cancelado: ya no se cambia el estado ni se agregan notas o fotos.
 function estaCerrado(trabajo: MiTrabajoResponse['trabajo']): boolean {
-  return trabajo.estado === 'ANULADA' || trabajo.estadoTrabajo === 'CERRADO_Y_COBRADO'
-    || trabajo.estadoTrabajo === 'CANCELADO'
+  return trabajoBloqueado(trabajo)
 }
 
 export function MisTrabajos() {
@@ -54,7 +55,7 @@ function Lista() {
   if (error) return <p className="error">{error}</p>
 
   const hoy = hoyIso()
-  const terminados = trabajos.filter((t) => estaCerrado(t.trabajo) || t.trabajo.estadoTrabajo === 'TERMINADO')
+  const terminados = trabajos.filter((t) => estaCerrado(t.trabajo) || t.trabajo.estadoTrabajo === 'TERMINADO_TECNICO')
   const activos = trabajos.filter((t) => !terminados.includes(t))
   const deHoy = activos.filter((t) => t.trabajo.fechaProgramada === hoy)
   const proximos = activos.filter((t) => t.trabajo.fechaProgramada !== hoy)
@@ -238,7 +239,9 @@ function Detalle({ id }: { id: number }) {
         <h3>Estado</h3>
         {cerrado ? (
           <p className="peticion-detalle">
-            Este trabajo ya está {v.estadoTrabajo === 'CANCELADO' ? 'cancelado' : 'cerrado'}: no se puede actualizar.
+            {v.estado === 'ANULADA'
+              ? 'Este trabajo se canceló.'
+              : 'El jefe ya cerró este trabajo: no se puede actualizar.'}
           </p>
         ) : (
           <div className="botones-grandes">

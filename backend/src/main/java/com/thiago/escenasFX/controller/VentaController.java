@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.thiago.escenasFX.dto.CobrarTrabajoRequest;
 import com.thiago.escenasFX.dto.DetalleVentaRequest;
 import com.thiago.escenasFX.dto.EnviarComprobanteRequest;
 import com.thiago.escenasFX.dto.FotoTrabajoResponse;
@@ -218,6 +219,21 @@ public class VentaController {
     private NotaTrabajoResponse toResponse(NotaTrabajo nota) {
         return new NotaTrabajoResponse(nota.getIdNota(), nota.getTexto(), nota.getEmpleado().getNombre(),
             nota.getCreadoEn());
+    }
+
+    // Un trabajo que el jefe marcó Terminado queda bloqueado: solo se cobra (con los ítems tal cual)
+    // o se reabre. Ver VentaService.cobrarTrabajoTerminado / reabrirTrabajo.
+    @PostMapping("/trabajo-domicilio/{id}/cobrar")
+    public VentaResponse cobrarTrabajoTerminado(@PathVariable Integer id,
+            @Valid @RequestBody CobrarTrabajoRequest request, Authentication authentication) {
+        return VentaMapper.toResponse(ventaService.cobrarTrabajoTerminado(id, request.medioPago(),
+            RolAutenticado.empleado(authentication, empleadoRepo)));
+    }
+
+    @PostMapping("/trabajo-domicilio/{id}/reabrir")
+    public VentaResponse reabrirTrabajo(@PathVariable Integer id, Authentication authentication) {
+        return VentaMapper.toResponse(
+            ventaService.reabrirTrabajo(id, RolAutenticado.empleado(authentication, empleadoRepo)));
     }
 
     @PostMapping("/trabajo-domicilio/{id}/anular")

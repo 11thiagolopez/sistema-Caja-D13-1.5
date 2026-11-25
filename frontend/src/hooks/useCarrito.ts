@@ -43,6 +43,12 @@ export function useCarrito<T extends ItemDeCarrito>() {
     setCarrito(items.map((item) => ({ ...item, clientId: siguienteId.current++ })))
   }
 
+  // Precio de una fila puntual (Trabajo a domicilio: un artículo puede cobrarse distinto que en
+  // mostrador). Solo cambia lo que se cobra: el costo sale siempre del producto en el backend.
+  function cambiarPrecio(index: number, precioUnitario: number) {
+    setCarrito((actual) => actual.map((item, i) => (i === index ? { ...item, precioUnitario } : item)))
+  }
+
   function quitar(index: number) {
     setCarrito((actual) => actual.filter((_, i) => i !== index))
   }
@@ -53,5 +59,5 @@ export function useCarrito<T extends ItemDeCarrito>() {
 
   const total = carrito.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0)
 
-  return { carrito, agregarOFusionar, reemplazar, quitar, vaciar, total }
+  return { carrito, agregarOFusionar, reemplazar, quitar, cambiarPrecio, vaciar, total }
 }
