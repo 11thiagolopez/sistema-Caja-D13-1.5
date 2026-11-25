@@ -55,3 +55,17 @@ export function textoSaldo(saldo: number): string {
 export function numeroComprobante(puntoVenta: number | null, numero: number | null): string {
   return `${String(puntoVenta ?? 0).padStart(4, '0')}-${String(numero ?? 0).padStart(8, '0')}`
 }
+
+/** 95 → "1 h 35 min", 45 → "45 min". */
+export function formatoDuracion(minutos: number): string {
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  if (horas === 0) return `${resto} min`
+  return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`
+}
+
+/** "2026-11" → "nov. 2026". */
+export function formatoMes(anioMes: string): string {
+  const [anio, mes] = anioMes.split('-').map(Number)
+  return new Date(Date.UTC(anio, mes - 1, 1)).toLocaleDateString('es-AR', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+}

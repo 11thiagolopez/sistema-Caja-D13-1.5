@@ -12,8 +12,10 @@ import { rangoDelMes, type Rango } from '../utils/date'
 import {
   formatoDiaCorto,
   formatoDiaLargo,
+  formatoDuracion,
   formatoEntero,
   formatoFechaHora,
+  formatoMes,
   formatoPesos,
   formatoPesosEje,
   formatoPorcentaje,
@@ -46,6 +48,19 @@ function Tarjetas({ datos, cargando }: { datos: ReporteTrabajosResponse | null; 
         <span>Ganancia del negocio</span>
         <strong>{pesos(datos?.gananciaNegocio)}</strong>
         <small>{datos ? `Restando ${formatoPesos(datos.costoArticulos)} de costo de artículos` : ' '}</small>
+      </div>
+      <div className="reportes-tarjeta">
+        <span>Tiempo promedio por trabajo</span>
+        <strong>
+          {datos?.tiempoPromedioMinutos != null ? formatoDuracion(datos.tiempoPromedioMinutos) : cargando ? '...' : '—'}
+        </strong>
+        <small>
+          {datos
+            ? datos.trabajosConTiempo > 0
+              ? `De "En camino" a "Terminé", sobre ${formatoEntero(datos.trabajosConTiempo)} trabajos`
+              : 'Sin trabajos con "En camino" y "Terminé" registrados'
+            : ' '}
+        </small>
       </div>
       <div className="reportes-tarjeta">
         <span>Mano de obra</span>
@@ -143,13 +158,14 @@ function PorTecnico({ datos, cargando, error }: { datos: ReporteTrabajosResponse
       error={error}
       sinDatos={filas.length === 0}
       tabla={{
-        columnas: ['Técnico', 'Trabajos', 'Mano de obra', 'Se llevó', 'Para el negocio'],
+        columnas: ['Técnico', 'Trabajos', 'Mano de obra', 'Se llevó', 'Para el negocio', 'Tiempo promedio'],
         filas: filas.map((fila) => [
           fila.nombre,
           formatoEntero(fila.cantidadTrabajos),
           formatoPesos(fila.manoDeObra),
           formatoPesos(fila.paraTecnico),
           formatoPesos(fila.paraNegocio),
+          fila.tiempoPromedioMinutos != null ? formatoDuracion(fila.tiempoPromedioMinutos) : '—',
         ]),
       }}
     >
@@ -161,6 +177,74 @@ function PorTecnico({ datos, cargando, error }: { datos: ReporteTrabajosResponse
         formatoValor={formatoPesos}
       />
     </TarjetaGrafico>
+  )
+}
+
+function PorMes({ datos, cargando, error }: { datos: ReporteTrabajosResponse | null; cargando: boolean; error: string | null }) {
+  const meses = useMemo(() => datos?.porMes ?? [], [datos])
+  const etiquetas = useMemo(() => meses.map((m) => formatoMes(m.mes)), [meses])
+  const valores = useMemo(() => meses.map((m) => m.total), [meses])
+
+  return (
+    <TarjetaGrafico
+      titulo="Trabajos por mes"
+      cargando={cargando}
+      error={error}
+      sinDatos={!meses.some((m) => m.cantidadTrabajos > 0)}
+      tabla={{
+        columnas: ['Mes', 'Trabajos', 'Cobrado', 'Se llevaron los técnicos'],
+        filas: meses.map((m) => [
+          formatoMes(m.mes),
+          formatoEntero(m.cantidadTrabajos),
+          formatoPesos(m.total),
+          formatoPesos(m.paraTecnicos),
+        ]),
+      }}
+    >
+      <GraficoBarras titulo="Cobrado por mes" etiquetas={etiquetas} valores={valores} formatoValor={formatoPesos} formatoEje={formatoPesosEje} />
+    </TarjetaGrafico>
+  )
+}
+
+/** Resumen para liquidar comisiones: un renglón por técnico y mes (por fecha de cobro). */
+function ComisionesPorMes({ datos }: { datos: ReporteTrabajosResponse | null }) {
+  if (!datos) return null
+  return (
+    <section>
+      <h3>Comisiones por mes</h3>
+      <p className="reportes-aclaracion">
+        Lo que le corresponde a cada técnico, por mes de cobro. Se calcula solo al cerrar y cobrar cada trabajo, con el %
+        que tenía el técnico en ese momento.
+      </p>
+      {datos.comisionesPorMes.length === 0 ? (
+        <p>No hay comisiones en este período.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Técnico</th>
+              <th>Trabajos</th>
+              <th>Mano de obra</th>
+              <th>Le corresponde</th>
+            </tr>
+          </thead>
+          <tbody>
+            {datos.comisionesPorMes.map((c) => (
+              <tr key={`${c.mes}-${c.idEmpleado}`}>
+                <td>{formatoMes(c.mes)}</td>
+                <td>{c.nombre}</td>
+                <td>{formatoEntero(c.cantidadTrabajos)}</td>
+                <td>{formatoPesos(c.manoDeObra)}</td>
+                <td>
+                  <strong>{formatoPesos(c.paraTecnico)}</strong>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   )
 }
 
@@ -203,12 +287,16 @@ export function ReporteTrabajos() {
         <Dona titulo="Técnicos y negocio" columna="Parte" puntos={reparto} colores={COLORES_REPARTO} cargando={cargando} error={error} />
         <PorTecnico datos={datos} cargando={cargando} error={error} />
         <Dona titulo="Medios de pago" columna="Medio" puntos={medios} colores={coloresMedios} cargando={cargando} error={error} />
+        <PorMes datos={datos} cargando={cargando} error={error} />
       </div>
+
+      <ComisionesPorMes datos={datos} />
 
       <section>
         <h3>Trabajos cobrados</h3>
         {datos?.trabajos.length === 0 && <p>No hay trabajos cobrados en este período.</p>}
         {datos && datos.trabajos.length > 0 && (
+          <div className="tabla-scroll">
           <table>
             <thead>
               <tr>
@@ -223,6 +311,7 @@ export function ReporteTrabajos() {
                 <th>Artículos</th>
                 <th>Técnico se llevó</th>
                 <th>Para el negocio</th>
+                <th>Duración</th>
               </tr>
             </thead>
             <tbody>
@@ -241,10 +330,12 @@ export function ReporteTrabajos() {
                   <td>{formatoPesos(trabajo.articulos)}</td>
                   <td>{formatoPesos(trabajo.paraTecnico)}</td>
                   <td>{formatoPesos(trabajo.paraNegocio)}</td>
+                  <td>{trabajo.minutos != null ? formatoDuracion(trabajo.minutos) : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

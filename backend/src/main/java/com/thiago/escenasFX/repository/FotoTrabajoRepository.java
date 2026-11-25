@@ -13,7 +13,7 @@ import com.thiago.escenasFX.model.FotoTrabajo;
 public interface FotoTrabajoRepository extends JpaRepository<FotoTrabajo, Integer> {
 
     // Proyección: listar las fotos de un trabajo no tiene que bajar los bytes de todas.
-    @Query("select new com.thiago.escenasFX.dto.FotoTrabajoResponse(f.idFoto, e.idEmpleado, e.nombre, f.creadaEn) "
+    @Query("select new com.thiago.escenasFX.dto.FotoTrabajoResponse(f.idFoto, e.idEmpleado, e.nombre, f.creadaEn, f.momento) "
         + "from FotoTrabajo f join f.empleado e where f.venta.idVenta = :idVenta order by f.creadaEn asc, f.idFoto asc")
     List<FotoTrabajoResponse> listarDelTrabajo(@Param("idVenta") Integer idVenta);
 

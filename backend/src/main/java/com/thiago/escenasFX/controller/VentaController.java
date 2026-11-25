@@ -225,7 +225,7 @@ public class VentaController {
         Venta venta = ventaService.obtenerTrabajo(id);
         Empleado admin = RolAutenticado.empleado(authentication, empleadoRepo);
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(fotoTrabajoService.subir(venta, admin, FotosHttp.leer(fotos), true));
+            .body(fotoTrabajoService.subir(venta, admin, FotosHttp.leer(fotos), true, null));
     }
 
     @GetMapping("/trabajo-domicilio/{id}/fotos/{idFoto}")

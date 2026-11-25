@@ -123,6 +123,7 @@ class FotosTrabajoIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(multipart("/api/mis-trabajos/" + id + "/fotos")
                 .file(foto(JPEG))
+                .param("momento", "DESPUES")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFabian))
             .andExpect(status().isCreated());
 
@@ -134,6 +135,25 @@ class FotosTrabajoIntegrationTest extends AbstractIntegrationTest {
         JsonNode fotos = objectMapper.readTree(r);
         assertThat(fotos.size()).isEqualTo(1);
         assertThat(fotos.get(0).get("idEmpleado").asInt()).isEqualTo(fabian.getIdEmpleado());
+        assertThat(fotos.get(0).get("momento").asText()).isEqualTo("DESPUES");
+    }
+
+    @Test
+    void tecnicoSinElegirAntesODespues_rechazaCon400_yLasDelJefeNoLlevanMomento() throws Exception {
+        int id = crearTrabajo();
+
+        mockMvc.perform(multipart("/api/mis-trabajos/" + id + "/fotos")
+                .file(foto(JPEG))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFabian))
+            .andExpect(status().isBadRequest());
+
+        // El jefe no elige momento: aunque lo mande, sus fotos quedan como "del cliente" (null).
+        mockMvc.perform(multipart("/api/ventas/trabajo-domicilio/" + id + "/fotos")
+                .file(foto(JPEG))
+                .param("momento", "ANTES")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$[0].momento").doesNotExist());
     }
 
     @Test

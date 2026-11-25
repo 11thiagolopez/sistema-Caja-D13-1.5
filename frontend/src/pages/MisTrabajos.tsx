@@ -270,7 +270,7 @@ function Detalle({ id }: { id: number }) {
           onCambio={(fotos) => setTrabajo((actual) => (actual ? { ...actual, fotos } : actual))}
           idEmpleadoActual={sesion?.idEmpleado}
           puedeSubir={!cerrado}
-          ayuda="Las que te pasa el jefe y las que subas vos (por ejemplo, cómo quedó el trabajo)."
+          ayuda="Las que te pasa el jefe, y las tuyas: sacá una de antes de empezar y otra de cómo quedó, sirven de comprobante."
         />
       </section>
 

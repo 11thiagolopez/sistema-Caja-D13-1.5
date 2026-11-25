@@ -125,6 +125,7 @@ class TerminadoTrabajoIntegrationTest extends AbstractIntegrationTest {
             .andExpect(status().isConflict());
         mockMvc.perform(multipart("/api/mis-trabajos/" + id + "/fotos")
                 .file(new MockMultipartFile("fotos", "f.jpg", "image/jpeg", JPEG))
+                .param("momento", "ANTES")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFabian))
             .andExpect(status().isConflict());
         mockMvc.perform(multipart("/api/ventas/trabajo-domicilio/" + id + "/fotos")

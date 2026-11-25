@@ -83,11 +83,12 @@ public class MisTrabajosController {
 
     @PostMapping("/{id}/fotos")
     public ResponseEntity<List<FotoTrabajoResponse>> subirFotos(@PathVariable Integer id,
-            @RequestParam("fotos") List<MultipartFile> fotos, Authentication authentication) {
+            @RequestParam("fotos") List<MultipartFile> fotos, @RequestParam(required = false) String momento,
+            Authentication authentication) {
         Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
         Venta venta = misTrabajosService.obtenerAbierto(id, tecnico);
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(fotoTrabajoService.subir(venta, tecnico, FotosHttp.leer(fotos), false));
+            .body(fotoTrabajoService.subir(venta, tecnico, FotosHttp.leer(fotos), false, momento));
     }
 
     @GetMapping("/{id}/fotos/{idFoto}")

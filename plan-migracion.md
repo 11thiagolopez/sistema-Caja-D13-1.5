@@ -3346,3 +3346,35 @@ Sin SQL.
 **Pendiente:** fotos marcadas Antes/Después (necesita una columna nueva — SQL a aprobar por el
 dueño); Etapa 3.3 (reportes: cantidad e ingresos por mes, tiempo promedio En camino → aviso de
 terminado) y 3.4 (resumen mensual de comisiones por técnico).
+
+## 39. Fotos Antes/Después + Etapa 3.3 (reportes) y 3.4 (comisiones por mes) — ETAPA 3 COMPLETA (2026-11-25)
+
+1. **Fotos Antes/Después.** SQL corrido contra producción con aprobación del dueño:
+   ```sql
+   ALTER TABLE fotos_trabajo ADD COLUMN momento VARCHAR(10);
+   ```
+   `null` = foto del jefe (normalmente las que manda el cliente); `ANTES`/`DESPUES` = las del
+   técnico. El técnico **tiene** que elegir (400 si no: "Elegí si las fotos son de antes o de
+   después"); para el jefe se ignora y queda null. El aviso al jefe dice "subió 2 fotos de antes".
+   `FotosTrabajo.tsx`: el técnico tiene "Foto de antes" / "Foto de después"; las fotos se muestran
+   agrupadas (Del cliente / del jefe, Antes del trabajo, Después del trabajo).
+2. **Etapa 3.3 — Reportes** (`ReporteTrabajosService`, `GET /api/reportes/trabajos-domicilio`):
+   - `porMes`: cantidad, cobrado y lo de los técnicos por mes de cobro; todos los meses del rango,
+     aunque estén en cero. Gráfico "Trabajos por mes".
+   - Tiempo por trabajo desde `historial_estado_trabajo`: primer `EN_CAMINO` → primer
+     `TERMINADO_TECNICO` posterior (o, si el técnico no avisó, primer `TERMINADO` del jefe). Sin
+     los dos registros no cuenta (los trabajos anteriores al historial no tienen tiempo).
+     `tiempoPromedioMinutos` + `trabajosConTiempo` (tarjeta), por técnico (columna en la tabla del
+     gráfico "Por técnico") y por trabajo (columna "Duración" en el detalle).
+3. **Etapa 3.4 — Comisiones por mes**: `comisionesPorMes` (mes × técnico: trabajos, mano de obra,
+   lo que le corresponde), tabla "Comisiones por mes" en el reporte para liquidar. La comisión ya se
+   calculaba sola al cobrar (`comisionTecnico` guardado en el cierre).
+- La tabla "Trabajos cobrados" del reporte quedó dentro de `.tabla-scroll` (era más ancha que la
+  pantalla y hacía scrollear toda la página).
+
+Tests nuevos: `ReporteTrabajosServiceTest` (tiempos con aviso / sin aviso / sin En camino; meses en
+cero y comisiones por mes), `FotosTrabajoIntegrationTest` (momento obligatorio para el técnico,
+ignorado para el jefe). Backend: **473 tests** verdes. Probado en Chrome contra el perfil `demo`.
+
+**Con esto el documento del dueño queda implementado completo** (Etapas 1, 2 y 3, salvo el cobro
+en el domicilio, que el dueño decidió no hacer — sección 37).

@@ -27,6 +27,7 @@ public class FotoTrabajoService {
     // para frenar a quien suba un original sin comprimir, no el tamaño esperado.
     static final int MAX_BYTES_POR_FOTO = 3 * 1024 * 1024;
     static final int MAX_FOTOS_POR_TRABAJO = 30;
+    static final java.util.Set<String> MOMENTOS = java.util.Set.of("ANTES", "DESPUES");
 
     private final FotoTrabajoRepository fotoRepo;
     private final NotificacionTrabajoService notificacionTrabajoService;
@@ -44,11 +45,18 @@ public class FotoTrabajoService {
     /**
      * @param subidaPorAdmin true si la sube el jefe (avisa al técnico asignado); false si la sube el
      *     técnico (avisa a los ADMIN).
+     * @param momento las del técnico: "ANTES" o "DESPUES" (obligatorio); las del jefe: siempre null.
      */
     @Transactional
-    public List<FotoTrabajoResponse> subir(Venta venta, Empleado autor, List<byte[]> imagenes, boolean subidaPorAdmin) {
+    public List<FotoTrabajoResponse> subir(Venta venta, Empleado autor, List<byte[]> imagenes, boolean subidaPorAdmin,
+            String momento) {
         if (imagenes.isEmpty()) {
             throw new IllegalArgumentException("No se recibió ninguna foto");
+        }
+        if (subidaPorAdmin) {
+            momento = null;
+        } else if (momento == null || !MOMENTOS.contains(momento)) {
+            throw new IllegalArgumentException("Elegí si las fotos son de antes o de después del trabajo");
         }
         if (VentaService.estaBloqueado(venta)) {
             throw new IllegalStateException("El trabajo #" + venta.getIdVenta()
@@ -73,6 +81,7 @@ public class FotoTrabajoService {
             foto.setEmpleado(autor);
             foto.setContenido(imagen);
             foto.setTipoContenido(tipo);
+            foto.setMomento(momento);
             fotoRepo.save(foto);
         }
 
@@ -85,7 +94,7 @@ public class FotoTrabajoService {
             }
         } else {
             notificacionTrabajoService.avisarATodosLosAdmin("FOTO",
-                autor.getNombre() + " subió " + cantidad + " en #" + venta.getIdVenta() + " (" + descripcion(venta) + ")",
+                autor.getNombre() + " subió " + cantidad + ("ANTES".equals(momento) ? " de antes" : " de después") + " en #" + venta.getIdVenta() + " (" + descripcion(venta) + ")",
                 venta);
         }
         return fotoRepo.listarDelTrabajo(venta.getIdVenta());
