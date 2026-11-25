@@ -57,7 +57,7 @@ INSERT INTO ventas (id_venta, fecha, id_empleado, id_sesion, medio_pago, tipo_co
   (6, CURRENT_TIMESTAMP, 2, 1, NULL, NULL, 7900.00, 'PENDIENTE_AUTORIZACION', 1000.00, 'Pidió descuento por pago en efectivo', 'MOSTRADOR', 1, FALSE);
 
 INSERT INTO ventas (id_venta, fecha, id_empleado, id_sesion, medio_pago, tipo_comprobante, total_venta, estado, descuento, tipo_venta, cliente_nombre, cliente_telefono, direccion_trabajo, descripcion_trabajo, estado_trabajo, fecha_programada, id_empleado_tecnico, comision_tecnico, comprobante_enviado_por_email) VALUES
-  (5, CURRENT_TIMESTAMP, 1, 1, 'EFECTIVO', 'REMITO', 33500.00, 'CONFIRMADA', 0, 'DOMICILIO', 'Jorge Medina', '011-1555-0099', 'Av. Rivadavia 4500', 'Cambio de cerradura de la puerta principal', 'COBRADO', CURRENT_DATE, 3, 15.00, FALSE);
+  (5, CURRENT_TIMESTAMP, 1, 1, 'EFECTIVO', 'REMITO', 33500.00, 'CONFIRMADA', 0, 'DOMICILIO', 'Jorge Medina', '011-1555-0099', 'Av. Rivadavia 4500', 'Cambio de cerradura de la puerta principal', 'CERRADO_Y_COBRADO', CURRENT_DATE, 3, 15.00, FALSE);
 
 INSERT INTO detalle_ventas (id_detalle, id_venta, id_producto, descripcion, tipo, cantidad, precio_unitario, subtotal) VALUES
   (1, 1, 1, 'Cerradura de embutir 60mm', 'ARTICULO', 1, 18500.00, 18500.00),

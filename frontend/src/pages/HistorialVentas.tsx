@@ -21,7 +21,14 @@ import type {
   VentaResponse,
 } from '../types/api'
 
-const ESTADOS_TRABAJO: EstadoTrabajo[] = ['AGENDADO', 'EN_CURSO', 'COMPLETADO', 'COBRADO']
+const ESTADOS_TRABAJO: EstadoTrabajo[] = [
+  'AGENDADO',
+  'EN_CAMINO',
+  'EN_CURSO',
+  'TERMINADO',
+  'CERRADO_Y_COBRADO',
+  'CANCELADO',
+]
 
 export function HistorialVentas() {
   // Desde el 1° del mes actual, igual que el resto de las pantallas de reportes/consulta

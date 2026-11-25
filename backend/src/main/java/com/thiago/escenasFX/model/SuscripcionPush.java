@@ -14,9 +14,12 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Un dispositivo de un ADMIN que quiere recibir el aviso de peticiones nuevas. Solo se guarda el
- * endpoint: las notificaciones van sin contenido (ver PushService), así que no hacen falta las
- * claves de cifrado de la suscripción.
+ * Un dispositivo (ADMIN o TECNICO) que quiere recibir avisos. El aviso de peticiones nuevas
+ * (PushService.avisarPeticionNueva) sigue yendo sin contenido y no necesita p256dh/auth; los
+ * avisos de trabajos a domicilio (PushService.avisarConContenido) sí, porque van cifrados
+ * (RFC 8291) con la clave pública y el secreto que el navegador generó al suscribirse. Nulables:
+ * una suscripción vieja, de antes de que existiera el push con contenido, los tiene en null hasta
+ * que ese dispositivo vuelva a activar las notificaciones.
  */
 @Entity
 @Table(name = "suscripciones_push")
@@ -31,6 +34,10 @@ public class SuscripcionPush {
 
     @Column(nullable = false, unique = true)
     private String endpoint;
+
+    private String p256dh;
+
+    private String auth;
 
     @ManyToOne
     @JoinColumn(name = "id_empleado", nullable = false)

@@ -21,4 +21,10 @@ public class TecnicoRequest {
     @DecimalMin(value = "0")
     @DecimalMax(value = "100")
     private BigDecimal comision;
+
+    // Ambos opcionales: sin ellos, el técnico sigue sin acceso al sistema (usuario/contraseña al
+    // azar, como hasta ahora). Se completan solo para el técnico al que se le da acceso real
+    // (ej. Fabián, para "Mis trabajos" desde el celular).
+    private String usuario;
+    private String password;
 }

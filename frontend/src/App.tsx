@@ -2,7 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { Layout } from './components/Layout'
 import { RequireAuth, RequireRole } from './auth/ProtectedRoute'
+import { useAuth } from './auth/AuthContext'
 import { Login } from './pages/Login'
+import { MisTrabajos } from './pages/MisTrabajos'
 import { Productos } from './pages/Productos'
 import { RegistrarVenta } from './pages/RegistrarVenta'
 import { HistorialVentas } from './pages/HistorialVentas'
@@ -27,14 +29,24 @@ import { Comprobantes } from './pages/Comprobantes'
 import { Recargos } from './pages/Recargos'
 import { CuentaCorrienteProveedores } from './pages/CuentaCorrienteProveedores'
 
+// Cobros es la pantalla de aterrizaje de siempre (adonde te deja el modal de abrir caja
+// post-login) — salvo para TECNICO, que no tiene acceso a Cobros ni a casi nada más.
+function Inicio() {
+  const { sesion } = useAuth()
+  return <Navigate to={sesion?.rol === 'TECNICO' ? '/mis-trabajos' : '/ventas/nueva'} replace />
+}
+
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireAuth />}>
         <Route element={<Layout />}>
-          {/* Cobros es la pantalla de aterrizaje: adonde te deja el modal de abrir caja post-login. */}
-          <Route path="/" element={<Navigate to="/ventas/nueva" replace />} />
+          <Route path="/" element={<Inicio />} />
+          <Route element={<RequireRole allow={['TECNICO']} />}>
+            <Route path="/mis-trabajos" element={<MisTrabajos />} />
+            <Route path="/mis-trabajos/:id" element={<MisTrabajos />} />
+          </Route>
           <Route path="/productos" element={<Productos />} />
           <Route path="/ventas/nueva" element={<RegistrarVenta />} />
           <Route path="/presupuestos" element={<Presupuestos />} />

@@ -1,6 +1,7 @@
 package com.thiago.escenasFX.dto;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -33,11 +34,19 @@ public class TrabajoDomicilioRequest {
     private String direccionTrabajo;
     private String descripcionTrabajo;
 
-    // AGENDADO | EN_CURSO | COMPLETADO — "COBRADO" lo fija el backend cuando cerrar=true.
+    // AGENDADO | EN_CAMINO | EN_CURSO | TERMINADO — "CERRADO_Y_COBRADO" lo fija el backend cuando
+    // cerrar=true, y "CANCELADO" se fija solo al anular el trabajo (VentaController endpoint aparte).
     private String estadoTrabajo;
 
     // Día de la agenda. Sin valor: un trabajo nuevo va a hoy y uno existente conserva el que tenía.
     private LocalDate fechaProgramada;
+
+    // Franja horaria agendada, ambos opcionales.
+    private LocalTime horaDesde;
+    private LocalTime horaHasta;
+
+    // Instrucciones del jefe para el técnico (ej. "tocar timbre del portero").
+    private String observacionesTecnico;
 
     // EFECTIVO | TRANSFERENCIA | TARJETA. Obligatorio si cerrar=true: la caja suma por medio de pago.
     private String medioPago;

@@ -3,7 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getProductos } from '../api/productos'
 import { getEmpleados } from '../api/empleados'
-import { anularTrabajoDomicilio, descargarVentaPdf, getVenta, guardarTrabajoDomicilio } from '../api/ventas'
+import {
+  anularTrabajoDomicilio,
+  descargarVentaPdf,
+  getNotasTrabajoDomicilio,
+  getVenta,
+  guardarTrabajoDomicilio,
+} from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
@@ -18,6 +24,7 @@ import type {
   EstadoTrabajo,
   EstadoVenta,
   MedioPago,
+  NotaTrabajoResponse,
   Producto,
   VentaResponse,
 } from '../types/api'
@@ -26,11 +33,13 @@ interface ItemCarrito extends DetalleVentaRequest {
   descripcionProducto: string
 }
 
-// "Cobrado" no está a propósito: un trabajo queda cobrado solo con "Cerrar y cobrar".
+// "Cerrado y cobrado"/"Cancelado" no están a propósito: eso lo fija el backend con "Cerrar y
+// cobrar" y "Eliminar trabajo", no se elige a mano desde este selector.
 const ESTADOS: { valor: EstadoTrabajo; etiqueta: string }[] = [
   { valor: 'AGENDADO', etiqueta: 'Agendado' },
+  { valor: 'EN_CAMINO', etiqueta: 'En camino' },
   { valor: 'EN_CURSO', etiqueta: 'En curso' },
-  { valor: 'COMPLETADO', etiqueta: 'Completado' },
+  { valor: 'TERMINADO', etiqueta: 'Terminado' },
 ]
 
 // Para saber si hay cambios sin guardar antes de volver a la lista.
@@ -63,6 +72,10 @@ export function TrabajoDomicilio() {
   const [estadoTrabajo, setEstadoTrabajo] = useState<EstadoTrabajo>('AGENDADO')
   const [idEmpleadoTecnico, setIdEmpleadoTecnico] = useState('')
   const [fechaProgramada, setFechaProgramada] = useState('')
+  const [horaDesde, setHoraDesde] = useState('')
+  const [horaHasta, setHoraHasta] = useState('')
+  const [observacionesTecnico, setObservacionesTecnico] = useState('')
+  const [notas, setNotas] = useState<NotaTrabajoResponse[]>([])
   // Vacío solo en trabajos cobrados antes de que se pidiera el medio de pago.
   const [medioPago, setMedioPago] = useState<MedioPago | ''>('EFECTIVO')
   const [comisionGuardada, setComisionGuardada] = useState<number | null>(null)
@@ -101,8 +114,8 @@ export function TrabajoDomicilio() {
   }, [])
 
   function precargarDesdeVenta(venta: VentaResponse) {
-    // Un borrador viejo marcado "Cobrado" a mano no se cobró: se sigue editando como completado.
-    const estado = venta.estadoTrabajo === 'COBRADO' ? 'COMPLETADO' : (venta.estadoTrabajo ?? 'AGENDADO')
+    // Un borrador viejo marcado "Cerrado y cobrado" a mano no se cobró: se sigue editando como terminado.
+    const estado = venta.estadoTrabajo === 'CERRADO_Y_COBRADO' ? 'TERMINADO' : (venta.estadoTrabajo ?? 'AGENDADO')
     const tecnico = venta.idEmpleadoTecnico != null ? String(venta.idEmpleadoTecnico) : ''
     const items = venta.detalles.map((d) => ({
       idProducto: d.idProducto ?? undefined,
@@ -128,13 +141,34 @@ export function TrabajoDomicilio() {
     setDescripcionTrabajo(venta.descripcionTrabajo ?? '')
     setEstadoTrabajo(estado)
     setIdEmpleadoTecnico(tecnico)
+    const desde = venta.horaDesde?.slice(0, 5) ?? ''
+    const hasta = venta.horaHasta?.slice(0, 5) ?? ''
+    setHoraDesde(desde)
+    setHoraHasta(hasta)
+    setObservacionesTecnico(venta.observacionesTecnico ?? '')
     reemplazarCarrito(items)
     setFirmaGuardada(
       firmaDe(
-        [venta.clienteNombre ?? '', venta.clienteTelefono ?? '', venta.direccionTrabajo ?? '', venta.descripcionTrabajo ?? '', estado, tecnico, fecha, medio],
+        [
+          venta.clienteNombre ?? '',
+          venta.clienteTelefono ?? '',
+          venta.direccionTrabajo ?? '',
+          venta.descripcionTrabajo ?? '',
+          estado,
+          tecnico,
+          fecha,
+          medio,
+          desde,
+          hasta,
+          venta.observacionesTecnico ?? '',
+        ],
         items,
       ),
     )
+    setNotas([])
+    if (venta.idVenta != null) {
+      getNotasTrabajoDomicilio(venta.idVenta).then(setNotas).catch(() => {})
+    }
     setVista('trabajo')
   }
 
@@ -214,13 +248,17 @@ export function TrabajoDomicilio() {
     setFechaProgramada(fechaBuscar)
     setMedioPago('EFECTIVO')
     setComisionGuardada(null)
-    setFirmaGuardada(firmaDe(['', '', '', '', 'AGENDADO', '', fechaBuscar, 'EFECTIVO'], []))
+    setFirmaGuardada(firmaDe(['', '', '', '', 'AGENDADO', '', fechaBuscar, 'EFECTIVO', '', '', ''], []))
     setClienteNombre('')
     setClienteTelefono('')
     setDireccionTrabajo('')
     setDescripcionTrabajo('')
     setEstadoTrabajo('AGENDADO')
     setIdEmpleadoTecnico('')
+    setHoraDesde('')
+    setHoraHasta('')
+    setObservacionesTecnico('')
+    setNotas([])
     vaciarCarrito()
     setMensaje(null)
     setError(null)
@@ -275,7 +313,22 @@ export function TrabajoDomicilio() {
   // Ya cobrado no se edita: guardarlo de nuevo lo sacaría de la caja en la que se cobró.
   const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA'
   const hayCambios =
-    firmaDe([clienteNombre, clienteTelefono, direccionTrabajo, descripcionTrabajo, estadoTrabajo, idEmpleadoTecnico, fechaProgramada, medioPago], carrito) !== firmaGuardada
+    firmaDe(
+      [
+        clienteNombre,
+        clienteTelefono,
+        direccionTrabajo,
+        descripcionTrabajo,
+        estadoTrabajo,
+        idEmpleadoTecnico,
+        fechaProgramada,
+        medioPago,
+        horaDesde,
+        horaHasta,
+        observacionesTecnico,
+      ],
+      carrito,
+    ) !== firmaGuardada
   const estadoVisible = estadoVenta ? estadoVisibleTrabajo({ estado: estadoVenta, estadoTrabajo: estadoTrabajoGuardado }) : null
 
   async function guardar(cerrar: boolean) {
@@ -303,6 +356,9 @@ export function TrabajoDomicilio() {
         descripcionTrabajo: descripcionTrabajo || undefined,
         estadoTrabajo,
         fechaProgramada,
+        horaDesde: horaDesde || undefined,
+        horaHasta: horaHasta || undefined,
+        observacionesTecnico: observacionesTecnico || undefined,
         medioPago,
         detalles: carrito.map(({ idProducto, descripcion, tipo, cantidad, precioUnitario }) => ({
           idProducto,
@@ -390,6 +446,22 @@ export function TrabajoDomicilio() {
 
       {error && <p className="error">{error}</p>}
 
+      {idVenta != null && notas.length > 0 && (
+        <section>
+          <h3>Notas del técnico</h3>
+          <div className="trabajo-notas">
+            {notas.map((n) => (
+              <div key={n.idNota} className="trabajo-nota">
+                <span>{n.texto}</span>
+                <small>
+                  {n.nombreEmpleado} — {n.creadoEn.slice(0, 16).replace('T', ' ')}
+                </small>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <fieldset className="trabajo-campos" disabled={soloLectura}>
       <section>
         <h3>Cliente y trabajo</h3>
@@ -397,6 +469,16 @@ export function TrabajoDomicilio() {
           Fecha del trabajo
           <input type="date" value={fechaProgramada} onChange={(e) => setFechaProgramada(e.target.value)} />
         </label>
+        <div className="franja-horaria">
+          <label>
+            Desde
+            <input type="time" value={horaDesde} onChange={(e) => setHoraDesde(e.target.value)} />
+          </label>
+          <label>
+            Hasta
+            <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} />
+          </label>
+        </div>
         <label>
           Nombre del cliente
           <input
@@ -427,6 +509,14 @@ export function TrabajoDomicilio() {
             placeholder="Ej: Cambio de cerradura puerta de entrada, cliente perdió las llaves"
             value={descripcionTrabajo}
             onChange={(e) => setDescripcionTrabajo(e.target.value)}
+          />
+        </label>
+        <label>
+          Observaciones para el técnico
+          <textarea
+            placeholder="Ej: tocar timbre del portero, llevar cerradura de doble paleta"
+            value={observacionesTecnico}
+            onChange={(e) => setObservacionesTecnico(e.target.value)}
           />
         </label>
         {!soloLectura && (

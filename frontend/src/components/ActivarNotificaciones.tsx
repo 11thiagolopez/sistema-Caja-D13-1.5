@@ -32,7 +32,10 @@ export function ActivarNotificaciones() {
       const registro = await navigator.serviceWorker.register('/sw.js')
       const suscripcion = await registro.pushManager.getSubscription()
       if (suscripcion) {
-        await guardarSuscripcionPush(suscripcion.endpoint)
+        const { endpoint, keys } = suscripcion.toJSON()
+        if (endpoint && keys?.p256dh && keys?.auth) {
+          await guardarSuscripcionPush(endpoint, keys.p256dh, keys.auth)
+        }
         setEstado('activas')
       } else {
         setEstado('inactivas')
@@ -57,7 +60,11 @@ export function ActivarNotificaciones() {
         userVisibleOnly: true,
         applicationServerKey: claveABytes(clavePublica),
       })
-      await guardarSuscripcionPush(suscripcion.endpoint)
+      const { endpoint, keys } = suscripcion.toJSON()
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        throw new Error('El navegador no devolvió una suscripción válida')
+      }
+      await guardarSuscripcionPush(endpoint, keys.p256dh, keys.auth)
       setEstado('activas')
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudieron activar las notificaciones')

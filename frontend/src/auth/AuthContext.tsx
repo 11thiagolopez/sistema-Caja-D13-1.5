@@ -15,7 +15,7 @@ interface Sesion {
 
 interface AuthContextValue {
   sesion: Sesion | null
-  login: (usuario: string, password: string) => Promise<void>
+  login: (usuario: string, password: string) => Promise<Rol>
   logout: () => void
 }
 
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(sesion?.token ?? null)
   }, [sesion])
 
-  async function login(usuario: string, password: string): Promise<void> {
+  async function login(usuario: string, password: string): Promise<Rol> {
     const respuesta: LoginResponse = await loginRequest({ usuario, password })
     const nuevaSesion: Sesion = {
       idEmpleado: respuesta.idEmpleado,
@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nuevaSesion))
     setSesion(nuevaSesion)
+    return nuevaSesion.rol
   }
 
   function logout(): void {

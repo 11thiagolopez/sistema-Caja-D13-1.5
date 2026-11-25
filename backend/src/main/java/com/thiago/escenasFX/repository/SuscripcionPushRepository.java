@@ -12,4 +12,6 @@ public interface SuscripcionPushRepository extends JpaRepository<SuscripcionPush
     Optional<SuscripcionPush> findByEndpoint(String endpoint);
 
     List<SuscripcionPush> findByEmpleado_RolAndEmpleado_ActivoTrue(String rol);
+
+    List<SuscripcionPush> findByEmpleado_IdEmpleado(Integer idEmpleado);
 }

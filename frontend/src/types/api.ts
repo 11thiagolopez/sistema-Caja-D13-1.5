@@ -245,7 +245,7 @@ export type TipoLinea = 'ARTICULO' | 'COPIA' | 'SERVICIO'
 // MOSTRADOR = venta de catálogo (Cobros) | DOMICILIO = trabajo a domicilio.
 export type TipoVenta = 'MOSTRADOR' | 'DOMICILIO'
 
-export type EstadoTrabajo = 'AGENDADO' | 'EN_CURSO' | 'COMPLETADO' | 'COBRADO'
+export type EstadoTrabajo = 'AGENDADO' | 'EN_CAMINO' | 'EN_CURSO' | 'TERMINADO' | 'CERRADO_Y_COBRADO' | 'CANCELADO'
 
 // O trae idProducto (línea de catálogo, descuenta stock) o trae descripcion (mano de obra u otro
 // ítem manual, no toca stock) — viene uno de los dos.
@@ -321,6 +321,44 @@ export interface VentaResponse {
   // Con un intento rechazado, la venta sigue SIN_FACTURAR y esto trae el error.
   factura: FacturaFiscalResponse | null
   tieneNotaCredito: boolean | null
+  // Franja horaria agendada ("HH:mm:ss") e instrucciones del jefe para el técnico — solo Trabajo a
+  // domicilio.
+  horaDesde: string | null
+  horaHasta: string | null
+  observacionesTecnico: string | null
+}
+
+export interface NotaTrabajoResponse {
+  idNota: number
+  texto: string
+  nombreEmpleado: string
+  creadoEn: string
+}
+
+export interface MiTrabajoResponse {
+  trabajo: VentaResponse
+  notas: NotaTrabajoResponse[]
+}
+
+// EN_CAMINO | EN_CURSO | TERMINADO: los únicos que el técnico puede fijar él mismo.
+export type EstadoTrabajoTecnico = 'EN_CAMINO' | 'EN_CURSO' | 'TERMINADO'
+
+export type TipoNotificacion =
+  | 'TRABAJO_NUEVO'
+  | 'REPROGRAMADO'
+  | 'CANCELADO'
+  | 'EN_CAMINO'
+  | 'LLEGO'
+  | 'TERMINADO'
+  | 'NOTA'
+
+export interface NotificacionResponse {
+  idNotificacion: number
+  tipo: TipoNotificacion
+  texto: string
+  idVenta: number | null
+  leida: boolean
+  creadaEn: string
 }
 
 // 80 = CUIT | 96 = DNI | 99 = Consumidor Final (clienteDocNro va vacío en ese caso).
@@ -380,6 +418,9 @@ export interface TrabajoDomicilioRequest {
   descripcionTrabajo?: string
   estadoTrabajo?: EstadoTrabajo
   fechaProgramada: string
+  horaDesde?: string
+  horaHasta?: string
+  observacionesTecnico?: string
   medioPago: MedioPago
   detalles: DetalleVentaRequest[]
   cerrar: boolean

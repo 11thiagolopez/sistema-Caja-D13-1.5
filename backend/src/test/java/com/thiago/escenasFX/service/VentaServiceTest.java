@@ -66,6 +66,10 @@ class VentaServiceTest {
     private com.thiago.escenasFX.repository.NotaCreditoRepository notaCreditoRepo;
     @Mock
     private RecargoService recargoService;
+    @Mock
+    private HistorialEstadoTrabajoService historialEstadoService;
+    @Mock
+    private NotificacionTrabajoService notificacionTrabajoService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -476,11 +480,84 @@ class VentaServiceTest {
 
         assertThat(guardado.getMedioPago()).isEqualTo("EFECTIVO");
         assertThat(guardado.getEstado()).isEqualTo("CONFIRMADA");
-        assertThat(guardado.getEstadoTrabajo()).isEqualTo("COBRADO");
+        assertThat(guardado.getEstadoTrabajo()).isEqualTo("CERRADO_Y_COBRADO");
         assertThat(guardado.getTotalVenta()).isEqualByComparingTo("3200");
         assertThat(guardado.getEmpleadoTecnico()).isEqualTo(tecnico);
         assertThat(producto.getStockActual()).isEqualTo(8);
         verify(notificacionService).evaluarYNotificarStockBajo(producto, 10, 8);
+        verify(notificacionTrabajoService).avisarATecnico(eq(tecnico), eq("TRABAJO_NUEVO"), anyString(), eq(guardado));
+    }
+
+    @Test
+    void guardarTrabajoDomicilio_reprogramarSinCambiarTecnico_avisaReprogramado() {
+        Empleado tecnico = empleado(2, "Técnico");
+        Venta existente = new Venta();
+        existente.setIdVenta(5);
+        existente.setTipoVenta("DOMICILIO");
+        existente.setEstado("EN_PROGRESO");
+        existente.setEstadoTrabajo("AGENDADO");
+        existente.setEmpleadoTecnico(tecnico);
+        existente.setFechaProgramada(java.time.LocalDate.of(2026, 12, 1));
+        existente.setDetalles(new ArrayList<>());
+        when(ventaRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(existente));
+        when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Empleado empleado = empleado(1, "Recepcionista");
+        TrabajoDomicilioRequest req = trabajoReq(List.of(), false);
+        req.setIdVenta(5);
+        req.setIdEmpleadoTecnico(2);
+        req.setFechaProgramada(java.time.LocalDate.of(2026, 12, 2));
+        when(empleadoRepo.findById(2)).thenReturn(Optional.of(tecnico));
+
+        Venta actualizado = ventaService.guardarTrabajoDomicilio(req, empleado);
+
+        verify(notificacionTrabajoService).avisarATecnico(eq(tecnico), eq("REPROGRAMADO"), anyString(),
+            eq(actualizado));
+        verify(notificacionTrabajoService, never()).avisarATecnico(any(), eq("TRABAJO_NUEVO"), anyString(), any());
+    }
+
+    @Test
+    void guardarTrabajoDomicilio_reasignarTecnico_avisaComoNuevoAlNuevoTecnico() {
+        Empleado tecnicoViejo = empleado(2, "Técnico viejo");
+        Empleado tecnicoNuevo = empleado(3, "Técnico nuevo");
+        Venta existente = new Venta();
+        existente.setIdVenta(5);
+        existente.setTipoVenta("DOMICILIO");
+        existente.setEstado("EN_PROGRESO");
+        existente.setEstadoTrabajo("AGENDADO");
+        existente.setEmpleadoTecnico(tecnicoViejo);
+        existente.setDetalles(new ArrayList<>());
+        when(ventaRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(existente));
+        when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(empleadoRepo.findById(3)).thenReturn(Optional.of(tecnicoNuevo));
+
+        Empleado empleado = empleado(1, "Recepcionista");
+        TrabajoDomicilioRequest req = trabajoReq(List.of(), false);
+        req.setIdVenta(5);
+        req.setIdEmpleadoTecnico(3);
+
+        Venta actualizado = ventaService.guardarTrabajoDomicilio(req, empleado);
+
+        verify(notificacionTrabajoService).avisarATecnico(eq(tecnicoNuevo), eq("TRABAJO_NUEVO"), anyString(),
+            eq(actualizado));
+    }
+
+    @Test
+    void anularTrabajoDomicilio_conTecnicoAsignado_avisaCancelado() {
+        Empleado tecnico = empleado(2, "Técnico");
+        Venta venta = new Venta();
+        venta.setIdVenta(5);
+        venta.setTipoVenta("DOMICILIO");
+        venta.setEstado("EN_PROGRESO");
+        venta.setEstadoTrabajo("AGENDADO");
+        venta.setEmpleadoTecnico(tecnico);
+        venta.setDetalles(new ArrayList<>());
+        when(ventaRepo.buscarPorIdConLock(5)).thenReturn(Optional.of(venta));
+        when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Venta anulada = ventaService.anularTrabajoDomicilio(5, empleado(1, "Admin"));
+
+        verify(notificacionTrabajoService).avisarATecnico(eq(tecnico), eq("CANCELADO"), anyString(), eq(anulada));
     }
 
     @Test

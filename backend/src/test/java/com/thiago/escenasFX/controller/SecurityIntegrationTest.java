@@ -212,4 +212,15 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.manual").value(true));
     }
+
+    // "Mis trabajos" del técnico (SecurityConfig.ROLES_MIS_TRABAJOS): hoy exclusivo TECNICO, ni
+    // ADMIN ni VENDEDOR lo usan (tienen sus propios endpoints de trabajo a domicilio).
+    @Test
+    void misTrabajos_comoVendedor_devuelve403() throws Exception {
+        crearEmpleado("vendedor1", "clave123", "VENDEDOR", null);
+        String token = login("vendedor1", "clave123");
+
+        mockMvc.perform(get("/api/mis-trabajos").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+            .andExpect(status().isForbidden());
+    }
 }

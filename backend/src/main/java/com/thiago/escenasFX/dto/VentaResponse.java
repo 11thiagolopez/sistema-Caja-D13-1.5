@@ -3,6 +3,7 @@ package com.thiago.escenasFX.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -48,4 +49,8 @@ public class VentaResponse {
     private String estadoFactura;
     private FacturaFiscalResponse factura;
     private Boolean tieneNotaCredito;
+    // Franja horaria agendada e instrucciones del jefe para el técnico — solo Trabajo a domicilio.
+    private LocalTime horaDesde;
+    private LocalTime horaHasta;
+    private String observacionesTecnico;
 }

@@ -17,8 +17,9 @@ export function Login() {
     setError(null)
     setCargando(true)
     try {
-      await login(usuario, password)
-      navigate((location.state as { desde?: string } | null)?.desde ?? '/ventas/nueva', { replace: true })
+      const rol = await login(usuario, password)
+      const destinoPorDefecto = rol === 'TECNICO' ? '/mis-trabajos' : '/ventas/nueva'
+      navigate((location.state as { desde?: string } | null)?.desde ?? destinoPorDefecto, { replace: true })
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo iniciar sesión')
     } finally {

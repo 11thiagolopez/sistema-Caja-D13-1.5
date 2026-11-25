@@ -18,7 +18,10 @@ export function RequireRole({ allow }: { allow: Rol[] }) {
     return <Navigate to="/login" replace />
   }
   if (!allow.includes(sesion.rol)) {
-    return <Navigate to="/productos" replace />
+    // TECNICO no tiene acceso a /productos (ni a casi nada fuera de lo suyo) — mandarlo ahí
+    // repetiría el mismo problema. Para los demás roles, /productos sigue siendo la pantalla
+    // segura de reserva.
+    return <Navigate to={sesion.rol === 'TECNICO' ? '/mis-trabajos' : '/productos'} replace />
   }
   return <Outlet />
 }

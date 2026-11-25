@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.thiago.escenasFX.dto.EmpleadoRequest;
 import com.thiago.escenasFX.dto.EmpleadoUpdateRequest;
+import com.thiago.escenasFX.dto.TecnicoRequest;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 
@@ -90,5 +91,64 @@ class EmpleadoServiceTest {
         Empleado actualizado = empleadoService.actualizar(1, req);
 
         assertThat(actualizado.getComision()).isNull();
+    }
+
+    private TecnicoRequest tecnicoRequest(String usuario, String password) {
+        TecnicoRequest req = new TecnicoRequest();
+        req.setNombre("Fabián");
+        req.setComision(new BigDecimal("30"));
+        req.setUsuario(usuario);
+        req.setPassword(password);
+        return req;
+    }
+
+    @Test
+    void crearTecnico_sinUsuario_quedaSinAccesoAlSistema() {
+        Empleado tecnico = empleadoService.crearTecnico(tecnicoRequest(null, null));
+
+        assertThat(tecnico.getUsuario()).startsWith("tecnico-");
+        assertThat(tecnico.getRol()).isEqualTo("TECNICO");
+    }
+
+    @Test
+    void crearTecnico_conUsuarioYPassword_quedaConAccesoReal() {
+        Empleado tecnico = empleadoService.crearTecnico(tecnicoRequest("fabian", "clave123"));
+
+        assertThat(tecnico.getUsuario()).isEqualTo("fabian");
+        assertThat(tecnico.getPasswordHash()).isEqualTo("hash");
+    }
+
+    @Test
+    void crearTecnico_conUsuarioYaUsado_rechaza() {
+        when(empleadoRepo.findByUsuario("fabian")).thenReturn(Optional.of(new Empleado()));
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> empleadoService.crearTecnico(tecnicoRequest("fabian", "clave123")));
+    }
+
+    @Test
+    void actualizarTecnico_sinUsuarioEnElRequest_noLeTocaElAccesoQueYaTenia() {
+        Empleado existente = new Empleado();
+        existente.setIdEmpleado(5);
+        existente.setRol("TECNICO");
+        existente.setUsuario("fabian");
+        existente.setPasswordHash("hash-viejo");
+        when(empleadoRepo.findById(5)).thenReturn(Optional.of(existente));
+
+        Empleado actualizado = empleadoService.actualizarTecnico(5, tecnicoRequest(null, null));
+
+        assertThat(actualizado.getUsuario()).isEqualTo("fabian");
+        assertThat(actualizado.getPasswordHash()).isEqualTo("hash-viejo");
+    }
+
+    @Test
+    void actualizarTecnico_deUnoQueNoEsTecnico_rechaza() {
+        Empleado existente = new Empleado();
+        existente.setIdEmpleado(5);
+        existente.setRol("VENDEDOR");
+        when(empleadoRepo.findById(5)).thenReturn(Optional.of(existente));
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> empleadoService.actualizarTecnico(5, tecnicoRequest(null, null)));
     }
 }

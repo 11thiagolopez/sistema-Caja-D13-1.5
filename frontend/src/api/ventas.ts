@@ -1,6 +1,7 @@
 import { request, requestBlob } from './client'
 import type {
   EstadoFactura,
+  NotaTrabajoResponse,
   TrabajoDomicilioRequest,
   VentaRequest,
   VentaResponse,
@@ -39,6 +40,10 @@ export function getAgendaTrabajos(desde: string, hasta: string): Promise<VentaRe
 
 export function anularTrabajoDomicilio(id: number): Promise<VentaResponse> {
   return request<VentaResponse>(`/api/ventas/trabajo-domicilio/${id}/anular`, { method: 'POST' })
+}
+
+export function getNotasTrabajoDomicilio(id: number): Promise<NotaTrabajoResponse[]> {
+  return request<NotaTrabajoResponse[]>(`/api/ventas/trabajo-domicilio/${id}/notas`)
 }
 
 export function guardarTrabajoDomicilio(req: TrabajoDomicilioRequest): Promise<VentaResponse> {

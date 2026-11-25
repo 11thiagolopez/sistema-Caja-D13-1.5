@@ -6,6 +6,7 @@ import { getCotizacionActual } from '../api/cotizacion'
 import type { CotizacionResponse, Rol } from '../types/api'
 import { AbrirCajaModal } from './AbrirCajaModal'
 import { AutorizacionesProvider, useAutorizaciones } from './AutorizacionesPendientes'
+import { Campanita } from './Campanita'
 import { CerrarCajaModal } from './CerrarCajaModal'
 import { RetiroModal } from './RetiroModal'
 import { ProveedoresModal } from './ProveedoresModal'
@@ -113,22 +114,27 @@ function LayoutContenido() {
   // inicial confirme que ya existe una cotización de hoy.
   const [cotizacionObligatoria, setCotizacionObligatoria] = useState(true)
   const [avisoCotizacion, setAvisoCotizacion] = useState<CotizacionResponse | null>(null)
+  const esTecnico = sesion?.rol === 'TECNICO'
 
+  // Ninguno de los dos gates aplica a TECNICO: no opera caja ni le importa la cotización del día
+  // (y el backend le devuelve 403 en los dos GET, así que ni se pueden resolver solos).
   useEffect(() => {
+    if (esTecnico) return
     getCotizacionActual().then((cotizacion) => {
       setCotizacionObligatoria(!cotizacion)
     })
-  }, [])
+  }, [esTecnico])
 
   // Se dispara una sola vez al entrar a cualquier pantalla logueada: si no hay una sesión de
   // caja ABIERTA, fuerza el modal de "abrir caja" (ambos roles) antes de dejar hacer nada más.
   useEffect(() => {
+    if (esTecnico) return
     getSesionAbierta().then((sesionCaja) => {
       if (!sesionCaja) {
         setCajaObligatoria(true)
       }
     })
-  }, [])
+  }, [esTecnico])
 
   function onCotizacionCargada(cotizacion: CotizacionResponse) {
     setCotizacionObligatoria(false)
@@ -156,6 +162,7 @@ function LayoutContenido() {
 
   return (
     <div className="layout">
+      {!esTecnico && (
       <aside className={`sidebar ${sidebarAbierta ? '' : 'sidebar-cerrada'}`}>
         <div className="sidebar-marca">Sistema D13</div>
         <nav>
@@ -222,28 +229,32 @@ function LayoutContenido() {
           )}
         </nav>
       </aside>
-      {sidebarAbierta && (
+      )}
+      {!esTecnico && sidebarAbierta && (
         <button type="button" className="sidebar-fondo" aria-label="Cerrar menú" onClick={() => setSidebarAbierta(false)} />
       )}
 
       <div className="layout-contenido">
         <header className="layout-topbar">
           <div className="topbar-espaciador">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              onClick={() => setSidebarAbierta((actual) => !actual)}
-              aria-label={sidebarAbierta ? 'Ocultar menú' : 'Mostrar menú'}
-              aria-expanded={sidebarAbierta}
-            >
-              ☰
-            </button>
+            {!esTecnico && (
+              <button
+                type="button"
+                className="sidebar-toggle"
+                onClick={() => setSidebarAbierta((actual) => !actual)}
+                aria-label={sidebarAbierta ? 'Ocultar menú' : 'Mostrar menú'}
+                aria-expanded={sidebarAbierta}
+              >
+                ☰
+              </button>
+            )}
           </div>
           <h1 className="topbar-titulo">Sistema D13</h1>
           <div className="topbar-usuario">
             <span className="nav-usuario">
               {sesion?.nombre} ({sesion?.rol})
             </span>
+            {(sesion?.rol === 'ADMIN' || esTecnico) && <Campanita rol={sesion?.rol} />}
             <button type="button" onClick={onLogout}>
               Salir
             </button>
@@ -262,24 +273,26 @@ function LayoutContenido() {
         </main>
       </div>
 
-      {cotizacionObligatoria ? (
-        <CotizacionGateModal onExito={onCotizacionCargada} />
-      ) : cajaObligatoria ? (
-        <AbrirCajaModal
-          onExito={() => {
-            setCajaObligatoria(false)
-            navigate('/ventas/nueva', { replace: true })
-          }}
-        />
-      ) : (
-        <>
-          {modalAbierto === 'abrir-caja' && (
-            <AbrirCajaModal onClose={() => setModalAbierto(null)} onExito={() => setModalAbierto(null)} />
-          )}
-          {modalAbierto === 'cerrar-caja' && <CerrarCajaModal onClose={() => setModalAbierto(null)} />}
-          {modalAbierto === 'retiro' && <RetiroModal onClose={() => setModalAbierto(null)} />}
-          {modalAbierto === 'proveedores' && <ProveedoresModal onClose={() => setModalAbierto(null)} />}
-        </>
+      {!esTecnico && (
+        cotizacionObligatoria ? (
+          <CotizacionGateModal onExito={onCotizacionCargada} />
+        ) : cajaObligatoria ? (
+          <AbrirCajaModal
+            onExito={() => {
+              setCajaObligatoria(false)
+              navigate('/ventas/nueva', { replace: true })
+            }}
+          />
+        ) : (
+          <>
+            {modalAbierto === 'abrir-caja' && (
+              <AbrirCajaModal onClose={() => setModalAbierto(null)} onExito={() => setModalAbierto(null)} />
+            )}
+            {modalAbierto === 'cerrar-caja' && <CerrarCajaModal onClose={() => setModalAbierto(null)} />}
+            {modalAbierto === 'retiro' && <RetiroModal onClose={() => setModalAbierto(null)} />}
+            {modalAbierto === 'proveedores' && <ProveedoresModal onClose={() => setModalAbierto(null)} />}
+          </>
+        )
       )}
     </div>
   )

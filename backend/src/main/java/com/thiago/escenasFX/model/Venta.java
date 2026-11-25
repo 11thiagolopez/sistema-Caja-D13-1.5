@@ -3,6 +3,7 @@ package com.thiago.escenasFX.model;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -92,7 +93,7 @@ public class Venta {
     @Column(name = "descripcion_trabajo")
     private String descripcionTrabajo;
 
-    // AGENDADO | EN_CURSO | COMPLETADO | COBRADO
+    // AGENDADO | EN_CAMINO | EN_CURSO | TERMINADO | CERRADO_Y_COBRADO | CANCELADO
     @Column(name = "estado_trabajo")
     private String estadoTrabajo;
 
@@ -100,6 +101,20 @@ public class Venta {
     // cerrar y cobrar pasa a ser el momento del cobro.
     @Column(name = "fecha_programada")
     private LocalDate fechaProgramada;
+
+    // Franja horaria agendada (ej. "entre 10 y 12"). Ambos nullable: un trabajo viejo o cargado
+    // sin horario preciso sigue funcionando solo con fechaProgramada.
+    @Column(name = "hora_desde")
+    private LocalTime horaDesde;
+
+    @Column(name = "hora_hasta")
+    private LocalTime horaHasta;
+
+    // Instrucciones del jefe al cargar el ticket (ej. "tocar timbre del portero, llevar cerradura
+    // de doble paleta") — a diferencia de las notas de NotaTrabajo, es un solo campo que se edita,
+    // no una lista histórica.
+    @Column(name = "observaciones_tecnico")
+    private String observacionesTecnico;
 
     @ManyToOne
     @JoinColumn(name = "id_empleado_tecnico")

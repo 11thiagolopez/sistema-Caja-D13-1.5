@@ -726,7 +726,7 @@ class TrabajoDomicilioConciliacionIntegrationTest extends AbstractIntegrationTes
     @Test
     void borrador_noSePuedeMarcarComoCobradoSinCerrar() throws Exception {
         Map<String, Object> cuerpo = trabajo("EFECTIVO", false, List.of(manoDeObra(1000)));
-        cuerpo.put("estadoTrabajo", "COBRADO");
+        cuerpo.put("estadoTrabajo", "CERRADO_Y_COBRADO");
 
         assertThat(crearDevolviendoStatus(cuerpo)).isEqualTo(400);
     }

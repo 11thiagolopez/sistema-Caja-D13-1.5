@@ -181,6 +181,7 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 |---|---|---|---|
 | POST | `/api/ventas/trabajo-domicilio` | `TrabajoDomicilioRequest` (ver abajo) | `VentaResponse` |
 | PUT | `/api/ventas/trabajo-domicilio/{id}` | igual que POST (sin `idVenta`, va en la URL) | `VentaResponse` |
+| GET | `/api/ventas/trabajo-domicilio/{id}/notas` | — | `NotaTrabajoResponse[]`, nuevo 2026-11-25 |
 
 `TrabajoDomicilioRequest`:
 ```ts
@@ -192,7 +193,10 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
   clienteTelefono?: string;
   direccionTrabajo?: string;
   descripcionTrabajo?: string;
-  estadoTrabajo?: string;     // "AGENDADO" | "EN_CURSO" | "COMPLETADO" — "COBRADO" lo fija el backend si cerrar=true
+  estadoTrabajo?: string;     // "AGENDADO" | "EN_CAMINO" | "EN_CURSO" | "TERMINADO" — "CERRADO_Y_COBRADO" lo fija el backend si cerrar=true
+  horaDesde?: string;         // "HH:mm", franja horaria agendada — nuevo 2026-11-24
+  horaHasta?: string;
+  observacionesTecnico?: string; // instrucciones del jefe para el técnico, ej. "tocar timbre del portero" — nuevo 2026-11-24
   detalles?: { idProducto?: number; descripcion?: string; tipo?: string; cantidad: number; precioUnitario: number }[];
   cerrar: boolean;            // true = "Cerrar y cobrar" (exige al menos un ítem); false = "Guardar borrador"
 }
@@ -203,6 +207,83 @@ primero devuelve el stock de las líneas viejas con producto y recién después 
 para no descuadrar el inventario. Los artículos de catálogo sí descuentan stock real; una línea
 `tipo="SERVICIO"` (mano de obra, sin `idProducto`) no. `TrabajoDomicilio.tsx` (`/ventas/domicilio`)
 es la pantalla; `BuscadorProductoCarrito.tsx` (compartido con Cobros) es el buscador de artículos.
+**Actualizada en la Parte 4**: franja horaria (Desde/Hasta), observaciones para el técnico, los
+estados nuevos (`EN_CAMINO`/`TERMINADO`/`CANCELADO`, ver el `<select>`) y una sección de solo
+lectura "Notas del técnico" (`GET /api/ventas/trabajo-domicilio/{id}/notas`, ADMIN) para ver lo que
+Fabián fue dejando — no editable desde acá, es la misma lista que ve el técnico.
+
+### Mis trabajos (`/api/mis-trabajos`) — **exclusivo TECNICO**, nuevo 2026-11-25,
+**pantalla hecha en la Parte 4** (`pages/MisTrabajos.tsx`, rutas `/mis-trabajos` y `/mis-trabajos/:id`)
+
+El técnico (ej. Fabián) ve y actualiza únicamente los trabajos que tiene asignados — nunca otro id,
+ni aunque lo adivine (403). Permiso centralizado en `utils/permisosTrabajoDomicilio.ts`
+(`ROLES_MIS_TRABAJOS`, hoy `['TECNICO']` — agregar `'VENDEDOR'` ahí el día que corresponda alcanza,
+no hace falta tocar nada más del frontend).
+
+| Método | Ruta | Body | Devuelve |
+|---|---|---|---|
+| GET | `/api/mis-trabajos` | — | `MiTrabajoResponse[]`, ordenados por `fechaProgramada` |
+| GET | `/api/mis-trabajos/{id}` | — | `MiTrabajoResponse` |
+| POST | `/api/mis-trabajos/{id}/estado` | `{ estado: string }` | `MiTrabajoResponse` |
+| POST | `/api/mis-trabajos/{id}/notas` | `{ texto: string }` | `NotaTrabajoResponse` (201) |
+
+`MiTrabajoResponse`:
+```ts
+{
+  trabajo: VentaResponse;        // el mismo shape que ya usa TrabajoDomicilio.tsx — Fabián sí ve el precio
+  notas: NotaTrabajoResponse[];
+}
+```
+`NotaTrabajoResponse`:
+```ts
+{ idNota: number; texto: string; nombreEmpleado: string; creadoEn: string }
+```
+
+**Cómo quedó la pantalla ("Mis trabajos" del técnico, mobile-first):**
+- `estado` del `POST .../estado` solo puede ser `"EN_CAMINO" | "EN_CURSO" | "TERMINADO"` — mostrados
+  como los tres botones grandes "En camino"/"Llegué"/"Terminado"; el actual queda remarcado.
+- Un trabajo con `estadoTrabajo` en `CERRADO_Y_COBRADO`/`CANCELADO` (o `estado === "ANULADA"`) no
+  muestra los botones de estado ni el formulario de notas, con un texto aclarando que ya está
+  cerrado o cancelado — no depende de que el backend devuelva 409 para enterarse.
+- Login de un TECNICO entra directo a `/mis-trabajos` (no a Cobros): ver `Login.tsx`/`App.tsx`/
+  `ProtectedRoute.tsx`. El `Layout` le esconde sidebar y los gates de caja/cotización (no le
+  corresponden ni tiene permiso para resolverlos).
+- Cada cambio de estado y cada nota nueva disparan una notificación real al jefe, cableada desde
+  la Parte 3 — confirmado end-to-end probando en el navegador contra el perfil `demo`.
+- Botones grandes para "Cómo llegar" (`https://maps.google.com/?q=` + `direccionTrabajo`) y
+  "Llamar al cliente" (`tel:` + `clienteTelefono`) — ninguno de los dos necesita el backend, son
+  solo links.
+
+### Notificaciones (`/api/notificaciones`) — la campanita, nuevo 2026-11-25,
+**hecha en la Parte 4** (`components/Campanita.tsx`, en el topbar de ADMIN y TECNICO)
+
+Sin matcher de rol propio: cualquier autenticado (hoy ADMIN y TECNICO) ve únicamente las suyas —
+la pertenencia la filtra siempre el backend por el empleado del JWT, nunca un id del request.
+
+| Método | Ruta | Devuelve |
+|---|---|---|
+| GET | `/api/notificaciones` | `NotificacionResponse[]`, hasta 50, más nueva primero |
+| GET | `/api/notificaciones/no-leidas` | `{cantidad: number}` — para el numerito de la campanita |
+| POST | `/api/notificaciones/{id}/leida` | 204; 400 si la notificación no es propia |
+
+`NotificacionResponse`:
+```ts
+{
+  idNotificacion: number;
+  tipo: string;   // TRABAJO_NUEVO | REPROGRAMADO | CANCELADO | EN_CAMINO | LLEGO | TERMINADO | NOTA
+  texto: string;
+  idVenta: number | null;  // para armar el link al trabajo (admin: /ventas/domicilio?id=; técnico: /mis-trabajos/{id})
+  leida: boolean;
+  creadaEn: string;
+}
+```
+
+**Cómo quedó la campanita:** pollea `/no-leidas` cada 15s (mismo patrón que
+`AutorizacionesPendientes.tsx`) para el numerito del topbar; la lista completa se pide recién al
+abrir el panel. Se eligió marcar como leída **al tocar cada aviso individual** (no "marcar todas"
+automático al abrir), para no perder de vista un aviso que se vio de reojo pero no se atendió. El
+`url` no lo manda `NotificacionResponse` — se arma en el frontend a partir de `idVenta` y del rol
+de quien mira (`urlDelAviso` en `Campanita.tsx`), misma regla que usa `sw.js` para el click del push.
 
 ### Facturación fiscal (`/api/ventas/{idVenta}/factura`) — **solo ADMIN**, nuevo 2026-08-19
 
@@ -272,10 +353,17 @@ manejan con `POST /api/empleados/tecnicos` y `PUT /api/empleados/tecnicos/{id}` 
 | GET | `/api/autorizaciones/estado?retiros=1,2&descuentos=3` | ADMIN, VENDEDOR | `[{tipo, id, estado}]`, solo las propias |
 | POST | `/api/autorizaciones/retiros/{id}/aprobar` o `/rechazar` | ADMIN | `{tipo, id, estado}` |
 | POST | `/api/autorizaciones/descuentos/{id}/aprobar` o `/rechazar` | ADMIN | `{tipo, id, estado}` |
-| GET | `/api/push/clave-publica` | ADMIN | `{clavePublica}` |
-| POST | `/api/push/suscripcion` | ADMIN | 204; body `{endpoint}` |
+| GET | `/api/push/clave-publica` | ADMIN, TECNICO | `{clavePublica}` |
+| POST | `/api/push/suscripcion` | ADMIN, TECNICO | 204; body `{endpoint, p256dh, auth}` |
 
 `tipo`: `RETIRO` o `DESCUENTO`. `estado`: `PENDIENTE`, `APROBADA` o `RECHAZADA`.
+
+**`p256dh`/`auth` nuevos (2026-11-25)**: antes el body de `/api/push/suscripcion` era solo
+`{endpoint}` — ahora, además, **requeridos**. Salen de
+`suscripcion.toJSON().keys` (`PushSubscription` del navegador, después de `pushManager.subscribe`
+o de `pushManager.getSubscription()`) — ver `components/ActivarNotificaciones.tsx`, ya
+actualizado. Sin ellos el push le sigue llegando igual al dispositivo para Autorizaciones (que no
+los necesita), pero no para los avisos de trabajos a domicilio (ver más abajo), que sí.
 
 `GET /api/ventas/{id}/pdf` admite VENDEDOR, solo para sus propias ventas `CONFIRMADA` (si no, 403).
 
