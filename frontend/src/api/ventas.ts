@@ -76,3 +76,19 @@ export function cobrarTrabajoTerminado(id: number, medioPago: MedioPago): Promis
 export function reabrirTrabajo(id: number): Promise<VentaResponse> {
   return request<VentaResponse>(`/api/ventas/trabajo-domicilio/${id}/reabrir`, { method: 'POST' })
 }
+
+export function agregarNotaTrabajoDomicilio(id: number, texto: string): Promise<NotaTrabajoResponse> {
+  return request<NotaTrabajoResponse>(`/api/ventas/trabajo-domicilio/${id}/notas`, {
+    method: 'POST',
+    body: JSON.stringify({ texto }),
+  })
+}
+
+// Trabajos anteriores del mismo teléfono o dirección (sin el que se está editando).
+export function getHistorialCliente(telefono: string, direccion: string, excluir: number | null): Promise<VentaResponse[]> {
+  const params = new URLSearchParams()
+  if (telefono.trim()) params.set('telefono', telefono.trim())
+  if (direccion.trim()) params.set('direccion', direccion.trim())
+  if (excluir != null) params.set('excluir', String(excluir))
+  return request<VentaResponse[]>(`/api/ventas/trabajo-domicilio/historial-cliente?${params}`)
+}

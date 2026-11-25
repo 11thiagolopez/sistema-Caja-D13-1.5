@@ -3,6 +3,7 @@ import { ApiRequestError } from '../api/client'
 import { getAgendaTrabajos } from '../api/ventas'
 import { hoyIso } from '../utils/date'
 import { estadoVisibleTrabajo } from '../utils/estadoTrabajo'
+import { trabajosSuperpuestos } from '../utils/superposicion'
 import type { VentaResponse } from '../types/api'
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -142,9 +143,17 @@ export function AgendaSemanal({
               {delDia.length === 0 && <p className="agenda-vacio">—</p>}
               {delDia.map((t) => {
                 const { clase, etiqueta } = estadoVisibleTrabajo(t)
+                // Contra todos los trabajos de la semana, no solo los filtrados: el aviso vale igual.
+                const pisado = t.fechaProgramada != null && trabajosSuperpuestos(trabajos, { ...t, fechaProgramada: t.fechaProgramada }).length > 0
                 return (
-                  <button key={t.idVenta} type="button" className={`agenda-trabajo ${clase}`} onClick={() => onAbrir(t)}>
+                  <button
+                    key={t.idVenta}
+                    type="button"
+                    className={`agenda-trabajo ${clase}${pisado ? ' agenda-trabajo-pisado' : ''}`}
+                    onClick={() => onAbrir(t)}
+                  >
                     <span className="agenda-trabajo-hora">{horario(t)}</span>
+                    {pisado && <span className="agenda-trabajo-aviso">Se superpone con otro trabajo del técnico</span>}
                     <span className="agenda-trabajo-direccion">{t.direccionTrabajo || 'Sin dirección'}</span>
                     <span>{t.clienteNombre || 'Sin nombre'}</span>
                     <span className="agenda-trabajo-pie">

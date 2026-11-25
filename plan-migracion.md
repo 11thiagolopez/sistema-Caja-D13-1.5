@@ -3314,3 +3314,35 @@ aviso de trabajos superpuestos del mismo técnico, fotos marcadas Antes/Después
 3.1 confirmación por WhatsApp (wa.me), 3.2 historial del cliente/dirección, 3.3 reportes (cantidad
 e ingresos por mes, tiempo promedio En camino → Terminado del técnico), 3.4 resumen mensual de
 comisiones por técnico.
+
+## 38. Faltantes de la Etapa 1/2 + Etapa 3.1 y 3.2 (2026-11-25)
+
+1. **Notas del jefe** (tabla de permisos del documento: "Agregar notas: Jefe sí"):
+   `POST /api/ventas/trabajo-domicilio/{id}/notas` (ADMIN), `NotaTrabajoJefeService`. Misma
+   lista `notas_trabajo` que las del técnico; avisa al técnico asignado ("Nota del jefe en #N:
+   ..."); 409 si el trabajo está bloqueado. En `TrabajoDomicilio.tsx` la sección pasó de "Notas del
+   técnico" (solo lectura) a "Notas", con formulario.
+2. **Aviso de trabajos superpuestos** (Etapa 2: "aviso si dos se superponen"), solo frontend
+   (`utils/superposicion.ts`): mismo técnico, mismo día, trabajos abiertos, horarios que se pisan
+   (sin hora de fin = 1 hora; 10–12 y 12–14 no se pisan; sin hora de inicio no cuenta). Al guardar
+   pide confirmación listando los que se pisan (es un aviso, no un bloqueo); en la agenda semanal
+   las tarjetas que se pisan quedan marcadas.
+3. **Etapa 3.1 — Confirmación por WhatsApp** (`utils/whatsapp.ts`): botón "Confirmar turno por
+   WhatsApp" junto al teléfono (pantalla del jefe), link `wa.me` con el mensaje armado ("Hola
+   Carlos! Te confirmamos el turno para el miércoles 25/11/2026 de 10 a 12 en ..."). Sin API.
+   Normaliza números argentinos (saca +54, 9, 0 y el 15 después del código de área) a
+   `549` + 10 dígitos; si no llega a 10 dígitos no muestra el botón y explica por qué.
+4. **Etapa 3.2 — Historial del cliente**: `GET /api/ventas/trabajo-domicilio/historial-cliente?
+   telefono&direccion&excluir` (ADMIN), `HistorialClienteService`: trabajos no eliminados con el
+   mismo teléfono (últimos 8 dígitos) o la misma dirección (sin mayúsculas, tildes ni puntuación),
+   del más reciente al más viejo, máx. 15. `components/HistorialCliente.tsx` lo muestra debajo de
+   la dirección mientras se carga el trabajo (con espera de 500 ms entre teclas).
+
+Probado en Chrome contra el perfil `demo`: superposición marcada en la agenda y aviso al guardar,
+historial encontrado con el teléfono escrito en otro formato, link de WhatsApp correcto, nota del
+jefe. Backend: **470 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores.
+Sin SQL.
+
+**Pendiente:** fotos marcadas Antes/Después (necesita una columna nueva — SQL a aprobar por el
+dueño); Etapa 3.3 (reportes: cantidad e ingresos por mes, tiempo promedio En camino → aviso de
+terminado) y 3.4 (resumen mensual de comisiones por técnico).
