@@ -9,7 +9,16 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-25, noche — revisión contra el documento del dueño + "Terminado" que bloquea):
+Estado Actual (Actualizado al 2026-11-25, noche — DOCUMENTO "Nuevo flujo de trabajos a domicilio" IMPLEMENTADO COMPLETO):
+
+**Sección 39 de `plan-migracion.md`**: fotos Antes/Después (`fotos_trabajo.momento`, SQL ya corrido en
+producción; obligatorio para el técnico), Etapa 3.3 reportes (por mes, tiempo promedio general/por
+técnico/por trabajo desde el historial de estados) y 3.4 comisiones por mes por técnico. 473 tests.
+Etapas 1, 2 y 3 completas salvo el cobro en el domicilio (el dueño decidió no hacerlo, sección 37).
+Quedan los pendientes generales de la lista de abajo (Mercado Libre, RLS, limpieza de las tablas
+`conversaciones`/`mensajes`, reactivar notificaciones en los 2 dispositivos viejos).
+
+Estado Anterior (Actualizado al 2026-11-25, noche — revisión contra el documento del dueño + "Terminado" que bloquea):
 
 **Sección 37 de `plan-migracion.md`** (leerla antes de seguir): decisiones del dueño tras comparar
 con el documento y el prompt original — caja de trabajos aparte, **sin cobro en el domicilio**

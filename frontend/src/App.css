@@ -1302,7 +1302,8 @@ section {
   border-radius: 4px;
 }
 
-.caja-resumen .tabla-scroll {
+.caja-resumen .tabla-scroll,
+.reportes .tabla-scroll {
   overflow-x: auto;
 }
 
@@ -2101,4 +2102,24 @@ section {
   font-size: 12px;
   font-weight: 700;
   color: var(--aviso);
+}
+
+/* Fotos agrupadas: del cliente / antes / después. */
+.fotos-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.fotos-grupo-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fotos-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

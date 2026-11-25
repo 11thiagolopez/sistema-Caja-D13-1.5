@@ -1,5 +1,5 @@
 import { request, requestBlob, requestForm } from './client'
-import type { FotoTrabajoResponse } from '../types/api'
+import type { FotoTrabajoResponse, MomentoFoto } from '../types/api'
 
 // Las mismas fotos, por dos caminos distintos según quién mira: el jefe por la agenda (ADMIN) y el
 // técnico por "Mis trabajos" (que en el backend valida que el trabajo sea suyo).
@@ -13,8 +13,15 @@ export function getFotosTrabajo(idVenta: number): Promise<FotoTrabajoResponse[]>
   return request<FotoTrabajoResponse[]>(base('jefe', idVenta))
 }
 
-export function subirFotosTrabajo(lado: LadoFotos, idVenta: number, fotos: Blob[]): Promise<FotoTrabajoResponse[]> {
+export function subirFotosTrabajo(
+  lado: LadoFotos,
+  idVenta: number,
+  fotos: Blob[],
+  momento: MomentoFoto | null,
+): Promise<FotoTrabajoResponse[]> {
   const form = new FormData()
+  // El técnico elige antes/después (obligatorio para él); las del jefe no llevan momento.
+  if (momento) form.append('momento', momento)
   fotos.forEach((foto, i) => form.append('fotos', foto, `foto-${i + 1}.jpg`))
   return requestForm<FotoTrabajoResponse[]>(base(lado, idVenta), form)
 }

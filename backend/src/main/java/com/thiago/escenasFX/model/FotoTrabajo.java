@@ -51,6 +51,11 @@ public class FotoTrabajo {
     @Column(name = "tipo_contenido", nullable = false, length = 30)
     private String tipoContenido;
 
+    // null = foto que sube el jefe (normalmente las que le manda el cliente); ANTES / DESPUES = las que
+    // saca el técnico en el domicilio, como comprobante ante reclamos (documento del dueño).
+    @Column(name = "momento", length = 10)
+    private String momento;
+
     @Column(name = "creada_en", nullable = false)
     private LocalDateTime creadaEn = LocalDateTime.now();
 }

@@ -362,11 +362,15 @@ export interface TrabajoTecnico {
 }
 
 // Foto de un trabajo a domicilio (sin la imagen: se pide aparte por su id).
+export type MomentoFoto = 'ANTES' | 'DESPUES'
+
 export interface FotoTrabajoResponse {
   idFoto: number
   idEmpleado: number
   nombreEmpleado: string
   creadaEn: string
+  // null = la subió el jefe (fotos del cliente); ANTES / DESPUES = las saca el técnico en el domicilio.
+  momento: MomentoFoto | null
 }
 
 export interface MiTrabajoResponse {
@@ -670,6 +674,9 @@ export interface ReporteTrabajosResponse {
   paraNegocio: number
   costoArticulos: number
   gananciaNegocio: number
+  // Minutos de "En camino" al aviso "Terminé" del técnico (o al Terminado del jefe); null si no hay datos.
+  tiempoPromedioMinutos: number | null
+  trabajosConTiempo: number
   porTecnico: {
     idEmpleado: number | null
     nombre: string
@@ -677,9 +684,14 @@ export interface ReporteTrabajosResponse {
     manoDeObra: number
     paraTecnico: number
     paraNegocio: number
+    tiempoPromedioMinutos: number | null
   }[]
   porDia: PuntoGraficoDTO[]
   porMedioPago: PuntoGraficoDTO[]
+  // mes: "2026-11". Todos los meses del rango, aunque estén en cero.
+  porMes: { mes: string; cantidadTrabajos: number; total: number; paraTecnicos: number }[]
+  // Para liquidar: lo que se llevó cada técnico en cada mes (por fecha de cobro).
+  comisionesPorMes: { mes: string; idEmpleado: number; nombre: string; cantidadTrabajos: number; manoDeObra: number; paraTecnico: number }[]
   trabajos: {
     idVenta: number
     fecha: string
@@ -692,6 +704,7 @@ export interface ReporteTrabajosResponse {
     articulos: number
     paraTecnico: number
     paraNegocio: number
+    minutos: number | null
   }[]
 }
 
