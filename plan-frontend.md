@@ -182,6 +182,7 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 | POST | `/api/ventas/trabajo-domicilio` | `TrabajoDomicilioRequest` (ver abajo) | `VentaResponse` |
 | PUT | `/api/ventas/trabajo-domicilio/{id}` | igual que POST (sin `idVenta`, va en la URL) | `VentaResponse` |
 | GET | `/api/ventas/trabajo-domicilio/{id}/notas` | — | `NotaTrabajoResponse[]`, nuevo 2026-11-25 |
+| GET | `/api/ventas/trabajo-domicilio/{id}/orden` | — | PDF de 58mm (orden de trabajo para la Xprinter), `inline`. 409 si el trabajo está eliminado, 400 si no es DOMICILIO. Nuevo 2026-11-25 (Parte 5) |
 
 `TrabajoDomicilioRequest`:
 ```ts
@@ -211,6 +212,10 @@ es la pantalla; `BuscadorProductoCarrito.tsx` (compartido con Cobros) es el busc
 estados nuevos (`EN_CAMINO`/`TERMINADO`/`CANCELADO`, ver el `<select>`) y una sección de solo
 lectura "Notas del técnico" (`GET /api/ventas/trabajo-domicilio/{id}/notas`, ADMIN) para ver lo que
 Fabián fue dejando — no editable desde acá, es la misma lista que ve el técnico.
+**Parte 5**: botón "Imprimir orden de trabajo" (cualquier trabajo guardado y no eliminado, también
+los ya cobrados) que abre el PDF de 58mm en otra pestaña (`descargarOrdenTrabajo` + `verBlob`) para
+imprimirlo en la Xprinter. Sale con lo último guardado: si hay cambios sin guardar, la pantalla
+pide guardar primero en vez de imprimir una orden distinta de lo que se ve.
 
 ### Mis trabajos (`/api/mis-trabajos`) — **exclusivo TECNICO**, nuevo 2026-11-25,
 **pantalla hecha en la Parte 4** (`pages/MisTrabajos.tsx`, rutas `/mis-trabajos` y `/mis-trabajos/:id`)

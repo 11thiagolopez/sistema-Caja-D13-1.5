@@ -3134,3 +3134,39 @@ hacer), la Etapa 2 (materiales que descuentan stock, recordatorio push 1h antes,
 semanal) y la Etapa 3 del documento original, más las dos tareas de limpieza ya mencionadas
 (tablas `conversaciones`/`mensajes`, y que cada dispositivo ya suscripto reactive las
 notificaciones una vez).
+
+**Parte 5 de la Etapa 1 (2026-11-25, TERMINADA — impresión térmica de la orden de trabajo):**
+
+1. **`OrdenTrabajoHtmlBuilder` nuevo** (backend, `service/`): XHTML de 58mm para la Xprinter que
+   **reusa `TicketHtmlBuilder.estilos()`** (misma página fija 58mm × 210mm, todo en negrita y negro
+   puro) para no tener dos criterios de impresión térmica que puedan divergir. Lleva: logo y datos
+   del local, título "ORDEN DE TRABAJO N° {id}" (en lugar de la "X" del ticket — una orden no es un
+   comprobante de venta), fecha programada, franja horaria ("10:00 a 12:00" / "desde las ..." /
+   "hasta las ..."), técnico, cliente, teléfono, dirección, descripción del trabajo,
+   observaciones del jefe (respetando los saltos de línea), artículos y mano de obra con precio y
+   total (Fabián sí ve el precio — decisión del dueño), y renglones de "Firma" y "Aclaración" para
+   la conformidad del cliente. Un trabajo sin ítems todavía lo aclara y no muestra total. Los
+   datos opcionales vacíos no dejan renglones en blanco. Todo el texto dinámico pasa por
+   `XmlEscaper`.
+2. **`VentaService.generarOrdenTrabajoPdf(id)`** + endpoint **`GET
+   /api/ventas/trabajo-domicilio/{id}/orden`** (ADMIN por el matcher ya existente de
+   `/api/ventas/trabajo-domicilio/**`; `Content-Disposition: inline`). **400** si la venta no es
+   DOMICILIO, **409** si el trabajo está eliminado (`ANULADA`). Sirve también para trabajos ya
+   cobrados (reimpresión).
+3. **Frontend**: botón "Imprimir orden de trabajo" en `TrabajoDomicilio.tsx` (cualquier trabajo
+   guardado y no eliminado), que abre el PDF en otra pestaña con `verBlob` — mismo flujo que "Ver
+   comprobante". **A pedido, nunca automática** (default acordado con el dueño). Si hay cambios
+   sin guardar, pide guardar primero: la orden sale con lo último guardado en el backend, y no
+   tiene que diferir de lo que se ve en pantalla.
+
+Tests nuevos: `OrdenTrabajoHtmlBuilderTest` (4: contenido + escapado, sin ítems, sin datos
+opcionales, franja horaria) y `OrdenTrabajoIntegrationTest` (3: ADMIN recibe un PDF real, TECNICO
+403, trabajo eliminado 409). Backend: **445 tests** verdes. Frontend: `tsc -b`, `oxlint` (solo
+los warnings de siempre) y `vite build` sin errores. **No probado contra la Xprinter física**
+(no hay impresora conectada a este equipo) — pendiente de que el dueño imprima una orden de
+prueba y confirme que se lee bien, igual que se hizo con el ticket (secciones 21-23).
+
+**Con esto, la Etapa 1 del documento del dueño queda COMPLETA.** Siguen pendientes: la Etapa 2
+(materiales que descuentan stock, recordatorio push 1h antes, fotos, agenda semanal) y la Etapa
+3 del documento original, más las dos tareas de limpieza (tablas `conversaciones`/`mensajes`, y
+que cada dispositivo ya suscripto reactive las notificaciones una vez).

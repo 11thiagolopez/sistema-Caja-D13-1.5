@@ -618,6 +618,10 @@ export interface BalanceFinancieroResponse {
 export interface TecnicoRequest {
   nombre: string
   comision: number
+  // Opcionales: con usuario+password el técnico puede entrar al sistema (ve solo sus trabajos a
+  // domicilio). Sin usuario queda sin acceso. En la edición, password vacía = no se cambia.
+  usuario?: string
+  password?: string
 }
 
 // total = paraTecnicos + paraNegocio. gananciaNegocio además le resta el costo de los artículos.

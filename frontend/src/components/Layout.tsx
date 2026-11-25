@@ -63,7 +63,6 @@ const SECCIONES: NavSection[] = [
     roles: ['ADMIN'],
     items: [
       { label: 'Reporte de trabajos', to: '/reportes/trabajos' },
-      { label: 'Técnicos', to: '/tecnicos' },
     ],
   },
 ]
@@ -77,6 +76,7 @@ const ENLACES_SUELTOS: NavItem[] = [
   { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
   { label: 'Clientes', to: '/clientes', roles: ['ADMIN'] },
   { label: 'Vendedores', to: '/vendedores', roles: ['ADMIN'] },
+  { label: 'Técnicos', to: '/tecnicos', roles: ['ADMIN'] },
   { label: 'Gastos', to: '/gastos', roles: ['ADMIN'] },
   { label: 'Facturación', to: '/comprobantes', roles: ['ADMIN'] },
   { label: 'Recargos de tarjeta', to: '/configuracion/recargos', roles: ['ADMIN'] },

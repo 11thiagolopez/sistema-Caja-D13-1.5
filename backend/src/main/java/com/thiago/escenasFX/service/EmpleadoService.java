@@ -17,6 +17,8 @@ import com.thiago.escenasFX.repository.EmpleadoRepository;
 @Service
 public class EmpleadoService {
 
+    static final String PREFIJO_USUARIO_SIN_ACCESO = "tecnico-";
+
     private final EmpleadoRepository empleadoRepo;
     private final PasswordEncoder passwordEncoder;
 
@@ -67,14 +69,17 @@ public class EmpleadoService {
      */
     @Transactional
     public Empleado crearTecnico(TecnicoRequest req) {
-        boolean conAcceso = req.getUsuario() != null && !req.getUsuario().isBlank();
+        boolean conAcceso = tieneTexto(req.getUsuario());
         if (conAcceso) {
             validarUsuarioLibre(req.getUsuario(), null);
+            if (!tieneTexto(req.getPassword())) {
+                throw new IllegalArgumentException("Para que el técnico pueda entrar al sistema hace falta una contraseña");
+            }
         }
 
         Empleado tecnico = new Empleado();
         tecnico.setNombre(req.getNombre());
-        tecnico.setUsuario(conAcceso ? req.getUsuario() : "tecnico-" + UUID.randomUUID());
+        tecnico.setUsuario(conAcceso ? req.getUsuario() : PREFIJO_USUARIO_SIN_ACCESO + UUID.randomUUID());
         tecnico.setPasswordHash(passwordEncoder.encode(conAcceso ? req.getPassword() : UUID.randomUUID().toString()));
         tecnico.setRol("TECNICO");
         tecnico.setComision(req.getComision());
@@ -90,17 +95,35 @@ public class EmpleadoService {
         }
         tecnico.setNombre(req.getNombre());
         tecnico.setComision(req.getComision());
-        if (req.getUsuario() != null && !req.getUsuario().isBlank()) {
+        if (tieneTexto(req.getUsuario())) {
             validarUsuarioLibre(req.getUsuario(), id);
+            // Darle acceso a uno que no lo tenía sin contraseña lo dejaría con la contraseña al
+            // azar del alta, que nadie conoce: igual sin poder entrar.
+            if (!tieneAcceso(tecnico) && !tieneTexto(req.getPassword())) {
+                throw new IllegalArgumentException("Para darle acceso al técnico hace falta una contraseña");
+            }
             tecnico.setUsuario(req.getUsuario());
-            if (req.getPassword() != null && !req.getPassword().isBlank()) {
+            if (tieneTexto(req.getPassword())) {
                 tecnico.setPasswordHash(passwordEncoder.encode(req.getPassword()));
             }
         }
         return empleadoRepo.save(tecnico);
     }
 
+    /** Un técnico dado de alta sin acceso queda con un usuario "tecnico-&lt;uuid&gt;" que nadie conoce. */
+    public static boolean tieneAcceso(Empleado empleado) {
+        return !empleado.getUsuario().startsWith(PREFIJO_USUARIO_SIN_ACCESO);
+    }
+
+    private static boolean tieneTexto(String valor) {
+        return valor != null && !valor.isBlank();
+    }
+
     private void validarUsuarioLibre(String usuario, Integer idAIgnorar) {
+        if (usuario != null && usuario.startsWith(PREFIJO_USUARIO_SIN_ACCESO)) {
+            throw new IllegalArgumentException("El usuario no puede empezar con \"" + PREFIJO_USUARIO_SIN_ACCESO
+                + "\": está reservado para los técnicos sin acceso al sistema");
+        }
         empleadoRepo.findByUsuario(usuario)
             .filter(otro -> idAIgnorar == null || !otro.getIdEmpleado().equals(idAIgnorar))
             .ifPresent(otro -> {

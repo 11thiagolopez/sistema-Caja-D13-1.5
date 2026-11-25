@@ -5,6 +5,7 @@ import { getProductos } from '../api/productos'
 import { getEmpleados } from '../api/empleados'
 import {
   anularTrabajoDomicilio,
+  descargarOrdenTrabajo,
   descargarVentaPdf,
   getNotasTrabajoDomicilio,
   getVenta,
@@ -64,6 +65,7 @@ export function TrabajoDomicilio() {
   const [idBuscar, setIdBuscar] = useState('')
   const [cargando, setCargando] = useState(false)
   const [abriendoComprobante, setAbriendoComprobante] = useState(false)
+  const [abriendoOrden, setAbriendoOrden] = useState(false)
 
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
@@ -215,6 +217,25 @@ export function TrabajoDomicilio() {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo abrir el comprobante')
     } finally {
       setAbriendoComprobante(false)
+    }
+  }
+
+  // La orden sale con lo último guardado en el backend, así que con cambios pendientes se frena
+  // para no imprimir una orden distinta de lo que se ve en pantalla.
+  async function imprimirOrden() {
+    if (idVenta == null) return
+    setError(null)
+    if (!soloLectura && hayCambios) {
+      setError('Guardá los cambios antes de imprimir la orden: sale con lo último guardado.')
+      return
+    }
+    setAbriendoOrden(true)
+    try {
+      verBlob(await descargarOrdenTrabajo(idVenta))
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo abrir la orden de trabajo')
+    } finally {
+      setAbriendoOrden(false)
     }
   }
 
@@ -431,6 +452,14 @@ export function TrabajoDomicilio() {
       {fechaTrabajo && (
         <p className="trabajo-detalle">
           {estadoVenta === 'CONFIRMADA' ? 'Cobrado' : 'Cargado'} el {formatoFechaHora(fechaTrabajo)}
+        </p>
+      )}
+      {idVenta != null && estadoVenta !== 'ANULADA' && (
+        <p>
+          <button type="button" onClick={imprimirOrden} disabled={abriendoOrden}>
+            {abriendoOrden && <span className="spinner" />}
+            {abriendoOrden ? 'Abriendo...' : 'Imprimir orden de trabajo'}
+          </button>
         </p>
       )}
 

@@ -151,4 +151,57 @@ class EmpleadoServiceTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
             () -> empleadoService.actualizarTecnico(5, tecnicoRequest(null, null)));
     }
+
+    @Test
+    void crearTecnico_conUsuarioSinPassword_rechaza() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> empleadoService.crearTecnico(tecnicoRequest("fabian", " ")));
+    }
+
+    @Test
+    void crearTecnico_conUsuarioDelPrefijoReservado_rechaza() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> empleadoService.crearTecnico(tecnicoRequest("tecnico-fabian", "clave123")));
+    }
+
+    private Empleado tecnicoSinAcceso() {
+        Empleado existente = new Empleado();
+        existente.setIdEmpleado(5);
+        existente.setRol("TECNICO");
+        existente.setUsuario("tecnico-1234");
+        existente.setPasswordHash("hash-al-azar");
+        when(empleadoRepo.findById(5)).thenReturn(Optional.of(existente));
+        return existente;
+    }
+
+    @Test
+    void actualizarTecnico_darleAccesoSinPassword_rechaza() {
+        tecnicoSinAcceso();
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> empleadoService.actualizarTecnico(5, tecnicoRequest("fabian", null)));
+    }
+
+    @Test
+    void actualizarTecnico_darleAccesoConPassword_quedaConAccesoReal() {
+        tecnicoSinAcceso();
+
+        Empleado actualizado = empleadoService.actualizarTecnico(5, tecnicoRequest("fabian", "clave123"));
+
+        assertThat(actualizado.getUsuario()).isEqualTo("fabian");
+        assertThat(actualizado.getPasswordHash()).isEqualTo("hash");
+        assertThat(EmpleadoService.tieneAcceso(actualizado)).isTrue();
+    }
+
+    @Test
+    void actualizarTecnico_conAccesoYSinPasswordNueva_conservaLaContrasena() {
+        Empleado existente = tecnicoSinAcceso();
+        existente.setUsuario("fabian");
+        existente.setPasswordHash("hash-viejo");
+
+        Empleado actualizado = empleadoService.actualizarTecnico(5, tecnicoRequest("fabian2", null));
+
+        assertThat(actualizado.getUsuario()).isEqualTo("fabian2");
+        assertThat(actualizado.getPasswordHash()).isEqualTo("hash-viejo");
+    }
 }

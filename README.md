@@ -106,12 +106,20 @@ worker) + Web Push · oxlint.
   origen), dolarización de precios con cotización diaria.
 - **Clientes y facturación**: catálogo de clientes con cuenta corriente auditable, facturación
   fiscal real ante AFIP/ARCA (Factura C), notas de crédito con emisión fiscal propia, comprobantes
-  no fiscales (ticket/remito) con diseño para impresora térmica 58mm.
+  no fiscales (ticket/remito) con diseño para impresora térmica 58mm. Al dar de alta un cliente
+  con CUIT, la razón social, el domicilio y la condición de IVA se autocompletan desde el padrón
+  de ARCA (`ws_sr_constancia_inscripcion`).
 - **Trabajos a domicilio**: agenda con calendario, artículos de catálogo + mano de obra, técnico
   asignado, comisión separada solo sobre la mano de obra.
 - **Gestión y reportes**: empleados con % de comisión, gastos operativos, balance financiero,
   ventas por marca/día/forma de pago, ranking de productos, comisiones por vendedor — todo con
   gráficos (Chart.js) y filtro global de fechas.
+
+### En desarrollo
+
+- **Integración con Mercado Libre** (en planificación): descuento automático de stock por cada
+  venta en ML vía webhooks, sincronización de stock del local hacia ML, y avisos push de ventas,
+  preguntas y stock bajo. Vinculación producto ↔ publicación por SKU.
 
 ## Demo local (con datos inventados)
 
