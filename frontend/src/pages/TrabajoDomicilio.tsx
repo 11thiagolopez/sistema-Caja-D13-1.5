@@ -5,11 +5,13 @@ import { getProductos } from '../api/productos'
 import { getEmpleados } from '../api/empleados'
 import {
   anularTrabajoDomicilio,
+  cobrarTrabajoTerminado,
   descargarOrdenTrabajo,
   descargarVentaPdf,
   getNotasTrabajoDomicilio,
   getVenta,
   guardarTrabajoDomicilio,
+  reabrirTrabajo,
 } from '../api/ventas'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
@@ -44,7 +46,9 @@ const ESTADOS: { valor: EstadoTrabajo; etiqueta: string }[] = [
   { valor: 'AGENDADO', etiqueta: 'Agendado' },
   { valor: 'EN_CAMINO', etiqueta: 'En camino' },
   { valor: 'EN_CURSO', etiqueta: 'En curso' },
-  { valor: 'TERMINADO', etiqueta: 'Terminado' },
+  { valor: 'TERMINADO_TECNICO', etiqueta: 'El técnico avisó que terminó' },
+  // Bloquea el trabajo: después solo se cobra o se reabre.
+  { valor: 'TERMINADO', etiqueta: 'Terminado (bloquea el trabajo)' },
 ]
 
 // Para saber si hay cambios sin guardar antes de volver a la lista.
@@ -241,6 +245,38 @@ export function TrabajoDomicilio() {
 
   // La orden sale con lo último guardado en el backend, así que con cambios pendientes se frena
   // para no imprimir una orden distinta de lo que se ve en pantalla.
+  async function cobrarTerminado() {
+    if (idVenta == null || !medioPago) return
+    setError(null)
+    setMensaje(null)
+    setGuardando(true)
+    try {
+      const venta = await cobrarTrabajoTerminado(idVenta, medioPago)
+      precargarDesdeVenta(venta)
+      setMensaje(`Trabajo #${venta.idVenta} cerrado y cobrado.`)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo cobrar el trabajo')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function reabrir() {
+    if (idVenta == null) return
+    setError(null)
+    setMensaje(null)
+    setGuardando(true)
+    try {
+      const venta = await reabrirTrabajo(idVenta)
+      precargarDesdeVenta(venta)
+      setMensaje(`Trabajo #${venta.idVenta} reabierto: ya se puede modificar de nuevo.`)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'No se pudo reabrir el trabajo')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   function elegirVistaAgenda(vista: 'semana' | 'mes') {
     setVistaAgenda(vista)
     try {
@@ -361,7 +397,9 @@ export function TrabajoDomicilio() {
   const gananciaNeta = gananciaArticulos + manoDeObraTotal - comision
 
   // Ya cobrado no se edita: guardarlo de nuevo lo sacaría de la caja en la que se cobró.
-  const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA'
+  // Terminado por el jefe y sin cobrar: bloqueado, solo queda "Cerrar y cobrar" o "Reabrir".
+  const terminado = estadoVenta === 'EN_PROGRESO' && estadoTrabajoGuardado === 'TERMINADO'
+  const soloLectura = estadoVenta === 'CONFIRMADA' || estadoVenta === 'ANULADA' || terminado
   const hayCambios =
     firmaDe(
       [
@@ -397,6 +435,16 @@ export function TrabajoDomicilio() {
       return
     }
     if (!medioPago) return
+    if (
+      !cerrar &&
+      estadoTrabajo === 'TERMINADO' &&
+      estadoTrabajoGuardado !== 'TERMINADO' &&
+      !window.confirm(
+        'Al marcarlo Terminado el trabajo queda bloqueado: no se pueden cambiar datos, artículos ni precios, y el técnico ya no puede actualizarlo. Después solo se puede cobrar o reabrir. ¿Seguir?',
+      )
+    ) {
+      return
+    }
     setError(null)
     setMensaje(null)
     setGuardando(true)
@@ -510,6 +558,33 @@ export function TrabajoDomicilio() {
         </p>
       )}
 
+      {terminado && (
+        <section className="trabajo-terminado">
+          <p>
+            <strong>Trabajo terminado.</strong> Ya no se pueden cambiar datos, artículos, precios, notas ni fotos. Cobralo
+            con los ítems tal cual están, o reabrilo si hay que corregir algo.
+          </p>
+          <div className="comprobante-acciones">
+            <label>
+              Medio de pago
+              <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+                {!medioPago && <option value="">Elegí el medio de pago</option>}
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="TARJETA">Tarjeta</option>
+              </select>
+            </label>
+            <button type="button" onClick={cobrarTerminado} disabled={guardando || !medioPago}>
+              {guardando && <span className="spinner" />}
+              Cerrar y cobrar
+            </button>
+            <button type="button" className="boton-secundario" onClick={reabrir} disabled={guardando}>
+              Reabrir
+            </button>
+          </div>
+        </section>
+      )}
+
       {estadoVenta === 'CONFIRMADA' && (
         <section>
           <p>Este trabajo ya se cobró, por eso no se puede editar.</p>
@@ -550,7 +625,7 @@ export function TrabajoDomicilio() {
               fotos={fotos}
               onCambio={setFotos}
               idEmpleadoActual={sesion?.idEmpleado}
-              puedeSubir
+              puedeSubir={!soloLectura}
               ayuda="Subí las fotos que te mande el cliente para que el técnico sepa con qué se va a encontrar. Acá también ves las que suba él."
             />
           )}
@@ -772,7 +847,7 @@ export function TrabajoDomicilio() {
         </div>
       )}
 
-      {idVenta && estadoVenta !== 'ANULADA' && (
+      {idVenta && estadoVenta !== 'ANULADA' && !terminado && (
         <div className="comprobante-acciones">
           <button type="button" className="boton-rechazar" onClick={eliminar} disabled={anulando || guardando}>
             {anulando && <span className="spinner" />}

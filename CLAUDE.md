@@ -9,7 +9,17 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-25, noche — ETAPA 2 COMPLETA):
+Estado Actual (Actualizado al 2026-11-25, noche — revisión contra el documento del dueño + "Terminado" que bloquea):
+
+**Sección 37 de `plan-migracion.md`** (leerla antes de seguir): decisiones del dueño tras comparar
+con el documento y el prompt original — caja de trabajos aparte, **sin cobro en el domicilio**
+(cobra siempre el jefe), stock como está, materiales los carga el jefe, fotos en la base,
+Reprogramado no es estado. **"Terminado" del técnico = `TERMINADO_TECNICO`, solo aviso; `TERMINADO`
+lo pone solo el jefe y bloquea todo** (datos, ítems, precios, notas, fotos, eliminar) — quedan
+`POST .../{id}/cobrar` y `POST .../{id}/reabrir`. Sin SQL. **Próximo, de a una parte:** notas del
+jefe, aviso de superposición, fotos Antes/Después; después Etapa 3 partes 3.1 a 3.4.
+
+Estado Anterior (Actualizado al 2026-11-25, noche — ETAPA 2 COMPLETA):
 
 **Sección 36 de `plan-migracion.md`**: panel de avisos arreglado (tapaba la pantalla en blanco en
 escritorio por la regla `.topbar-usuario button`; en celular se cortaba porque estaba anclado al

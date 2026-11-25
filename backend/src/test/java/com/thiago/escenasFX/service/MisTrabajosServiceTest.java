@@ -110,16 +110,36 @@ class MisTrabajosServiceTest {
     }
 
     @Test
-    void cambiarEstado_aTerminado_avisaAlJefeConElTipoTerminado() {
+    void cambiarEstado_avisoDeTerminado_avisaAlJefeSinBloquearElTrabajo() {
         Empleado fabian = tecnico(1);
         Venta venta = trabajoDe(fabian, "EN_CURSO", "EN_PROGRESO");
         when(ventaRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(venta));
         when(ventaRepo.save(any(Venta.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Venta actualizado = misTrabajosService.cambiarEstado(1, "TERMINADO", fabian);
+        Venta actualizado = misTrabajosService.cambiarEstado(1, "TERMINADO_TECNICO", fabian);
 
+        assertThat(actualizado.getEstadoTrabajo()).isEqualTo("TERMINADO_TECNICO");
+        assertThat(VentaService.estaBloqueado(actualizado)).isFalse();
         verify(notificacionTrabajoService).avisarATodosLosAdmin(org.mockito.ArgumentMatchers.eq("TERMINADO"),
             org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(actualizado));
+    }
+
+    @Test
+    void cambiarEstado_elTecnicoNoPuedeFijarElTerminadoDelJefe() {
+        Empleado fabian = tecnico(1);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> misTrabajosService.cambiarEstado(1, "TERMINADO", fabian));
+    }
+
+    @Test
+    void cambiarEstado_deUnTrabajoTerminadoPorElJefe_rechaza() {
+        Empleado fabian = tecnico(1);
+        Venta venta = trabajoDe(fabian, "TERMINADO", "EN_PROGRESO");
+        when(ventaRepo.buscarPorIdConLock(1)).thenReturn(Optional.of(venta));
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+            () -> misTrabajosService.cambiarEstado(1, "EN_CURSO", fabian));
     }
 
     @Test

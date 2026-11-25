@@ -3271,3 +3271,46 @@ cambios (460 tests).
 
 **Etapa 2 completa** (fotos, recordatorio, agenda semanal, precio de materiales). Etapa 3 del
 documento del dueño sin empezar.
+
+## 37. Revisión contra el documento y el prompt original + "Terminado" del jefe que bloquea (2026-11-25)
+
+El dueño pasó el documento "Nuevo flujo de trabajos a domicilio" y el prompt original con las 3
+etapas. Se comparó lo hecho contra ambos (detalle en la conversación) y el dueño resolvió:
+
+- **Caja**: la plata de los trabajos es una caja aparte, nunca se junta con la de mostrador (como
+  hoy). **No hay cobro en el domicilio**: cobra siempre el jefe con "Cerrar y cobrar" → la parte
+  3.5 de la Etapa 3 no se hace.
+- **Stock**: se queda como está (se descuenta al cargar el artículo en el trabajo y vuelve si se
+  cancela o se corrige), aunque el prompt decía "al cerrar".
+- **Materiales**: los carga solo el jefe (son los artículos del trabajo, con precio editable).
+- **Fotos**: se quedan en la base (bytea), no en Supabase Storage.
+- **Reprogramado** no es un estado: queda en el historial y avisa, el trabajo sigue "Agendado".
+- **"Llamar al cliente"/teléfono** fuera de la vista y la orden del técnico (sección 35).
+
+**"Terminado" nuevo (pedido del dueño):** el "Terminado" del técnico es solo información para el
+jefe; solo el jefe pone el trabajo Terminado, y ahí ya no se puede seguir editando.
+- Estado nuevo `TERMINADO_TECNICO` (cabe en `ventas.estado_trabajo` VARCHAR(30), **sin SQL**): lo
+  fija el botón "Terminé" del técnico; avisa al jefe "X avisó que terminó el trabajo #N...";
+  no bloquea nada. El técnico ya no puede fijar `TERMINADO` (400).
+- `TERMINADO` lo fija solo el jefe (selector "Terminado (bloquea el trabajo)", con confirmación).
+  `VentaService.estaBloqueado` = no EN_PROGRESO o TERMINADO: rechaza (409) editar datos/ítems/
+  precios, eliminar, notas y fotos del técnico, y fotos del jefe (subir y borrar; también en
+  trabajos cobrados, que antes sí aceptaban fotos). El técnico lo ve en "Terminados", solo lectura.
+- Bloqueado, solo queda: `POST /api/ventas/trabajo-domicilio/{id}/cobrar {medioPago}`
+  (`cobrarTrabajoTerminado`: con los ítems tal cual, a la caja aparte, guarda la comisión del
+  técnico, historial TERMINADO → CERRADO_Y_COBRADO) o `POST .../{id}/reabrir` (`reabrirTrabajo`:
+  vuelve al estado previo según el historial — `HistorialEstadoTrabajoService.estadoAntesDe` —,
+  deja "Reabierto" en el historial y avisa al técnico). Ambos solo ADMIN.
+- El "Cerrar y cobrar" de siempre (desde cualquier estado abierto no terminado) sigue igual.
+- En producción había 1 trabajo `EN_PROGRESO`/`TERMINADO` (de la lógica vieja): ahora aparece
+  bloqueado; se cobra o se reabre. No se migraron datos.
+
+Tests: `TerminadoTrabajoIntegrationTest` (recorrido completo aviso → terminado → bloqueos →
+reabrir → cobrar, con el stock descontado una sola vez; cobrar sin terminar 409; reabrir/cobrar
+solo ADMIN) y `MisTrabajosServiceTest` actualizado.
+
+**Sigue (aprobado por el dueño, de a una parte):** faltantes — notas del jefe (avisan al técnico),
+aviso de trabajos superpuestos del mismo técnico, fotos marcadas Antes/Después; después Etapa 3:
+3.1 confirmación por WhatsApp (wa.me), 3.2 historial del cliente/dirección, 3.3 reportes (cantidad
+e ingresos por mes, tiempo promedio En camino → Terminado del técnico), 3.4 resumen mensual de
+comisiones por técnico.

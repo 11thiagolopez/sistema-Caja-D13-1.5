@@ -1,6 +1,7 @@
 import { request, requestBlob } from './client'
 import type {
   EstadoFactura,
+  MedioPago,
   NotaTrabajoResponse,
   TrabajoDomicilioRequest,
   VentaRequest,
@@ -62,4 +63,16 @@ export function guardarTrabajoDomicilio(req: TrabajoDomicilioRequest): Promise<V
     method: 'POST',
     body: JSON.stringify(req),
   })
+}
+
+// Trabajo que el jefe marcó Terminado: queda bloqueado, solo se cobra (con los ítems tal cual) o se reabre.
+export function cobrarTrabajoTerminado(id: number, medioPago: MedioPago): Promise<VentaResponse> {
+  return request<VentaResponse>(`/api/ventas/trabajo-domicilio/${id}/cobrar`, {
+    method: 'POST',
+    body: JSON.stringify({ medioPago }),
+  })
+}
+
+export function reabrirTrabajo(id: number): Promise<VentaResponse> {
+  return request<VentaResponse>(`/api/ventas/trabajo-domicilio/${id}/reabrir`, { method: 'POST' })
 }

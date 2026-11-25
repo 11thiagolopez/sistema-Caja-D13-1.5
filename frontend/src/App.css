@@ -2019,3 +2019,25 @@ section {
     grid-template-columns: 1fr;
   }
 }
+
+/* Trabajo que el jefe marcó Terminado: bloqueado, solo cobrar o reabrir. */
+.trabajo-terminado {
+  padding: 12px 14px;
+  border: 1px solid var(--ok);
+  border-left: 6px solid var(--ok);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+
+.trabajo-terminado p {
+  margin: 0;
+}
+
+.trabajo-terminado .comprobante-acciones {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.trabajo-terminado label {
+  margin-bottom: 0;
+}
