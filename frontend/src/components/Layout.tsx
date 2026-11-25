@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { ApiRequestError } from '../api/client'
 import { getSesionAbierta } from '../api/caja'
 import { getCotizacionActual } from '../api/cotizacion'
 import type { CotizacionResponse, Rol } from '../types/api'
@@ -120,20 +121,33 @@ function LayoutContenido() {
   // (y el backend le devuelve 403 en los dos GET, así que ni se pueden resolver solos).
   useEffect(() => {
     if (esTecnico) return
-    getCotizacionActual().then((cotizacion) => {
-      setCotizacionObligatoria(!cotizacion)
-    })
+    getCotizacionActual()
+      .then((cotizacion) => {
+        setCotizacionObligatoria(!cotizacion)
+      })
+      .catch((err) => {
+        // Sin permiso (403) = este usuario no opera con la cotización: bloquearlo detrás de un
+        // modal que el backend nunca le va a dejar resolver lo deja trabado para siempre (bug
+        // reportado con el técnico). Cualquier otro error sigue bloqueando, como siempre.
+        if (err instanceof ApiRequestError && err.status === 403) {
+          setCotizacionObligatoria(false)
+        }
+      })
   }, [esTecnico])
 
   // Se dispara una sola vez al entrar a cualquier pantalla logueada: si no hay una sesión de
   // caja ABIERTA, fuerza el modal de "abrir caja" (ambos roles) antes de dejar hacer nada más.
   useEffect(() => {
     if (esTecnico) return
-    getSesionAbierta().then((sesionCaja) => {
-      if (!sesionCaja) {
-        setCajaObligatoria(true)
-      }
-    })
+    getSesionAbierta()
+      .then((sesionCaja) => {
+        if (!sesionCaja) {
+          setCajaObligatoria(true)
+        }
+      })
+      .catch(() => {
+        // Sin permiso o sin conexión: no se fuerza el modal de abrir caja (mismo motivo que arriba).
+      })
   }, [esTecnico])
 
   function onCotizacionCargada(cotizacion: CotizacionResponse) {
