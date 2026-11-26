@@ -48,6 +48,12 @@ interface FilaCompra {
   nuevoMarca: string
   nuevoDescripcion: string
   nuevoCodigoFabrica: string
+  // Producto existente de otro proveedor: true = compra suelta, el producto conserva el suyo.
+  mantenerProveedor: boolean
+}
+
+function mismoProveedor(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
 let proximoId = 1
@@ -66,6 +72,7 @@ function filaVacia(): FilaCompra {
     nuevoMarca: '',
     nuevoDescripcion: '',
     nuevoCodigoFabrica: '',
+    mantenerProveedor: false,
   }
 }
 
@@ -189,7 +196,13 @@ export function ComprasNueva() {
       const productoExistente = productoDeFila(fila)
 
       if (productoExistente) {
-        items.push({ idProducto: productoExistente.idProducto, cantidad, precioCompraUnitario, precioVentaUnitario })
+        items.push({
+          idProducto: productoExistente.idProducto,
+          cantidad,
+          precioCompraUnitario,
+          precioVentaUnitario,
+          mantenerProveedor: fila.mantenerProveedor || undefined,
+        })
       } else if (fila.texto && fila.nuevoRubro && fila.nuevoFamilia && fila.nuevoMarca && fila.nuevoDescripcion) {
         items.push({
           nuevoProducto: {
@@ -309,6 +322,11 @@ export function ComprasNueva() {
             {filas.map((fila) => {
               const existente = productoDeFila(fila)
               const esNuevo = fila.texto.length > 0 && !existente
+              const cambiaProveedor =
+                existente != null &&
+                Boolean(existente.proveedor) &&
+                proveedorNombre.trim() !== '' &&
+                !mismoProveedor(existente.proveedor ?? '', proveedorNombre)
               return (
                 <Fragment key={fila.id}>
                   <tr>
@@ -377,6 +395,25 @@ export function ComprasNueva() {
                       </button>
                     </td>
                   </tr>
+                  {cambiaProveedor && (
+                    <tr>
+                      <td colSpan={7}>
+                        <em>
+                          {fila.mantenerProveedor
+                            ? `Este producto sigue con ${existente?.proveedor}.`
+                            : `Este producto figura con ${existente?.proveedor}: va a quedar con ${proveedorNombre.trim()}.`}
+                        </em>{' '}
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={fila.mantenerProveedor}
+                            onChange={(e) => actualizarFila(fila.id, { mantenerProveedor: e.target.checked })}
+                          />{' '}
+                          Compra suelta: mantener {existente?.proveedor}
+                        </label>
+                      </td>
+                    </tr>
+                  )}
                   {esNuevo && (
                     <tr>
                       <td colSpan={7}>

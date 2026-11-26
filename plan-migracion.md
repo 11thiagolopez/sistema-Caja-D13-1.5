@@ -3378,3 +3378,35 @@ ignorado para el jefe). Backend: **473 tests** verdes. Probado en Chrome contra 
 
 **Con esto el documento del dueño queda implementado completo** (Etapas 1, 2 y 3, salvo el cobro
 en el domicilio, que el dueño decidió no hacer — sección 37).
+
+---
+
+## 40. Alta de productos 02/02 que fallaba, proveedor editable y proveedor en Compras (2026-11-26)
+
+**Bug: "no se aceptan rubro 02 y familia 02".** No era falta de combinaciones: el correlativo es de
+4 dígitos (hasta 9999) y la combinación más cargada de 02/02 (marca 08) va por 1072. La causa real,
+confirmada consultando Supabase: **81 productos migrados** (rubro 03, familia 02, marcas 01 y 10,
+ids 1126-1200 y 1818-1823) tienen un `codigo_interno` que empieza con `0202` y **no coincide con sus
+partes** (ej. id 1126: partes `03/02/10/0025`, código `0202100001`). Ocupan `0202010558`-`0563` y
+`0202100001`-`0075`. `ProductoService.crear` solo miraba el último correlativo de la misma
+combinación, así que el alta 02/02 con la marca de código `10` (LUZ VERDE) generaba `0202100001`, ya
+ocupado, y el `UNIQUE (codigo_interno)` de la base lo rechazaba → "error inesperado".
+Fix: al generar el código se saltan los correlativos cuyo `codigoInterno` ya existe (y, si el
+producto no trae código de fábrica, también los que ya están como `codigoBarras` de otro); si se
+pasara de 9999 hay un mensaje claro. Repositorio: `existsByCodigoInterno`, `existsByCodigoBarras`.
+No se tocaron los 81 productos (renumerarlos cambiaría etiquetas ya impresas).
+
+**Proveedor editable en Productos (ADMIN).** `ProductoUpdateRequest.proveedor` (PATCH): se resuelve
+contra el catálogo con `ProveedorService.resolverOCrear` (o lo crea), y actualiza `proveedorRef` y el
+texto legado `proveedor` con el nombre del catálogo. Vacío = no se toca. `Productos.tsx`: la celda
+Proveedor es editable en línea, con sugerencias del catálogo. Sin SQL.
+
+**Proveedor en Compras (decisión del dueño).** Antes, una compra de un producto existente
+actualizaba stock y precios pero **nunca el proveedor del producto**. Ahora el producto queda con el
+proveedor de la última compra (`proveedorRef` + texto legado). `CompraItemRequest.mantenerProveedor`
+(opcional, `true` = compra suelta) lo conserva. En `ComprasNueva.tsx`, si el producto figura con otro
+proveedor, el renglón muestra "figura con X: va a quedar con Y" y una casilla "Compra suelta:
+mantener X". El historial de a quién se le compró cada vez sigue en `compras`. Sin SQL.
+
+Backend: **478 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. No probado en
+navegador.

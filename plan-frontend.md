@@ -106,11 +106,11 @@ campos son opcionales, semántica PATCH**: solo se actualiza el que venga no-nul
   precioCompra?: number;
   stockActual?: number;
   codigoFabrica?: string;  // "" (string vacío) limpia el código de fábrica
+  proveedor?: string;      // 2026-11-26: nombre; se resuelve contra el catálogo (o se crea). "" = no se toca
 }
 ```
-No incluye `rubro`/código de marca/`proveedor`: esos forman parte de `codigoInterno` o de la
-resolución de catálogos, cambiarlos ahí rompería esa identidad — para eso existe el alta de un
-producto nuevo. `Productos.tsx` (solo ADMIN) usa esto para la edición en línea tocando una celda
+No incluye `rubro`/`familia`/código de marca: forman parte de `codigoInterno`, cambiarlos ahí
+rompería esa identidad — para eso existe el alta de un producto nuevo. `Productos.tsx` (solo ADMIN) usa esto para la edición en línea tocando una celda
 de la tabla (Enter guarda, Escape cancela, click afuera guarda).
 
 ### Ventas (`/api/ventas`)
@@ -577,6 +577,8 @@ abierta.
     cantidad: number;
     precioCompraUnitario: number;
     precioVentaUnitario?: number;      // si viene, actualiza Producto.precioVenta también
+    mantenerProveedor?: boolean;       // 2026-11-26, solo producto existente: por defecto queda con el
+                                       // proveedor de esta compra; true = compra suelta, conserva el suyo
   }[];
   // Cuenta corriente de proveedor, nuevo 2026-10-30: ausente = se paga todo de una
   // (comportamiento de siempre). Un valor menor al total deja el resto como deuda pendiente,

@@ -9,9 +9,9 @@ import lombok.Setter;
 
 /**
  * Edición en línea desde la tabla de Productos: cada campo es opcional, solo se actualiza el
- * que venga no-nulo (semántica PATCH). No incluye rubro/marca-código/proveedor porque esos
- * forman parte de codigoInterno o de la resolución de catálogos — cambiarlos ahí rompería esa
- * identidad; para eso sigue existiendo el alta de un producto nuevo.
+ * que venga no-nulo (semántica PATCH). No incluye rubro/familia/marca-código porque forman parte
+ * de codigoInterno — cambiarlos ahí rompería esa identidad; para eso sigue existiendo el alta de
+ * un producto nuevo.
  */
 @Getter
 @Setter
@@ -35,4 +35,8 @@ public class ProductoUpdateRequest {
     // o el dato se tipeó mal. String vacío ("") limpia el código de fábrica (el producto vuelve a
     // usar codigoInterno como codigoBarras) — ver ProductoService.actualizar.
     private String codigoFabrica;
+
+    // El proveedor no forma parte de codigoInterno: se puede corregir (2026-11-26, pedido del
+    // dueño). Se resuelve contra el catálogo como en el alta; vacío o null = no se toca.
+    private String proveedor;
 }

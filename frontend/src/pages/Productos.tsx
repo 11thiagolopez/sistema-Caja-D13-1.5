@@ -21,7 +21,14 @@ import type {
   ProveedorResponse,
 } from '../types/api'
 
-type CampoEditable = 'descripcion' | 'marca' | 'precioVenta' | 'precioCompra' | 'stockActual' | 'codigoFabrica'
+type CampoEditable =
+  | 'descripcion'
+  | 'marca'
+  | 'proveedor'
+  | 'precioVenta'
+  | 'precioCompra'
+  | 'stockActual'
+  | 'codigoFabrica'
 
 const PRODUCTO_VACIO: ProductoRequest = {
   rubro: '',
@@ -206,6 +213,8 @@ export function Productos() {
         return producto.descripcion
       case 'marca':
         return producto.marca ?? ''
+      case 'proveedor':
+        return producto.proveedor ?? ''
       case 'precioVenta':
         return producto.precioVenta != null ? String(producto.precioVenta) : ''
       case 'precioCompra':
@@ -255,9 +264,11 @@ export function Productos() {
             ? { stockActual: Number(valor) }
             : campo === 'marca'
               ? { marca: valor }
-              : campo === 'codigoFabrica'
-                ? { codigoFabrica: valor }
-                : { descripcion: valor }
+              : campo === 'proveedor'
+                ? { proveedor: valor }
+                : campo === 'codigoFabrica'
+                  ? { codigoFabrica: valor }
+                  : { descripcion: valor }
 
     // Se sale del modo edición antes de esperar la respuesta: si el valor no cambió, evita
     // reintentar el guardado por el blur que dispara el propio input al desmontarse.
@@ -297,6 +308,7 @@ export function Productos() {
             step={paso}
             min={campo === 'stockActual' ? 0 : undefined}
             autoFocus
+            list={campo === 'proveedor' ? 'proveedores-edicion-datalist' : undefined}
             value={valorEdicion}
             onChange={(e) => setValorEdicion(e.target.value)}
             onKeyDown={onKeyDownEdicion}
@@ -423,7 +435,7 @@ export function Productos() {
               {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
               {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
               <td>{producto.rubro}</td>
-              <td>{producto.proveedor || '—'}</td>
+              {celdaEditable(producto, 'proveedor', producto.proveedor || '—', 'text')}
               <td>{producto.codigoInterno}</td>
               {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text')}
               {celdaEditable(
@@ -464,6 +476,12 @@ export function Productos() {
           ))}
         </tbody>
       </table>
+      {/* Sugerencias para editar el proveedor en línea (solo ADMIN carga el catálogo). */}
+      <datalist id="proveedores-edicion-datalist">
+        {proveedores.map((p) => (
+          <option key={p.idProveedor} value={p.nombre} />
+        ))}
+      </datalist>
 
       {esAdmin && (
         <section>

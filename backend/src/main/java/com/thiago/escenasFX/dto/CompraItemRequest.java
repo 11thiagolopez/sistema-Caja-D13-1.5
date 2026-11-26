@@ -33,4 +33,8 @@ public class CompraItemRequest {
 
     @DecimalMin(value = "0.01")
     private BigDecimal precioVentaUnitario;
+
+    // Solo aplica a un producto existente (2026-11-26, decisión del dueño): por defecto el producto
+    // queda con el proveedor de esta compra; true = es una compra suelta y se conserva el que tenía.
+    private Boolean mantenerProveedor;
 }

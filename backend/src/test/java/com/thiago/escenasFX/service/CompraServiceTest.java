@@ -126,6 +126,44 @@ class CompraServiceTest {
     }
 
     @Test
+    void registrarCompra_productoDeOtroProveedor_quedaConElProveedorDeLaCompra() {
+        Producto producto = producto(3, 0);
+        Proveedor viejo = proveedor(9);
+        viejo.setNombre("Viejo SA");
+        producto.setProveedorRef(viejo);
+        producto.setProveedor("Viejo SA");
+        when(productoRepo.findById(3)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        Proveedor nuevo = proveedor(1);
+        when(proveedorService.resolverOCrear("Proveedor de prueba")).thenReturn(nuevo);
+
+        compraService.registrarCompra(compraReq(3, "100", null), new Empleado());
+
+        assertThat(producto.getProveedorRef()).isSameAs(nuevo);
+        assertThat(producto.getProveedor()).isEqualTo("Proveedor de prueba");
+    }
+
+    @Test
+    void registrarCompra_mantenerProveedor_noTocaElProveedorDelProducto() {
+        Producto producto = producto(3, 0);
+        Proveedor viejo = proveedor(9);
+        viejo.setNombre("Viejo SA");
+        producto.setProveedorRef(viejo);
+        producto.setProveedor("Viejo SA");
+        when(productoRepo.findById(3)).thenReturn(Optional.of(producto));
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(proveedorService.resolverOCrear("Proveedor de prueba")).thenReturn(proveedor(1));
+
+        CompraRequest req = compraReq(3, "100", null);
+        req.getItems().get(0).setMantenerProveedor(true);
+        compraService.registrarCompra(req, new Empleado());
+
+        assertThat(producto.getProveedorRef()).isSameAs(viejo);
+        assertThat(producto.getProveedor()).isEqualTo("Viejo SA");
+        assertThat(producto.getStockActual()).isEqualTo(1);
+    }
+
+    @Test
     void registrarCompra_sinMontoPagado_pagaTodoYDejaSaldoPendienteEnCero() {
         Producto producto = producto(3, 0);
         when(productoRepo.findById(3)).thenReturn(Optional.of(producto));

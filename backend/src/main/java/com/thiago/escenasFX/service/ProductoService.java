@@ -48,8 +48,22 @@ public class ProductoService {
             .findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc(req.getRubro(), req.getFamilia(), marca.getCodigo());
 
         int correlativoAnterior = existentes.isEmpty() ? 0 : Integer.parseInt(existentes.get(0).getCorrelativo());
-        String correlativo = String.format("%04d", correlativoAnterior + 1);
-        String codigoInterno = req.getRubro() + req.getFamilia() + marca.getCodigo() + correlativo;
+        String prefijo = req.getRubro() + req.getFamilia() + marca.getCodigo();
+        boolean usaCodigoInternoComoBarras = req.getCodigoFabrica() == null || req.getCodigoFabrica().isBlank();
+
+        // Se salta todo correlativo cuyo código ya esté ocupado: 81 productos migrados (rubro 03,
+        // familia 02) tienen un codigo_interno "0202..." que no coincide con sus partes, y sin este
+        // salto el alta de 02/02 chocaba contra el UNIQUE de la base (ver plan-migracion.md §40).
+        int numero = correlativoAnterior + 1;
+        while (numero <= 9999 && codigoOcupado(prefijo + String.format("%04d", numero), usaCodigoInternoComoBarras)) {
+            numero++;
+        }
+        if (numero > 9999) {
+            throw new IllegalStateException("No quedan códigos libres para rubro " + req.getRubro() + ", familia "
+                + req.getFamilia() + " y marca " + marca.getCodigo() + " (el correlativo llegó a 9999)");
+        }
+        String correlativo = String.format("%04d", numero);
+        String codigoInterno = prefijo + correlativo;
 
         Producto producto = new Producto();
         producto.setRubro(req.getRubro());
@@ -70,6 +84,11 @@ public class ProductoService {
         asignarCodigoBarras(producto, null);
         sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);
+    }
+
+    private boolean codigoOcupado(String codigo, boolean tambienComoCodigoBarras) {
+        return productoRepo.existsByCodigoInterno(codigo)
+            || (tambienComoCodigoBarras && productoRepo.existsByCodigoBarras(codigo));
     }
 
     /**
@@ -118,6 +137,13 @@ public class ProductoService {
         if (req.getCodigoFabrica() != null) {
             producto.setCodigoFabrica(req.getCodigoFabrica().isBlank() ? null : req.getCodigoFabrica());
             asignarCodigoBarras(producto, id);
+        }
+        if (req.getProveedor() != null && !req.getProveedor().isBlank()) {
+            // Mismo criterio que el alta: se resuelve contra el catálogo (o se crea) y el texto
+            // legado, que es el que muestra/filtra el frontend, queda con el nombre del catálogo.
+            var proveedor = proveedorService.resolverOCrear(req.getProveedor());
+            producto.setProveedorRef(proveedor);
+            producto.setProveedor(proveedor.getNombre());
         }
         sincronizarAnclaUsd(producto);
         return productoRepo.save(producto);
