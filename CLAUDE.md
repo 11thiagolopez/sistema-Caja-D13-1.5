@@ -9,7 +9,15 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-25, noche — DOCUMENTO "Nuevo flujo de trabajos a domicilio" IMPLEMENTADO COMPLETO):
+Estado Actual (Actualizado al 2026-11-26 — alta 02/02 arreglada + proveedor editable):
+
+**Sección 40 de `plan-migracion.md`**: el alta de productos rubro 02/familia 02 fallaba porque 81
+productos migrados (rubro 03) tienen `codigo_interno` "0202…" que no coincide con sus partes; ahora
+el generador salta los códigos ocupados. El ADMIN puede editar el proveedor en línea en Productos
+(`PATCH` con `proveedor`). Al comprar un producto existente, queda con el proveedor de la compra
+salvo que se marque "Compra suelta" (`mantenerProveedor`). 478 tests. No probado en navegador.
+
+Estado Anterior (Actualizado al 2026-11-25, noche — DOCUMENTO "Nuevo flujo de trabajos a domicilio" IMPLEMENTADO COMPLETO):
 
 **Sección 39 de `plan-migracion.md`**: fotos Antes/Después (`fotos_trabajo.momento`, SQL ya corrido en
 producción; obligatorio para el técnico), Etapa 3.3 reportes (por mes, tiempo promedio general/por

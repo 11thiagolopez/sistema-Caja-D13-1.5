@@ -34,6 +34,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     boolean existsByNumeroMarca(String numeroMarca);
 
+    // Usados al generar el codigoInterno de un alta: hay productos migrados cuyo codigo_interno no
+    // coincide con su rubro+familia+marca+correlativo y "ocupan" códigos de otra combinación.
+    boolean existsByCodigoInterno(String codigoInterno);
+
+    boolean existsByCodigoBarras(String codigoBarras);
+
     // Los productos históricos (migrados antes del catálogo Marca, o backfileados a mano en
     // Supabase) tienen numeroMarca/marca en texto libre sin pasar por MarcaService — y un mismo
     // numeroMarca puede repetirse para nombres distintos según el rubro. Antes de generar un

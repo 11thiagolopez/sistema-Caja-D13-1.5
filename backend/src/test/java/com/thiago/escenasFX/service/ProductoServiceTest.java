@@ -137,6 +137,59 @@ class ProductoServiceTest {
         assertThat(creado.getCodigoInterno()).isEqualTo("0105020003");
     }
 
+    // Caso real de producción (2026-11-26): 81 productos migrados de rubro 03/familia 02 tienen un
+    // codigo_interno que empieza con "0202" (no coincide con sus partes), así que el alta de 02/02
+    // con la marca "10" generaba "0202100001", ya ocupado, y la base lo rechazaba por UNIQUE.
+    @Test
+    void crear_codigoInternoYaOcupadoPorProductoMigrado_saltaAlSiguienteLibre() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("10"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("02", "02", "10"))
+            .thenReturn(List.of());
+        when(productoRepo.existsByCodigoInterno("0202100001")).thenReturn(true);
+        when(productoRepo.existsByCodigoInterno("0202100002")).thenReturn(true);
+        when(productoRepo.existsByCodigoBarras("0202100003")).thenReturn(true);
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Producto creado = productoService.crear(request("02", "02", "10"));
+
+        assertThat(creado.getCorrelativo()).isEqualTo("0004");
+        assertThat(creado.getCodigoInterno()).isEqualTo("0202100004");
+        assertThat(creado.getCodigoBarras()).isEqualTo("0202100004");
+    }
+
+    @Test
+    void crear_correlativoAgotado_lanzaMensajeClaro() {
+        when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("02"));
+        when(productoRepo.findByRubroAndFamiliaAndNumeroMarcaOrderByCorrelativoDesc("01", "05", "02"))
+            .thenReturn(List.of(productoConCorrelativo("9999")));
+
+        assertThatThrownBy(() -> productoService.crear(request("01", "05", "02")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("9999");
+    }
+
+    @Test
+    void actualizar_cambiaProveedor_resuelveCatalogoYTextoLegado() {
+        Producto producto = new Producto();
+        producto.setIdProducto(7);
+        producto.setPrecioVenta(new BigDecimal("100"));
+        producto.setProveedor("Viejo SA");
+        com.thiago.escenasFX.model.Proveedor nuevo = new com.thiago.escenasFX.model.Proveedor();
+        nuevo.setIdProveedor(3);
+        nuevo.setNombre("Nuevo SRL");
+        when(productoRepo.findById(7)).thenReturn(Optional.of(producto));
+        when(proveedorService.resolverOCrear("nuevo srl")).thenReturn(nuevo);
+        when(productoRepo.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProductoUpdateRequest req = new ProductoUpdateRequest();
+        req.setProveedor("nuevo srl");
+        Producto actualizado = productoService.actualizar(7, req);
+
+        // Se guarda el nombre tal como está en el catálogo, no como se tipeó.
+        assertThat(actualizado.getProveedor()).isEqualTo("Nuevo SRL");
+        assertThat(actualizado.getProveedorRef()).isSameAs(nuevo);
+    }
+
     @Test
     void crear_combinacionDistinta_reiniciaCorrelativoEn0001() {
         when(marcaService.resolverOCrear(anyString())).thenReturn(marcaConCodigo("09"));

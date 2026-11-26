@@ -81,6 +81,8 @@ export interface ProductoUpdateRequest {
   // A diferencia de los demás campos, "" (string vacío) es un valor válido: limpia el código de
   // fábrica y el producto vuelve a usar codigoInterno como codigoBarras.
   codigoFabrica?: string
+  // Se resuelve contra el catálogo de proveedores (o se crea); vacío = no se toca.
+  proveedor?: string
 }
 
 export interface ProductoRequest {
@@ -744,6 +746,8 @@ export interface CompraItemRequest {
   cantidad: number
   precioCompraUnitario: number
   precioVentaUnitario?: number
+  // Solo producto existente: por defecto queda con el proveedor de la compra; true = lo conserva.
+  mantenerProveedor?: boolean
 }
 
 export type MedioPagoProveedor = 'EFECTIVO' | 'TRANSFERENCIA'

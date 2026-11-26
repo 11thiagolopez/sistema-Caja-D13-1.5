@@ -91,6 +91,12 @@ public class CompraService {
             if (itemReq.getPrecioVentaUnitario() != null) {
                 producto.setPrecioVenta(itemReq.getPrecioVentaUnitario());
             }
+            // El producto queda con el proveedor de la última compra, salvo que se pida mantenerlo
+            // (compra suelta). El historial de a quién se le compró cada vez queda en las compras.
+            if (!Boolean.TRUE.equals(itemReq.getMantenerProveedor())) {
+                producto.setProveedorRef(proveedor);
+                producto.setProveedor(proveedor.getNombre());
+            }
             productoService.sincronizarAnclaUsd(producto);
             productoRepo.save(producto);
 
