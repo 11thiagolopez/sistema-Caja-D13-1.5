@@ -150,7 +150,7 @@ export function Comprobantes() {
   return (
     <div>
       <h2>Comprobantes</h2>
-      <form onSubmit={onBuscar}>
+      <form onSubmit={onBuscar} className="tarjeta filtros-fechas">
         <label>
           Desde
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />

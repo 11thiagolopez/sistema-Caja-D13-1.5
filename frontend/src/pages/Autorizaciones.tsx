@@ -3,7 +3,8 @@ import { ApiRequestError } from '../api/client'
 import { resolverPeticion } from '../api/autorizaciones'
 import { ActivarNotificaciones } from '../components/ActivarNotificaciones'
 import { useAutorizaciones } from '../components/AutorizacionesPendientes'
-import { formatoFechaHora } from '../utils/formato'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { formatoFechaHora, formatoPesos } from '../utils/formato'
 import type { AutorizacionPeticion } from '../types/api'
 
 export function Autorizaciones() {
@@ -34,31 +35,39 @@ export function Autorizaciones() {
 
   return (
     <div className="peticiones">
-      <h2>Peticiones</h2>
+      <EncabezadoPagina
+        titulo="Peticiones"
+        subtitulo={peticiones.length === 0 ? 'No hay nada para aprobar' : `${peticiones.length} esperando tu respuesta`}
+      />
       <ActivarNotificaciones />
-      {error && <p className="error">{error}</p>}
-      {peticiones.length === 0 && <p>No hay peticiones pendientes.</p>}
+      {error && <p className="alerta alerta-error">{error}</p>}
+      {peticiones.length === 0 && <p className="cobros-vacio">No hay peticiones pendientes.</p>}
       {peticiones.map((p) => {
         const clave = `${p.tipo}-${p.id}`
         return (
-          <article key={clave} className="peticion">
+          <article key={clave} className="tarjeta peticion">
             <header>
               <strong>{p.tipo === 'RETIRO' ? `Retiro #${p.id}` : `Descuento en venta #${p.id}`}</strong>
-              <span className="peticion-monto">${p.monto.toFixed(2)}</span>
+              <span className="peticion-monto">{formatoPesos(p.monto)}</span>
             </header>
             <p>{p.motivo}</p>
             <p className="peticion-detalle">
               {p.solicitante ?? 'Sin empleado'} · {formatoFechaHora(p.fecha)} · {p.medioPago}
-              {p.totalVenta != null && ` · Total con descuento: $${p.totalVenta.toFixed(2)}`}
+              {p.totalVenta != null && ` · Total con descuento: ${formatoPesos(p.totalVenta)}`}
             </p>
             <div className="peticion-acciones">
-              <button type="button" onClick={() => resolver(p, 'aprobar')} disabled={resolviendo === clave}>
-                {resolviendo === clave && <span className="spinner" />}
+              <button
+                type="button"
+                className="btn-exito"
+                onClick={() => resolver(p, 'aprobar')}
+                disabled={resolviendo === clave}
+              >
+                {resolviendo === clave && <span className="spinner" aria-hidden="true" />}
                 Aprobar
               </button>
               <button
                 type="button"
-                className="boton-rechazar"
+                className="btn-peligro-borde"
                 onClick={() => resolver(p, 'rechazar')}
                 disabled={resolviendo === clave}
               >

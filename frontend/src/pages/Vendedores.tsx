@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { crearEmpleado, desactivarEmpleado, getEmpleados } from '../api/empleados'
 import { ApiRequestError } from '../api/client'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { Modal } from '../components/Modal'
 import type { EmpleadoRequest, EmpleadoResponse, Rol } from '../types/api'
 
 const VENDEDOR_VACIO: EmpleadoRequest = {
@@ -11,6 +13,8 @@ const VENDEDOR_VACIO: EmpleadoRequest = {
   rol: 'VENDEDOR',
   comision: undefined,
 }
+const NOMBRE_ROL: Record<string, string> = { ADMIN: 'Administrador', VENDEDOR: 'Vendedor', TECNICO: 'Técnico' }
+
 
 export function Vendedores() {
   const [empleados, setEmpleados] = useState<EmpleadoResponse[]>([])
@@ -20,6 +24,7 @@ export function Vendedores() {
   const [form, setForm] = useState<EmpleadoRequest>(VENDEDOR_VACIO)
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
   const [agregando, setAgregando] = useState(false)
+  const [altaAbierta, setAltaAbierta] = useState(false)
   const [eliminandoId, setEliminandoId] = useState<number | null>(null)
 
   function cargar() {
@@ -40,6 +45,7 @@ export function Vendedores() {
     try {
       await crearEmpleado(form)
       setForm(VENDEDOR_VACIO)
+      setAltaAbierta(false)
       await cargar()
     } catch (err) {
       setErrorAlta(err instanceof ApiRequestError ? err.message : 'No se pudo agregar el vendedor')
@@ -61,78 +67,123 @@ export function Vendedores() {
     }
   }
 
-  if (cargando) return <p>Cargando...</p>
-  if (error) return <p className="error">{error}</p>
+  if (cargando) return <p className="texto-apagado">Cargando…</p>
+  if (error) return <p className="alerta alerta-error">{error}</p>
 
   return (
     <div>
-      <h2>Vendedores</h2>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Usuario</th>
-            <th>Rol</th>
-            <th>Email</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {empleados.map((e) => (
-            <tr key={e.idEmpleado}>
-              <td>{e.nombre}</td>
-              <td>{e.usuario}</td>
-              <td>{e.rol}</td>
-              <td>{e.email}</td>
-              <td>
-                <button type="button" onClick={() => onDesactivar(e)} disabled={eliminandoId === e.idEmpleado}>
-                  {eliminandoId === e.idEmpleado ? 'Dando de baja...' : 'Dar de baja'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <section>
-        <h3>Agregar vendedor</h3>
-        <form onSubmit={onAgregar}>
-          <label>
-            Nombre
-            <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          </label>
-          <label>
-            Usuario
-            <input required value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} />
-          </label>
-          <label>
-            Contraseña
-            <input
-              type="password"
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-          </label>
-          <label>
-            Email
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
-          <label>
-            Rol
-            <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>
-              <option value="VENDEDOR">VENDEDOR</option>
-              <option value="ADMIN">ADMIN</option>
-            </select>
-          </label>
-          {errorAlta && <p className="error">{errorAlta}</p>}
-          <button type="submit" disabled={agregando}>
-            {agregando && <span className="spinner" />}
-            {agregando ? 'Agregando...' : 'Agregar vendedor'}
+      <EncabezadoPagina
+        titulo="Vendedores"
+        subtitulo={`${empleados.length} ${empleados.length === 1 ? 'usuario' : 'usuarios'} del sistema`}
+        acciones={
+          <button type="button" onClick={() => setAltaAbierta(true)}>
+            + Agregar vendedor
           </button>
-        </form>
+        }
+      />
+
+      <section className="tarjeta productos-tabla">
+        {empleados.length === 0 ? (
+          <p className="cobros-vacio">Todavía no hay vendedores.</p>
+        ) : (
+          <div className="tabla-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Usuario</th>
+                  <th>Rol</th>
+                  <th>Email</th>
+                  <th>
+                    <span className="solo-lector">Acciones</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {empleados.map((e) => (
+                  <tr key={e.idEmpleado}>
+                    <td className="texto-fuerte">{e.nombre}</td>
+                    <td className="texto-apagado">{e.usuario}</td>
+                    <td>
+                      <span className={`badge ${e.rol === 'ADMIN' ? 'badge-info' : ''}`}>{NOMBRE_ROL[e.rol] ?? e.rol}</span>
+                    </td>
+                    <td>{e.email || '—'}</td>
+                    <td className="celda-numero">
+                      <button
+                        type="button"
+                        className="btn-peligro-borde btn-chico"
+                        onClick={() => onDesactivar(e)}
+                        disabled={eliminandoId === e.idEmpleado}
+                      >
+                        {eliminandoId === e.idEmpleado ? 'Dando de baja…' : 'Dar de baja'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
+
+      {altaAbierta && (
+        <Modal title="Agregar vendedor" onClose={() => setAltaAbierta(false)}>
+          <form onSubmit={onAgregar} className="formulario-grilla">
+            <label className="campo-ancho">
+              Nombre
+              <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+            </label>
+            <label>
+              Usuario
+              <input
+                required
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                value={form.usuario}
+                onChange={(e) => setForm({ ...form, usuario: e.target.value })}
+              />
+            </label>
+            <label>
+              Contraseña
+              <input
+                type="password"
+                autoComplete="new-password"
+                required
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+            </label>
+            <label>
+              Email (opcional)
+              <input
+                type="email"
+                autoComplete="off"
+                spellCheck={false}
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </label>
+            <label>
+              Rol
+              <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>
+                <option value="VENDEDOR">Vendedor</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
+            </label>
+            {errorAlta && <p className="alerta alerta-error campo-ancho">{errorAlta}</p>}
+            <div className="formulario-acciones campo-ancho">
+              <button type="button" className="btn-secundario" onClick={() => setAltaAbierta(false)}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={agregando}>
+                {agregando && <span className="spinner" aria-hidden="true" />}
+                {agregando ? 'Agregando…' : 'Agregar vendedor'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }

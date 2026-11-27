@@ -4,6 +4,7 @@ import { getProductos } from '../api/productos'
 import { crearPresupuesto, descargarPresupuestoPdf, enviarPresupuestoEmail, getPresupuestos } from '../api/presupuestos'
 import { ApiRequestError } from '../api/client'
 import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { claseFilaStock } from '../utils/stockColor'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
@@ -24,16 +25,15 @@ export function Presupuestos() {
 
   return (
     <div>
-      <h2>Presupuestos</h2>
-      <p>
-        Cotización informativa para un cliente: usa los mismos productos y precios que Cobros, pero no descuenta
-        stock ni genera una venta.
-      </p>
-      <div className="tabs">
-        <button type="button" onClick={() => setVista('nuevo')} disabled={vista === 'nuevo'}>
+      <EncabezadoPagina
+        titulo="Presupuestos"
+        subtitulo="Cotización para un cliente con los mismos productos y precios que Cobros. No descuenta stock ni genera una venta."
+      />
+      <div className="segmentado presupuestos-vista" role="group" aria-label="Qué querés hacer">
+        <button type="button" aria-pressed={vista === 'nuevo'} onClick={() => setVista('nuevo')}>
           Nuevo presupuesto
         </button>
-        <button type="button" onClick={() => setVista('consultar')} disabled={vista === 'consultar'}>
+        <button type="button" aria-pressed={vista === 'consultar'} onClick={() => setVista('consultar')}>
           Consultar presupuestos
         </button>
       </div>
@@ -354,7 +354,7 @@ function ConsultarPresupuestos() {
 
   return (
     <div>
-      <form onSubmit={onBuscar}>
+      <form onSubmit={onBuscar} className="tarjeta filtros-fechas">
         <label>
           Desde
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
