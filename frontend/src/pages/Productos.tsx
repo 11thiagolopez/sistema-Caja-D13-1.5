@@ -12,6 +12,9 @@ import { getMarcas } from '../api/marcas'
 import { getProveedores } from '../api/proveedores'
 import { ApiRequestError } from '../api/client'
 import { BarcodeInput } from '../components/BarcodeInput'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { Modal } from '../components/Modal'
+import { formatoPesos } from '../utils/formato'
 import { EtiquetaImprimible } from '../components/EtiquetaImprimible'
 import { claseFilaStock, colorStock, ETIQUETA_COLOR_STOCK, type ColorStock } from '../utils/stockColor'
 import type {
@@ -77,6 +80,8 @@ export function Productos() {
   )
   const [agregando, setAgregando] = useState(false)
   const [eliminandoId, setEliminandoId] = useState<number | null>(null)
+  // Agregar producto y Cargar stock se abren desde los botones de arriba a la derecha.
+  const [modalProductos, setModalProductos] = useState<'alta' | 'stock' | null>(null)
 
   const [cantidadStock, setCantidadStock] = useState('1')
   const [errorStock, setErrorStock] = useState<string | null>(null)
@@ -303,13 +308,14 @@ export function Productos() {
     valorMostrado: ReactNode,
     tipo: 'text' | 'number',
     paso?: string,
+    clase?: string,
   ) {
-    if (!esAdmin) return <td>{valorMostrado}</td>
+    if (!esAdmin) return <td className={clase}>{valorMostrado}</td>
 
     const editando = celdaEditando?.id === producto.idProducto && celdaEditando.campo === campo
     if (editando) {
       return (
-        <td className="celda-editando">
+        <td className={`celda-editando ${clase ?? ''}`}>
           <input
             type={tipo}
             step={paso}
@@ -328,7 +334,7 @@ export function Productos() {
 
     return (
       <td
-        className="celda-editable"
+        className={`celda-editable ${clase ?? ''}`}
         onClick={() => empezarEdicion(producto, campo)}
         title="Tocar para editar"
       >
@@ -337,152 +343,197 @@ export function Productos() {
     )
   }
 
-  if (cargando) return <p>Cargando productos...</p>
-  if (error) return <p className="error">{error}</p>
+  if (cargando) return <p>Cargando productos…</p>
+  if (error) return <p className="alerta alerta-error">{error}</p>
+
+  const hayFiltros = Boolean(filtroDescripcion || filtroMarca || filtroProveedor || filtroColorStock)
+  const precioUsd = (valor: number | null) => (valor != null ? <small>USD {valor.toFixed(2)}</small> : null)
 
   return (
-    <div>
-      <h2>Productos</h2>
+    <div className="productos">
+      <EncabezadoPagina
+        titulo="Productos"
+        subtitulo={
+          hayFiltros
+            ? `Mostrando ${productosFiltrados.length} de ${productos.length} productos`
+            : `${productos.length} productos`
+        }
+        acciones={
+          esAdmin && (
+            <>
+              <button type="button" className="btn-secundario" onClick={() => setModalProductos('stock')}>
+                Cargar stock
+              </button>
+              <button type="button" onClick={() => setModalProductos('alta')}>
+                + Agregar producto
+              </button>
+            </>
+          )
+        }
+      />
 
-      <section>
-        <h3>Filtrar</h3>
-        <input
-          placeholder="Filtrar por descripción"
-          value={filtroDescripcion}
-          onChange={(e) => setFiltroDescripcion(e.target.value)}
-        />
-        {/* Marca/proveedor/color de stock quedan colapsados: con las 4 opciones de color más los
-            proveedores reales del catálogo (pueden ser varias decenas), tenerlos siempre abiertos
-            junto a la búsqueda rápida por descripción hacía la barra de filtros demasiado larga. */}
-        <details className="filtros-avanzados">
-          <summary>Más filtros (marca, proveedor, color de stock)</summary>
-          <div className="agregar-producto">
+      <section className="tarjeta productos-filtros">
+        <div className="productos-filtros-fila">
+          <label className="productos-filtro-texto">
+            Buscar
             <input
-              placeholder="Filtrar por marca"
-              value={filtroMarca}
-              onChange={(e) => setFiltroMarca(e.target.value)}
+              type="search"
+              placeholder="Descripción del producto…"
+              value={filtroDescripcion}
+              onChange={(e) => setFiltroDescripcion(e.target.value)}
             />
+          </label>
+          <label>
+            Marca
+            <input placeholder="Todas" value={filtroMarca} onChange={(e) => setFiltroMarca(e.target.value)} />
+          </label>
+          <label>
+            Proveedor
             <select value={filtroProveedor} onChange={(e) => setFiltroProveedor(e.target.value)}>
-              <option value="">Todos los proveedores</option>
+              <option value="">Todos</option>
               {proveedoresDisponibles.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
             </select>
-            <select
-              value={filtroColorStock}
-              onChange={(e) => setFiltroColorStock(e.target.value as ColorStock | '')}
+          </label>
+          {hayFiltros && (
+            <button
+              type="button"
+              className="btn-suave"
+              onClick={() => {
+                setFiltroDescripcion('')
+                setFiltroMarca('')
+                setFiltroProveedor('')
+                setFiltroColorStock('')
+              }}
             >
-              <option value="">Todos los colores de stock</option>
-              {(Object.keys(ETIQUETA_COLOR_STOCK) as ColorStock[]).map((color) => (
-                <option key={color} value={color}>
-                  {ETIQUETA_COLOR_STOCK[color]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </details>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+        {/* Leyenda de colores de stock: tocar uno filtra por ese color, tocarlo de nuevo lo saca. */}
+        <div className="stock-leyenda" role="group" aria-label="Filtrar por stock">
+          {(Object.keys(ETIQUETA_COLOR_STOCK) as ColorStock[]).map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`stock-chip stock-chip-${color}`}
+              aria-pressed={filtroColorStock === color}
+              onClick={() => setFiltroColorStock((actual) => (actual === color ? '' : color))}
+            >
+              <span className="stock-chip-punto" aria-hidden="true" />
+              {ETIQUETA_COLOR_STOCK[color]}
+            </button>
+          ))}
+        </div>
       </section>
 
       {esAdmin && (
-        <section>
-          <h3>Cargar stock (escanear código de barras)</h3>
-          <input
-            type="number"
-            min={1}
-            placeholder="Cantidad a cargar"
-            value={cantidadStock}
-            onChange={(e) => setCantidadStock(e.target.value)}
-          />
-          <BarcodeInput onScan={onEscanearParaCargarStock} />
-          {cargandoStock && (
-            <p>
-              <span className="spinner" />
-              Actualizando stock...
-            </p>
-          )}
-          {errorStock && <p className="error">{errorStock}</p>}
-          {mensajeStock && <p className="resultado">{mensajeStock}</p>}
-        </section>
-      )}
-
-      {esAdmin && (
         <p className="ayuda-edicion">
-          Tocá una celda de descripción, marca, precio de venta, precio de compra, stock o código
-          de fábrica para editarla.
+          Tocá la descripción, marca, proveedor, código de fábrica, precios o stock para editarlos.
         </p>
       )}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Descripción</th>
-            <th>Marca</th>
-            <th>Rubro</th>
-            <th>Proveedor</th>
-            <th>Código interno</th>
-            <th>Código de fábrica</th>
-            <th>Precio venta</th>
-            <th>Precio compra</th>
-            <th>USD venta</th>
-            <th>USD compra</th>
-            <th>Stock</th>
-            <th />
-            {esAdmin && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {productosFiltrados.map((producto) => (
-            <tr
-              key={producto.idProducto}
-              className={claseFilaStock(producto.stockActual)}
-              title={ETIQUETA_COLOR_STOCK[colorStock(producto.stockActual)]}
-            >
-              {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
-              {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
-              <td>{producto.rubro}</td>
-              {celdaEditable(producto, 'proveedor', producto.proveedor || '—', 'text')}
-              <td>{producto.codigoInterno}</td>
-              {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text')}
-              {celdaEditable(
-                producto,
-                'precioVenta',
-                producto.precioVenta != null ? producto.precioVenta.toFixed(2) : '—',
-                'number',
-                '0.01',
-              )}
-              {celdaEditable(
-                producto,
-                'precioCompra',
-                producto.precioCompra != null ? producto.precioCompra.toFixed(2) : '—',
-                'number',
-                '0.01',
-              )}
-              <td>{producto.precioVentaUsd != null ? `USD ${producto.precioVentaUsd.toFixed(2)}` : '—'}</td>
-              <td>{producto.precioCompraUsd != null ? `USD ${producto.precioCompraUsd.toFixed(2)}` : '—'}</td>
-              {celdaEditable(producto, 'stockActual', producto.stockActual, 'number', '1')}
-              <td>
-                <button type="button" onClick={() => setEtiquetaProducto(producto)}>
-                  Imprimir etiqueta
-                </button>
-              </td>
-              {esAdmin && (
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => onEliminar(producto)}
-                    disabled={eliminandoId === producto.idProducto}
+      <section className="tarjeta productos-tabla">
+        {productosFiltrados.length === 0 ? (
+          <p className="cobros-vacio">
+            {productos.length === 0 ? 'Todavía no hay productos cargados.' : 'Ningún producto coincide con los filtros.'}
+          </p>
+        ) : (
+          <div className="tabla-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Descripción</th>
+                  <th>Marca</th>
+                  <th>Proveedor</th>
+                  <th>Código interno</th>
+                  <th>Código de fábrica</th>
+                  <th className="celda-numero">Precio venta</th>
+                  <th className="celda-numero">Precio compra</th>
+                  <th className="celda-numero">Stock</th>
+                  <th>
+                    <span className="solo-lector">Acciones</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {productosFiltrados.map((producto) => (
+                  <tr
+                    key={producto.idProducto}
+                    className={claseFilaStock(producto.stockActual)}
+                    title={ETIQUETA_COLOR_STOCK[colorStock(producto.stockActual)]}
                   >
-                    {eliminandoId === producto.idProducto && <span className="spinner" />}
-                    {eliminandoId === producto.idProducto ? 'Eliminando...' : 'Eliminar'}
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
+                    {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
+                    {celdaEditable(producto, 'proveedor', producto.proveedor || '—', 'text')}
+                    <td className="texto-apagado celda-codigo">{producto.codigoInterno}</td>
+                    {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text', undefined, 'celda-codigo')}
+                    {celdaEditable(
+                      producto,
+                      'precioVenta',
+                      <span className="celda-precio">
+                        <strong>{producto.precioVenta != null ? formatoPesos(producto.precioVenta) : '—'}</strong>
+                        {precioUsd(producto.precioVentaUsd)}
+                      </span>,
+                      'number',
+                      '0.01',
+                      'celda-numero',
+                    )}
+                    {celdaEditable(
+                      producto,
+                      'precioCompra',
+                      <span className="celda-precio">
+                        {producto.precioCompra != null ? formatoPesos(producto.precioCompra) : '—'}
+                        {precioUsd(producto.precioCompraUsd)}
+                      </span>,
+                      'number',
+                      '0.01',
+                      'celda-numero',
+                    )}
+                    {celdaEditable(
+                      producto,
+                      'stockActual',
+                      <strong>{producto.stockActual}</strong>,
+                      'number',
+                      '1',
+                      'celda-numero',
+                    )}
+                    <td>
+                      <div className="productos-acciones">
+                        <button
+                          type="button"
+                          className="btn-icono"
+                          onClick={() => setEtiquetaProducto(producto)}
+                          aria-label={`Imprimir etiqueta de ${producto.descripcion}`}
+                          title="Imprimir etiqueta"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z" />
+                          </svg>
+                        </button>
+                        {esAdmin && (
+                          <button
+                            type="button"
+                            className="btn-peligro-borde btn-chico"
+                            onClick={() => onEliminar(producto)}
+                            disabled={eliminandoId === producto.idProducto}
+                          >
+                            {eliminandoId === producto.idProducto && <span className="spinner" aria-hidden="true" />}
+                            {eliminandoId === producto.idProducto ? 'Eliminando…' : 'Eliminar'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       {/* Sugerencias para editar el proveedor en línea (solo ADMIN carga el catálogo). */}
       <datalist id="proveedores-edicion-datalist">
         {proveedores.map((p) => (
@@ -490,14 +541,70 @@ export function Productos() {
         ))}
       </datalist>
 
-      {esAdmin && (
-        <section>
-          <h3>Agregar producto</h3>
-          <form onSubmit={onAgregarProducto}>
+      {modalProductos === 'stock' && (
+        <Modal title="Cargar stock" onClose={() => setModalProductos(null)}>
+          <p className="texto-apagado">
+            Poné cuántas unidades entraron y escaneá el código: se suman al stock del producto.
+          </p>
+          <label>
+            Cantidad a sumar
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={cantidadStock}
+              onChange={(e) => setCantidadStock(e.target.value)}
+            />
+          </label>
+          <label>
+            Código de barras
+            <BarcodeInput onScan={onEscanearParaCargarStock} />
+          </label>
+          {cargandoStock && (
+            <p>
+              <span className="spinner" aria-hidden="true" /> Actualizando stock…
+            </p>
+          )}
+          {errorStock && <p className="alerta alerta-error">{errorStock}</p>}
+          {mensajeStock && <p className="alerta alerta-ok">{mensajeStock}</p>}
+        </Modal>
+      )}
+
+      {modalProductos === 'alta' && (
+        <Modal title="Agregar producto" onClose={() => setModalProductos(null)} wide>
+          {ultimoProductoCreado && (
+            <div className="alerta alerta-ok producto-creado">
+              <p>
+                Producto creado con código interno <strong>{ultimoCodigoGenerado}</strong>.
+                {!ultimoProductoCreado.codigoFabrica && ' Ese código se usa como código de barras.'}
+                {marcaInfoAlta &&
+                  (marcaInfoAlta.esNueva
+                    ? ` Se creó la marca "${marcaInfoAlta.nombre}" con el código N° ${marcaInfoAlta.codigo}.`
+                    : ` Marca "${marcaInfoAlta.nombre}", código N° ${marcaInfoAlta.codigo}.`)}
+              </p>
+              <button
+                type="button"
+                className="btn-secundario btn-chico"
+                onClick={() => setEtiquetaProducto(ultimoProductoCreado)}
+              >
+                Imprimir etiqueta
+              </button>
+            </div>
+          )}
+          <form onSubmit={onAgregarProducto} className="formulario-grilla">
+            <label className="campo-ancho">
+              Descripción
+              <input
+                required
+                value={nuevoProducto.descripcion}
+                onChange={(e) => setNuevoProducto({ ...nuevoProducto, descripcion: e.target.value })}
+              />
+            </label>
             <label>
               Rubro (2 dígitos)
               <input
                 maxLength={2}
+                inputMode="numeric"
                 required
                 value={nuevoProducto.rubro}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, rubro: e.target.value })}
@@ -507,13 +614,14 @@ export function Productos() {
               Familia (2 dígitos)
               <input
                 maxLength={2}
+                inputMode="numeric"
                 required
                 value={nuevoProducto.familia}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, familia: e.target.value })}
               />
             </label>
             <label>
-              Marca (escribí el nombre, no es un código — no importa mayúsculas/minúsculas)
+              Marca
               <input
                 required
                 list="marcas-datalist"
@@ -526,7 +634,7 @@ export function Productos() {
                   <option key={m.idMarca} value={m.nombre} />
                 ))}
               </datalist>
-              <small>Si la marca no existe todavía, se crea sola y te avisamos qué código le tocó.</small>
+              <small>Escribí el nombre. Si no existe, se crea sola.</small>
             </label>
             <label>
               Proveedor
@@ -542,16 +650,8 @@ export function Productos() {
                 ))}
               </datalist>
             </label>
-            <label>
-              Descripción
-              <input
-                required
-                value={nuevoProducto.descripcion}
-                onChange={(e) => setNuevoProducto({ ...nuevoProducto, descripcion: e.target.value })}
-              />
-            </label>
-            <label>
-              Código de fábrica (opcional, escanear o tipear)
+            <label className="campo-ancho">
+              Código de fábrica (opcional: escanealo o tipealo)
               <input
                 value={nuevoProducto.codigoFabrica ?? ''}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, codigoFabrica: e.target.value })}
@@ -564,19 +664,16 @@ export function Productos() {
                   // campo hasta que se manden todos los datos juntos con "Agregar producto".
                   if (e.key === 'Enter') e.preventDefault()
                 }}
-                placeholder="Código de fábrica"
               />
               {!nuevoProducto.codigoFabrica && (
-                <small>
-                  Sin código de fábrica: se va a usar el código interno (se genera al guardar) como
-                  código de barras.
-                </small>
+                <small>Sin código de fábrica se usa el código interno (se genera al guardar) como código de barras.</small>
               )}
             </label>
             <label>
               Precio de compra
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min={0}
                 value={nuevoProducto.precioCompra ?? ''}
@@ -584,67 +681,53 @@ export function Productos() {
               />
             </label>
             <label>
-              % Ganancia
+              % de ganancia
               <input
                 type="number"
+                inputMode="decimal"
                 step="1"
                 min={0}
-                placeholder="%"
+                placeholder="Ej. 100 = vender al doble"
                 value={gananciaPctAlta}
                 onChange={(e) => onCambiarGananciaPctAlta(e.target.value)}
               />
-              <small>Recargo sobre el costo (100% = vender al doble) — autocompleta el precio de venta.</small>
             </label>
             <label>
               Precio de venta
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min={0}
                 required
                 value={nuevoProducto.precioVenta}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, precioVenta: Number(e.target.value) })}
               />
-              <small>Se autocompleta con precio de compra + % ganancia, pero se puede pisar a mano.</small>
+              <small>Se calcula con compra + % de ganancia; lo podés cambiar a mano.</small>
             </label>
             <label>
               Stock inicial
               <input
                 type="number"
+                inputMode="numeric"
                 min={0}
                 required
                 value={nuevoProducto.stockActual}
                 onChange={(e) => setNuevoProducto({ ...nuevoProducto, stockActual: Number(e.target.value) })}
               />
             </label>
-            {errorAlta && <p className="error">{errorAlta}</p>}
-            <button type="submit" disabled={agregando}>
-              {agregando && <span className="spinner" />}
-              {agregando ? 'Agregando...' : 'Agregar producto'}
-            </button>
+            {errorAlta && <p className="alerta alerta-error campo-ancho">{errorAlta}</p>}
+            <div className="formulario-acciones campo-ancho">
+              <button type="button" className="btn-secundario" onClick={() => setModalProductos(null)}>
+                Cerrar
+              </button>
+              <button type="submit" disabled={agregando}>
+                {agregando && <span className="spinner" aria-hidden="true" />}
+                {agregando ? 'Agregando…' : 'Agregar producto'}
+              </button>
+            </div>
           </form>
-          {ultimoCodigoGenerado && (
-            <p className="resultado">Producto creado con código interno: {ultimoCodigoGenerado}</p>
-          )}
-          {ultimoProductoCreado && !ultimoProductoCreado.codigoFabrica && (
-            <p className="resultado">
-              Sin código de fábrica: se usará el código interno {ultimoProductoCreado.codigoInterno}{' '}
-              como código de barras.
-            </p>
-          )}
-          {ultimoProductoCreado && (
-            <button type="button" onClick={() => setEtiquetaProducto(ultimoProductoCreado)}>
-              Imprimir etiqueta
-            </button>
-          )}
-          {marcaInfoAlta && (
-            <p className="resultado">
-              {marcaInfoAlta.esNueva
-                ? `Se creó la marca "${marcaInfoAlta.nombre}" y se le asignó el código N° ${marcaInfoAlta.codigo}.`
-                : `Marca "${marcaInfoAlta.nombre}", código N° ${marcaInfoAlta.codigo}.`}
-            </p>
-          )}
-        </section>
+        </Modal>
       )}
 
       {etiquetaProducto && (

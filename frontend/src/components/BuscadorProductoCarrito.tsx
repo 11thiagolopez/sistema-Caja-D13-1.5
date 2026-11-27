@@ -33,7 +33,9 @@ export function BuscadorProductoCarrito({ productos, datalistId, onAgregar }: Bu
     <div className="agregar-producto">
       <input
         list={datalistId}
-        placeholder="Buscar producto por descripción o marca"
+        aria-label="Producto"
+        className="buscador-producto-texto"
+        placeholder="Descripción o marca…"
         value={productoTexto}
         onChange={(e) => setProductoTexto(e.target.value)}
       />
@@ -42,7 +44,15 @@ export function BuscadorProductoCarrito({ productos, datalistId, onAgregar }: Bu
           <option key={producto.idProducto} value={etiquetaProducto(producto)} />
         ))}
       </datalist>
-      <input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
+      <input
+        type="number"
+        inputMode="numeric"
+        aria-label="Cantidad"
+        className="buscador-producto-cantidad"
+        min={1}
+        value={cantidad}
+        onChange={(e) => setCantidad(Number(e.target.value))}
+      />
       <button type="button" onClick={agregar} disabled={!productoSeleccionado}>
         Agregar
       </button>
