@@ -16,6 +16,7 @@ import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { ModalFacturacion } from '../components/ModalFacturacion'
 import { SelectorCliente } from '../components/SelectorCliente'
+import { VueltoModal } from '../components/VueltoModal'
 import { useCarrito } from '../hooks/useCarrito'
 import { verBlob } from '../utils/descargarBlob'
 import { formatoPesos, numeroComprobante, textoSaldo } from '../utils/formato'
@@ -56,6 +57,8 @@ export function RegistrarVenta() {
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<VentaResponse | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [pidiendoVuelto, setPidiendoVuelto] = useState(false)
+  const [vueltoDado, setVueltoDado] = useState<{ pagaCon: number; vuelto: number } | null>(null)
   const [viendoComprobante, setViendoComprobante] = useState(false)
   const [errorComprobanteVer, setErrorComprobanteVer] = useState<string | null>(null)
 
@@ -135,9 +138,26 @@ export function RegistrarVenta() {
     }
   }
 
-  async function onSubmit(event: FormEvent) {
+  // Lo que el cliente paga en el mostrador (sin recargo, que solo aplica a tarjeta).
+  function importeACobrar(): number {
+    return Math.max(total - (Number(descuento) || 0) - (Number(montoSaldoAplicado) || 0), 0)
+  }
+
+  function onSubmit(event: FormEvent) {
     event.preventDefault()
     if (!sesion || carrito.length === 0) return
+    // En efectivo primero se pregunta con cuánto paga, para mostrar el vuelto (VueltoModal).
+    if (medioPago === 'EFECTIVO' && importeACobrar() > 0) {
+      setError(null)
+      setPidiendoVuelto(true)
+      return
+    }
+    void registrar(null)
+  }
+
+  async function registrar(pagaCon: number | null) {
+    if (!sesion || carrito.length === 0) return
+    const importe = importeACobrar()
     setError(null)
     setEnviando(true)
     try {
@@ -158,6 +178,7 @@ export function RegistrarVenta() {
         montoSaldoAplicado: montoSaldoNumero,
       })
       setResultado(venta)
+      setVueltoDado(pagaCon != null && pagaCon > importe ? { pagaCon, vuelto: pagaCon - importe } : null)
       setClienteDeResultado(cliente)
       setFactura(null)
       setErrorFactura(null)
@@ -176,6 +197,7 @@ export function RegistrarVenta() {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar la venta')
     } finally {
       setEnviando(false)
+      setPidiendoVuelto(false)
     }
   }
 
@@ -254,6 +276,13 @@ export function RegistrarVenta() {
                 : `${formatoPesos(resultado.totalCobrado)} · ${ETIQUETA_MEDIO_PAGO[resultado.medioPago] ?? ''}`}
             </span>
           </div>
+          {vueltoDado && (
+            <div className="vuelto-dado">
+              <span>
+                Pagó con {formatoPesos(vueltoDado.pagaCon)} · <strong>Vuelto {formatoPesos(vueltoDado.vuelto)}</strong>
+              </span>
+            </div>
+          )}
           {resultado.recargoTarjeta != null && resultado.recargoTarjeta > 0 && (
             <div className="cobro-posnet">
               <span>Cobrar con el posnet</span>
@@ -511,6 +540,15 @@ export function RegistrarVenta() {
           </button>
         </form>
       </div>
+
+      {pidiendoVuelto && (
+        <VueltoModal
+          total={importeACobrar()}
+          enviando={enviando}
+          onConfirmar={(pagaCon) => void registrar(pagaCon)}
+          onCancelar={() => setPidiendoVuelto(false)}
+        />
+      )}
 
       {modalFacturaAbierto && resultado && (
         <ModalFacturacion
