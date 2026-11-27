@@ -43,9 +43,32 @@ public class FotoTrabajoService {
     }
 
     /**
-     * @param subidaPorAdmin true si la sube el jefe (avisa al técnico asignado); false si la sube el
-     *     técnico (avisa a los ADMIN).
-     * @param momento las del técnico: "ANTES" o "DESPUES" (obligatorio); las del jefe: siempre null.
+     * null = adjunto (lo que mandó el cliente, o lo que suma cualquiera para dar contexto); "ANTES" /
+     * "DESPUES" = comprobante del técnico. Al jefe se le ignora: lo suyo siempre es adjunto. Un valor
+     * que no sea ninguno de esos es un error (no se adivina).
+     */
+    static String normalizarMomento(String momento, boolean subidoPorAdmin) {
+        if (subidoPorAdmin || momento == null || momento.isBlank()) {
+            return null;
+        }
+        if (!MOMENTOS.contains(momento)) {
+            throw new IllegalArgumentException("Momento inválido: " + momento + " (ANTES, DESPUES o ninguno)");
+        }
+        return momento;
+    }
+
+    /** " de antes", " de después" o "" (adjunto), para los avisos. */
+    static String textoMomento(String momento) {
+        if ("ANTES".equals(momento)) {
+            return " de antes";
+        }
+        return "DESPUES".equals(momento) ? " de después" : "";
+    }
+
+    /**
+     * @param subidaPorAdmin true si la sube el jefe (avisa al técnico asignado y a los otros
+     *     dispositivos del jefe); false si la sube el técnico (avisa a los ADMIN).
+     * @param momento null = adjunto; "ANTES"/"DESPUES" solo para el técnico (al jefe se le ignora).
      */
     @Transactional
     public List<FotoTrabajoResponse> subir(Venta venta, Empleado autor, List<byte[]> imagenes, boolean subidaPorAdmin,
@@ -53,11 +76,7 @@ public class FotoTrabajoService {
         if (imagenes.isEmpty()) {
             throw new IllegalArgumentException("No se recibió ninguna foto");
         }
-        if (subidaPorAdmin) {
-            momento = null;
-        } else if (momento == null || !MOMENTOS.contains(momento)) {
-            throw new IllegalArgumentException("Elegí si las fotos son de antes o de después del trabajo");
-        }
+        momento = normalizarMomento(momento, subidaPorAdmin);
         if (VentaService.estaBloqueado(venta)) {
             throw new IllegalStateException("El trabajo #" + venta.getIdVenta()
                 + " está terminado, cobrado o eliminado: no se le pueden agregar fotos");
@@ -92,9 +111,11 @@ public class FotoTrabajoService {
                     "Hay " + cantidad + " nueva" + (imagenes.size() == 1 ? "" : "s") + " en el trabajo de "
                         + descripcion(venta), venta);
             }
+            notificacionTrabajoService.avisarCambioDelJefe("Se adjunt" + (imagenes.size() == 1 ? "ó " : "aron ")
+                + cantidad + " en #" + venta.getIdVenta() + " (" + descripcion(venta) + ")", venta);
         } else {
             notificacionTrabajoService.avisarATodosLosAdmin("FOTO",
-                autor.getNombre() + " subió " + cantidad + ("ANTES".equals(momento) ? " de antes" : " de después") + " en #" + venta.getIdVenta() + " (" + descripcion(venta) + ")",
+                autor.getNombre() + " subió " + cantidad + textoMomento(momento) + " en #" + venta.getIdVenta() + " (" + descripcion(venta) + ")",
                 venta);
         }
         return fotoRepo.listarDelTrabajo(venta.getIdVenta());

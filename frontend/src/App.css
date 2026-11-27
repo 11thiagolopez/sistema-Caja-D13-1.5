@@ -2118,6 +2118,45 @@ section {
   color: var(--text-muted);
 }
 
+/* Videos del trabajo: lista (no hay miniatura sin bajar el video) y el reproductor en el mismo visor. */
+.videos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.video-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+.video-progreso {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 13px;
+}
+
+.video-progreso progress {
+  width: 100%;
+}
+
+.foto-visor-contenido video {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  border-radius: 6px;
+  background: #000;
+}
+
+.foto-visor-contenido audio {
+  width: min(90vw, 480px);
+}
+
 .fotos-botones {
   display: flex;
   flex-wrap: wrap;

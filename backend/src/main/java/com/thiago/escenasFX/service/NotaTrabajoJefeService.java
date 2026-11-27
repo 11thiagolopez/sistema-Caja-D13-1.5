@@ -44,6 +44,7 @@ public class NotaTrabajoJefeService {
             notificacionTrabajoService.avisarATecnico(venta.getEmpleadoTecnico(), "NOTA",
                 "Nota del jefe en #" + venta.getIdVenta() + ": " + texto, venta);
         }
+        notificacionTrabajoService.avisarCambioDelJefe("Nota en " + ResumenTrabajo.nombre(venta) + ": " + texto, venta);
         return guardada;
     }
 }

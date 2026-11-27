@@ -206,6 +206,18 @@ class PushServiceTest {
     }
 
     @Test
+    void avisarConContenido_salteaElDispositivoQueHizoElCambio_peroAvisaALosOtros() throws Exception {
+        SuscripcionPush otroDispositivo = suscripcionConClaves();
+        otroDispositivo.setEndpoint("https://fcm.googleapis.com/fcm/send/celular-del-jefe");
+        when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(suscripcionConClaves(), otroDispositivo));
+        when(webPushClient.enviar(org.mockito.ArgumentMatchers.any())).thenReturn(respuestaConEstado(201));
+
+        pushService.avisarConContenido(empleado(1), "{\"tipo\":\"CAMBIO_TRABAJO\"}", ENDPOINT);
+
+        verify(webPushClient, org.mockito.Mockito.times(1)).enviar(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void avisarConContenido_suscripcionVencida_laBorra() throws Exception {
         SuscripcionPush vencida = suscripcionConClaves();
         when(repo.findByEmpleado_IdEmpleado(1)).thenReturn(List.of(vencida));

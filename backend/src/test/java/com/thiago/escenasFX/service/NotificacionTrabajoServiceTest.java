@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,7 +69,7 @@ class NotificacionTrabajoServiceTest {
         assertThat(captor.getValue().getVenta()).isEqualTo(venta);
 
         ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
-        verify(pushService).avisarConContenido(eq(fabian), payloadCaptor.capture());
+        verify(pushService).avisarConContenido(eq(fabian), payloadCaptor.capture(), isNull());
         assertThat(payloadCaptor.getValue()).contains("\"tipo\":\"TRABAJO_NUEVO\"").contains("/mis-trabajos/42");
     }
 
@@ -83,8 +84,30 @@ class NotificacionTrabajoServiceTest {
 
         service.avisarATodosLosAdmin("TERMINADO", "Trabajo #7 terminado", venta);
 
-        verify(pushService).avisarConContenido(eq(admin1), anyString());
-        verify(pushService).avisarConContenido(eq(admin2), anyString());
+        verify(pushService).avisarConContenido(eq(admin1), anyString(), isNull());
+        verify(pushService).avisarConContenido(eq(admin2), anyString(), isNull());
+    }
+
+    @Test
+    void avisarCambioDelJefe_salteaElDispositivoDesdeElQueSeHizoElCambio() {
+        service = crearServicio();
+        Empleado admin = empleado(1);
+        when(empleadoRepo.findByRolAndActivoTrue("ADMIN")).thenReturn(List.of(admin));
+        when(notificacionRepo.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        org.springframework.mock.web.MockHttpServletRequest pedido = new org.springframework.mock.web.MockHttpServletRequest();
+        pedido.addHeader("X-Push-Endpoint", "https://fcm.googleapis.com/fcm/send/pc-del-local");
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+            new org.springframework.web.context.request.ServletRequestAttributes(pedido));
+        try {
+            service.avisarCambioDelJefe("Nuevo trabajo #7", venta(7));
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(pushService).avisarConContenido(eq(admin), payload.capture(),
+            eq("https://fcm.googleapis.com/fcm/send/pc-del-local"));
+        assertThat(payload.getValue()).contains("\"tipo\":\"CAMBIO_TRABAJO\"").contains("/ventas/domicilio?id=7");
     }
 
     @Test
@@ -109,7 +132,7 @@ class NotificacionTrabajoServiceTest {
         Venta venta = venta(1);
         when(notificacionRepo.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         org.mockito.Mockito.doThrow(new RuntimeException("sin red")).when(pushService)
-            .avisarConContenido(any(), anyString());
+            .avisarConContenido(any(), anyString(), any());
 
         service.avisarATecnico(fabian, "TRABAJO_NUEVO", "texto", venta);
 

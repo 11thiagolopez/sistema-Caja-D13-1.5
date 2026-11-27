@@ -371,15 +371,29 @@ export interface FotoTrabajoResponse {
   idEmpleado: number
   nombreEmpleado: string
   creadaEn: string
-  // null = la subió el jefe (fotos del cliente); ANTES / DESPUES = las saca el técnico en el domicilio.
+  // null = adjunto (lo que mandó el cliente, o lo que suma el jefe o el técnico para dar contexto);
+  // ANTES / DESPUES = las saca el técnico en el domicilio como comprobante.
   momento: MomentoFoto | null
+}
+
+// Video o audio adjunto a un trabajo (el archivo vive en el bucket: para reproducirlo se pide un link temporal).
+export interface ArchivoTrabajoResponse {
+  idArchivo: number
+  idEmpleado: number
+  nombreEmpleado: string
+  creadaEn: string
+  momento: MomentoFoto | null
+  tamanioBytes: number
+  // "video/..." o "audio/..."
+  tipoContenido: string
 }
 
 export interface MiTrabajoResponse {
   trabajo: TrabajoTecnico
   notas: NotaTrabajoResponse[]
-  // Vacío en la lista: solo viene completo en el detalle.
+  // Vacíos en la lista: solo vienen completos en el detalle.
   fotos: FotoTrabajoResponse[]
+  archivos: ArchivoTrabajoResponse[]
 }
 
 // EN_CAMINO | EN_CURSO | TERMINADO: los únicos que el técnico puede fijar él mismo.
@@ -393,6 +407,10 @@ export type TipoNotificacion =
   | 'LLEGO'
   | 'TERMINADO'
   | 'NOTA'
+  | 'FOTO'
+  | 'REABIERTO'
+  // Lo que hace el jefe en un trabajo, avisado a los otros dispositivos del usuario ADMIN.
+  | 'CAMBIO_TRABAJO'
 
 export interface NotificacionResponse {
   idNotificacion: number

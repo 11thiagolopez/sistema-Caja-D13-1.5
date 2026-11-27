@@ -9,7 +9,20 @@ Antes de escribir código del frontend, lee SIEMPRE el archivo plan-frontend.md 
 
 Revisa la sección "Estado Actual" de este mismo archivo para saber exactamente en qué paso nos encontramos.
 
-Estado Actual (Actualizado al 2026-11-26 — alta 02/02 arreglada + proveedor editable):
+Estado Actual (Actualizado al 2026-11-27 — adjuntos, avisos al jefe y WhatsApp Web):
+
+**Sección 41 de `plan-migracion.md`**: (1) adjuntos en trabajos a domicilio — fotos (en la base, como
+antes), videos (100 MB, 5 por trabajo) y audios en el **Railway Storage Bucket** (API S3,
+`archivos_trabajo` guarda solo la referencia); botones Antes / Después / **Adjuntar** (el técnico ya
+no está obligado a elegir antes/después). (2) **Avisos `CAMBIO_TRABAJO`** a los ADMIN con lo que
+cambió al crear/editar/cobrar/eliminar/reabrir/notas/adjuntos del jefe; como jefe y local comparten
+el usuario ADMIN, se excluye el **dispositivo** que hizo el cambio (cabecera `X-Push-Endpoint`).
+(3) Confirmación del turno por **WhatsApp Web** en la PC (wa.me en el celular). **Pendiente:** correr
+el SQL de la sección 41 en Supabase ANTES de deployar (sin la tabla el backend no arranca), cargar
+`BUCKET` (y `ENDPOINT` si no es `https://t3.storageapi.dev`) en Railway, y probar en navegador y
+celular. 492 tests.
+
+Estado Anterior (Actualizado al 2026-11-26 — alta 02/02 arreglada + proveedor editable):
 
 **Sección 40 de `plan-migracion.md`**: el alta de productos rubro 02/familia 02 fallaba porque 81
 productos migrados (rubro 03) tienen `codigo_interno` "0202…" que no coincide con sus partes; ahora

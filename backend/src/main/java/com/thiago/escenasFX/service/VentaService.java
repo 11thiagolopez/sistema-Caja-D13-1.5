@@ -519,8 +519,10 @@ public class VentaService {
         LocalTime horaDesdeAnterior;
         LocalTime horaHastaAnterior;
         Empleado tecnicoAnterior;
+        ResumenTrabajo resumenAnterior = null;
         if (!esNueva) {
             venta = obtenerTrabajoEditableConLock(req.getIdVenta());
+            resumenAnterior = ResumenTrabajo.de(venta);
             estadoAnterior = venta.getEstadoTrabajo();
             fechaAnterior = venta.getFechaProgramada();
             horaDesdeAnterior = venta.getHoraDesde();
@@ -637,8 +639,32 @@ public class VentaService {
 
         avisarTecnicoSiCorresponde(guardada, esNueva, tecnicoAnterior, fechaAnterior, horaDesdeAnterior,
             horaHastaAnterior);
+        avisarAlJefe(guardada, resumenAnterior, req.isCerrar());
 
         return guardada;
+    }
+
+    /**
+     * Push a los dispositivos del jefe con lo que se hizo (el que guardó no lo recibe: ver
+     * NotificacionTrabajoService.avisarCambioDelJefe). Guardar sin cambiar nada no avisa.
+     */
+    private void avisarAlJefe(Venta guardada, ResumenTrabajo antes, boolean cobrado) {
+        ResumenTrabajo ahora = ResumenTrabajo.de(guardada);
+        if (cobrado) {
+            notificacionTrabajoService.avisarCambioDelJefe(textoCobrado(guardada), guardada);
+        } else if (antes == null) {
+            notificacionTrabajoService.avisarCambioDelJefe(ahora.textoNuevo(guardada), guardada);
+        } else {
+            List<String> cambios = ahora.cambiosDesde(antes);
+            if (!cambios.isEmpty()) {
+                notificacionTrabajoService.avisarCambioDelJefe(ResumenTrabajo.textoCambios(guardada, cambios), guardada);
+            }
+        }
+    }
+
+    private static String textoCobrado(Venta venta) {
+        String medio = venta.getMedioPago() != null ? " (" + venta.getMedioPago().toLowerCase().replace('_', ' ') + ")" : "";
+        return "Se cobró el trabajo " + ResumenTrabajo.nombre(venta) + ": " + ResumenTrabajo.pesos(venta.getTotalVenta()) + medio;
     }
 
     /**
@@ -708,6 +734,7 @@ public class VentaService {
             notificacionTrabajoService.avisarATecnico(anulada.getEmpleadoTecnico(), ESTADO_CANCELADO,
                 "Se canceló el trabajo #" + anulada.getIdVenta(), anulada);
         }
+        notificacionTrabajoService.avisarCambioDelJefe("Se eliminó el trabajo " + ResumenTrabajo.nombre(anulada), anulada);
         return anulada;
     }
 
@@ -766,6 +793,7 @@ public class VentaService {
         venta.setEstado("CONFIRMADA");
         Venta cobrada = ventaRepo.save(venta);
         historialEstadoService.registrar(cobrada, ESTADO_TERMINADO, ESTADO_CERRADO_Y_COBRADO, admin, null);
+        notificacionTrabajoService.avisarCambioDelJefe(textoCobrado(cobrada), cobrada);
         return cobrada;
     }
 
@@ -788,6 +816,7 @@ public class VentaService {
             notificacionTrabajoService.avisarATecnico(reabierta.getEmpleadoTecnico(), "REABIERTO",
                 "Se reabrió el trabajo #" + reabierta.getIdVenta() + " (" + descripcionParaAviso(reabierta) + ")", reabierta);
         }
+        notificacionTrabajoService.avisarCambioDelJefe("Se reabrió el trabajo " + ResumenTrabajo.nombre(reabierta), reabierta);
         return reabierta;
     }
 }

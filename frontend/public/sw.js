@@ -9,7 +9,9 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification('Sistema D13', {
       body: datos ? datos.cuerpo : 'Tenés una petición nueva para aprobar.',
       icon: '/icon-192.png',
-      tag: datos ? datos.tipo : 'peticion-autorizacion',
+      // Una por tipo y trabajo: el aviso de un trabajo no tapa el de otro (antes, dos trabajos nuevos
+      // seguidos dejaban visible solo el último).
+      tag: datos ? `${datos.tipo}-${datos.url}` : 'peticion-autorizacion',
       renotify: true,
       data: { url: datos ? datos.url : '/autorizaciones' },
     }),
