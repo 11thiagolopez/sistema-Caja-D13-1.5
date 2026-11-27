@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiRequestError } from '../api/client'
+import { Logo } from '../components/Logo'
 
 export function Login() {
   const { login } = useAuth()
@@ -17,7 +18,7 @@ export function Login() {
     setError(null)
     setCargando(true)
     try {
-      const rol = await login(usuario, password)
+      const rol = await login(usuario.trim(), password)
       const destinoPorDefecto = rol === 'TECNICO' ? '/mis-trabajos' : '/ventas/nueva'
       navigate((location.state as { desde?: string } | null)?.desde ?? destinoPorDefecto, { replace: true })
     } catch (err) {
@@ -29,27 +30,57 @@ export function Login() {
 
   return (
     <div className="pantalla-login">
-      <form onSubmit={onSubmit}>
-        <h1>Sistema D13</h1>
-        <label>
-          Usuario
-          <input value={usuario} onChange={(e) => setUsuario(e.target.value)} autoFocus required />
-        </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={cargando}>
-          {cargando && <span className="spinner" />}
-          {cargando ? 'Ingresando...' : 'Ingresar'}
-        </button>
-      </form>
+      <div className="login-marca">
+        <Logo tamano={64} claro />
+        <div>
+          <h1>Tu caja, tus ventas y tus trabajos, en un solo lugar.</h1>
+          <p>Sistema de gestión para comercios y distribuidoras.</p>
+        </div>
+        <small>© {new Date().getFullYear()} oNce</small>
+      </div>
+
+      <div className="login-panel">
+        <div className="login-logo-celular">
+          <Logo tamano={48} />
+        </div>
+        <form onSubmit={onSubmit}>
+          <h2>Iniciar sesión</h2>
+          <p className="login-subtitulo">Ingresá con tu usuario del sistema</p>
+          <label>
+            Usuario
+            <input
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              autoFocus
+              required
+            />
+          </label>
+          <label>
+            Contraseña
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          {error && (
+            <p className="alerta alerta-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={cargando}>
+            {cargando && <span className="spinner" aria-hidden="true" />}
+            {cargando ? 'Ingresando…' : 'Entrar'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

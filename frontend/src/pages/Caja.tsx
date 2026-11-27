@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getResumenDia } from '../api/caja'
 import { ApiRequestError } from '../api/client'
 import { GraficoDona } from '../components/graficos/GraficoDona'
 import { TarjetaGrafico } from '../components/graficos/TarjetaGrafico'
 import { COLORES_MEDIO_PAGO } from '../components/graficos/tema'
-import { formatoFechaHora, formatoPesos, formatoPorcentaje } from '../utils/formato'
+import { BotonesCaja, EstadoCaja } from '../components/AccionesCaja'
+import { useAccionesCaja } from '../components/accionesCajaContexto'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { UltimasVentas } from '../components/UltimasVentas'
+import { hoyIso } from '../utils/date'
+import { formatoDiaLargo, formatoFechaHora, formatoPesos, formatoPorcentaje } from '../utils/formato'
 import type { ResumenDiaResponse } from '../types/api'
 
 // Una fila del arqueo: cuánto suma o resta en efectivo y en digital (transferencia + tarjeta).
@@ -51,13 +57,15 @@ export function Caja() {
   const [resumen, setResumen] = useState<ResumenDiaResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
+  const navigate = useNavigate()
+  const { version } = useAccionesCaja()
 
   useEffect(() => {
     getResumenDia()
       .then(setResumen)
       .catch((err) => setError(err instanceof ApiRequestError ? err.message : 'No se pudo cargar el resumen del día'))
       .finally(() => setCargando(false))
-  }, [])
+  }, [version])
 
   // Lo cobrado por cada medio: ventas de mostrador más pagos de clientes de cuenta corriente.
   const medios = useMemo(() => {
@@ -86,10 +94,21 @@ export function Caja() {
 
   return (
     <div className="caja-resumen">
-      <h2>Resumen de caja del día</h2>
+      <EncabezadoPagina
+        titulo="Resumen de caja del día"
+        etiqueta={<EstadoCaja />}
+        subtitulo={formatoDiaLargo(hoyIso())}
+        acciones={
+          <BotonesCaja>
+            <button type="button" onClick={() => navigate('/ventas/nueva')}>
+              + Nueva venta
+            </button>
+          </BotonesCaja>
+        }
+      />
 
       <div className="reportes-tarjetas">
-        <div className="reportes-tarjeta">
+        <div className="reportes-tarjeta caja-tarjeta-destacada">
           <span>Vendido hoy</span>
           <strong>{formatoPesos(resumen.totalDelDia)}</strong>
           <small>Mostrador, cobros de clientes y trabajos a domicilio</small>
@@ -104,12 +123,14 @@ export function Caja() {
           <strong>{formatoPesos(resumen.totalDigital)}</strong>
           <small>Transferencias y tarjeta</small>
         </div>
-        <div className="reportes-tarjeta caja-tarjeta-destacada">
+        <div className="reportes-tarjeta">
           <span>Total en caja</span>
           <strong>{formatoPesos(resumen.cajaTotalDelDia)}</strong>
           <small>Efectivo + digital, incluye el monto inicial</small>
         </div>
       </div>
+
+      <UltimasVentas version={version} />
 
       <p className="caja-aclaracion">
         <strong>Vendido hoy</strong> y <strong>Total en caja</strong> no tienen que coincidir: el total en caja

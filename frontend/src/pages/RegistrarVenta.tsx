@@ -2,13 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getRecargos } from '../api/recargos'
-import { calcularRecargo } from '../utils/recargo'
+import { calcularRecargo, ETIQUETA_MEDIO_PAGO } from '../utils/recargo'
 import { buscarProductoPorCodigo, getProductos } from '../api/productos'
 import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../api/ventas'
 import { getSaldoCliente } from '../api/clientes'
 import { verPdfFactura } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
+import { BotonesCaja, EstadoCaja } from '../components/AccionesCaja'
 import { useAutorizaciones } from '../components/AutorizacionesPendientes'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
@@ -216,149 +218,42 @@ export function RegistrarVenta() {
   const netoPorPosnet = Math.max(total - (Number(descuento) || 0) - (Number(montoSaldoAplicado) || 0), 0)
   const recargoPrevio = porcentajeRecargo != null ? calcularRecargo(netoPorPosnet, porcentajeRecargo) : 0
 
+  const opcionesMedioPago: { valor: MedioPago; texto: string; detalle?: string }[] = [
+    { valor: 'EFECTIVO', texto: 'Efectivo' },
+    { valor: 'TRANSFERENCIA', texto: 'Transferencia' },
+    {
+      valor: 'TARJETA_DEBITO',
+      texto: 'Débito',
+      detalle: recargos.TARJETA_DEBITO != null ? `+${recargos.TARJETA_DEBITO}%` : undefined,
+    },
+    {
+      valor: 'TARJETA_CREDITO',
+      texto: 'Crédito',
+      detalle: recargos.TARJETA_CREDITO != null ? `+${recargos.TARJETA_CREDITO}%` : undefined,
+    },
+    { valor: 'CUENTA_CORRIENTE', texto: 'Cuenta corriente' },
+  ]
+  const totalACobrar = Math.max(total - (Number(descuento) || 0) - (Number(montoSaldoAplicado) || 0), 0) + recargoPrevio
+  const cantidadArticulos = carrito.reduce((acc, item) => acc + item.cantidad, 0)
+
   return (
-    <div>
-      <h2>Registrar venta</h2>
-
-      <section>
-        <h3>Escanear código de barras</h3>
-        <BarcodeInput onScan={onEscanear} />
-        {errorEscaneo && <p className="error">{errorEscaneo}</p>}
-      </section>
-
-      <BuscadorProductoCarrito
-        productos={productos}
-        datalistId="productos-datalist"
-        onAgregar={agregarProductoAlCarrito}
-      />
-
-      <table>
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Cantidad</th>
-            <th>Precio unitario</th>
-            <th>Subtotal</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {carrito.map((item, index) => (
-            <tr key={item.clientId}>
-              <td>{item.descripcionProducto}</td>
-              <td>{item.cantidad}</td>
-              <td>{item.precioUnitario.toFixed(2)}</td>
-              <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
-              <td>
-                <button type="button" onClick={() => quitarDelCarrito(index)}>
-                  Quitar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        <strong>Total: {total.toFixed(2)}</strong>
-      </p>
-
-      <form onSubmit={onSubmit}>
-        <section>
-          <h4>Cliente (opcional)</h4>
-          <SelectorCliente value={cliente} onChange={setCliente} />
-          {cliente && saldoDisponible != null && (
-            <p>
-              Cuenta corriente: <span className={saldoDisponible < 0 ? 'saldo-deudor' : undefined}>{textoSaldo(saldoDisponible)}</span>
-              {saldoDisponible > 0 && medioPago !== 'CUENTA_CORRIENTE' && (
-                <>
-                  {' — '}
-                  <label>
-                    Pagar con saldo
-                    <input
-                      type="number"
-                      min={0}
-                      max={Math.min(saldoDisponible, total)}
-                      step="0.01"
-                      value={montoSaldoAplicado}
-                      onChange={(e) => setMontoSaldoAplicado(e.target.value)}
-                    />
-                  </label>
-                </>
-              )}
-            </p>
-          )}
-          {montoSaldoAplicado && Number(montoSaldoAplicado) >= total && (
-            <p>Se paga el total con saldo — el medio de pago de abajo no aplica.</p>
-          )}
-        </section>
-        <label>
-          Medio de pago
-          <select value={medioPago} onChange={(e) => onCambiarMedioPago(e.target.value as MedioPago)}>
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA_CREDITO">
-              Tarjeta de crédito{recargos.TARJETA_CREDITO != null ? ` (+ recargo ${recargos.TARJETA_CREDITO}%)` : ''}
-            </option>
-            <option value="TARJETA_DEBITO">
-              Tarjeta de débito{recargos.TARJETA_DEBITO != null ? ` (+ recargo ${recargos.TARJETA_DEBITO}%)` : ''}
-            </option>
-            <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
-          </select>
-        </label>
-        {esTarjeta && netoPorPosnet > 0 && porcentajeRecargo != null && (
-          <div className="cobro-posnet">
-            <span>Cobrar con el posnet</span>
-            <strong>{formatoPesos(netoPorPosnet + recargoPrevio)}</strong>
-            <small>
-              Precio {formatoPesos(netoPorPosnet)} + recargo {formatoPesos(recargoPrevio)}. El posnet se queda con el{' '}
-              {porcentajeRecargo}% y quedan {formatoPesos(netoPorPosnet)}, que es lo que se registra en caja.
-              {sesion?.rol === 'ADMIN' && (
-                <>
-                  {' '}
-                  <Link to="/configuracion/recargos">Cambiar porcentajes</Link>
-                </>
-              )}
-            </small>
-          </div>
-        )}
-        {faltaClienteParaCuenta && <p className="error">Para vender en cuenta corriente, elegí o creá un cliente.</p>}
-        {medioPago === 'CUENTA_CORRIENTE' && cliente && (
-          <p>El total se carga a la cuenta corriente de {cliente.nombre}.</p>
-        )}
-        <label>
-          Descuento (opcional)
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            value={descuento}
-            onChange={(e) => setDescuento(e.target.value)}
-          />
-        </label>
-        {descuento && Number(descuento) > 0 && (
-          <label>
-            Motivo del descuento
-            <input
-              value={motivoDescuento}
-              onChange={(e) => setMotivoDescuento(e.target.value)}
-              required
-            />
-          </label>
-        )}
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={enviando || carrito.length === 0 || faltaClienteParaCuenta}>
-          {enviando && <span className="spinner" />}
-          {enviando ? 'Registrando...' : 'Registrar venta'}
-        </button>
-      </form>
+    <div className="cobros">
+      <EncabezadoPagina titulo="Cobros" etiqueta={<EstadoCaja />} acciones={<BotonesCaja />} />
 
       {resultado && (
-        <div className="resultado">
-          <p>
-            {resultado.estado === 'PENDIENTE_AUTORIZACION'
-              ? `Venta #${resultado.idVenta} registrada, pendiente de autorización: le llegó al administrador. Podés seguir cobrando; la respuesta aparece en "Mis peticiones", abajo a la derecha.`
-              : `Venta #${resultado.idVenta} confirmada.`}
-          </p>
+        <section className={`tarjeta cobro-resultado ${resultado.estado === 'PENDIENTE_AUTORIZACION' ? 'cobro-resultado-pendiente' : ''}`} role="status">
+          <div className="cobro-resultado-titulo">
+            <strong>
+              {resultado.estado === 'PENDIENTE_AUTORIZACION'
+                ? `Venta #${resultado.idVenta} esperando autorización`
+                : `Venta #${resultado.idVenta} cobrada`}
+            </strong>
+            <span>
+              {resultado.estado === 'PENDIENTE_AUTORIZACION'
+                ? 'Le llegó al administrador. Podés seguir cobrando; la respuesta aparece en "Mis peticiones", abajo a la derecha.'
+                : `${formatoPesos(resultado.totalCobrado)} · ${ETIQUETA_MEDIO_PAGO[resultado.medioPago] ?? ''}`}
+            </span>
+          </div>
           {resultado.recargoTarjeta != null && resultado.recargoTarjeta > 0 && (
             <div className="cobro-posnet">
               <span>Cobrar con el posnet</span>
@@ -371,64 +266,251 @@ export function RegistrarVenta() {
           )}
           {resultado.montoSaldoAplicado != null && resultado.montoSaldoAplicado > 0 && (
             <p>
-              Se pagaron ${resultado.montoSaldoAplicado.toFixed(2)} con el saldo de cuenta corriente de{' '}
+              Se pagaron {formatoPesos(resultado.montoSaldoAplicado)} con el saldo de cuenta corriente de{' '}
               {resultado.nombreCliente}.
             </p>
           )}
           {factura && (
-            <div>
-              <p>
-                Factura C Nº {numeroComprobante(factura.puntoVenta, factura.numero)}
-                {factura.clienteNombre ? ` a ${factura.clienteNombre}` : ' a Consumidor Final'}. CAE {factura.cae}
-              </p>
-              <button type="button" onClick={verFactura} disabled={abriendoFactura}>
-                {abriendoFactura ? 'Abriendo...' : 'Ver factura'}
-              </button>
-              <BotonDescargarFactura factura={factura} onError={setErrorFactura} />
-              {errorFactura && <p className="error">{errorFactura}</p>}
-            </div>
+            <p>
+              Factura C Nº {numeroComprobante(factura.puntoVenta, factura.numero)}
+              {factura.clienteNombre ? ` a ${factura.clienteNombre}` : ' a Consumidor Final'}. CAE {factura.cae}
+            </p>
           )}
-          {resultado.estado === 'CONFIRMADA' && !factura && (
-            <button type="button" onClick={() => setModalFacturaAbierto(true)}>
-              Facturar esta venta
-            </button>
-          )}
-          {resultado.estado === 'CONFIRMADA' && !factura && (
-            <button type="button" onClick={verComprobante} disabled={viendoComprobante}>
-              {viendoComprobante && <span className="spinner" />}
-              {viendoComprobante ? 'Abriendo...' : 'Ver comprobante'}
-            </button>
-          )}
+          <div className="cobro-resultado-acciones">
+            {factura && (
+              <>
+                <button type="button" onClick={verFactura} disabled={abriendoFactura}>
+                  {abriendoFactura ? 'Abriendo…' : 'Ver factura'}
+                </button>
+                <BotonDescargarFactura factura={factura} onError={setErrorFactura} />
+              </>
+            )}
+            {resultado.estado === 'CONFIRMADA' && !factura && (
+              <>
+                <button type="button" onClick={() => setModalFacturaAbierto(true)}>
+                  Facturar esta venta
+                </button>
+                <button type="button" className="btn-secundario" onClick={verComprobante} disabled={viendoComprobante}>
+                  {viendoComprobante && <span className="spinner" aria-hidden="true" />}
+                  {viendoComprobante ? 'Abriendo…' : 'Ver comprobante'}
+                </button>
+              </>
+            )}
+          </div>
+          {errorFactura && <p className="error">{errorFactura}</p>}
           {errorComprobanteVer && <p className="error">{errorComprobanteVer}</p>}
           {resultado.estado === 'CONFIRMADA' && !factura && (
-            <div>
-              <h4>Enviar comprobante por email</h4>
-              <input
-                type="email"
-                placeholder="Email del cliente"
-                value={emailComprobante}
-                onChange={(e) => setEmailComprobante(e.target.value)}
-              />
+            <div className="cobro-email">
+              <label>
+                Enviar comprobante por email
+                <input
+                  type="email"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="cliente@ejemplo.com"
+                  value={emailComprobante}
+                  onChange={(e) => setEmailComprobante(e.target.value)}
+                />
+              </label>
               <button
                 type="button"
+                className="btn-secundario"
                 onClick={onEnviarComprobante}
                 disabled={enviandoComprobante || !emailComprobante}
               >
-                {enviandoComprobante && <span className="spinner" />}
+                {enviandoComprobante && <span className="spinner" aria-hidden="true" />}
                 {enviandoComprobante
-                  ? 'Enviando...'
+                  ? 'Enviando…'
                   : resultado.comprobanteEnviadoPorEmail
                     ? 'Reenviar por email'
                     : 'Enviar por email'}
               </button>
-              {errorComprobante && <p className="error">{errorComprobante}</p>}
-              {resultado.comprobanteEnviadoPorEmail && resultado.clienteEmail && (
-                <p className="resultado">Comprobante enviado a {resultado.clienteEmail}.</p>
-              )}
             </div>
           )}
-        </div>
+          {errorComprobante && <p className="error">{errorComprobante}</p>}
+          {resultado.comprobanteEnviadoPorEmail && resultado.clienteEmail && (
+            <p className="alerta alerta-ok">Comprobante enviado a {resultado.clienteEmail}.</p>
+          )}
+        </section>
       )}
+
+      <div className="cobros-grilla">
+        <section className="tarjeta cobros-productos">
+          <header className="tarjeta-encabezado">
+            <h3>Productos</h3>
+            {carrito.length > 0 && (
+              <span className="texto-apagado">
+                {cantidadArticulos} {cantidadArticulos === 1 ? 'artículo' : 'artículos'}
+              </span>
+            )}
+          </header>
+          <div className="cobros-carga">
+            <label>
+              Escanear código de barras
+              <BarcodeInput onScan={onEscanear} />
+            </label>
+            {errorEscaneo && <p className="error">{errorEscaneo}</p>}
+            <div className="cobros-buscar">
+              <span className="cobros-buscar-titulo">O buscalo por nombre</span>
+              <BuscadorProductoCarrito
+                productos={productos}
+                datalistId="productos-datalist"
+                onAgregar={agregarProductoAlCarrito}
+              />
+            </div>
+          </div>
+
+          {carrito.length === 0 ? (
+            <p className="cobros-vacio">Escaneá o buscá un producto para empezar la venta.</p>
+          ) : (
+            <div className="tabla-scroll">
+              <table className="cobros-carrito">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th className="celda-numero">Cantidad</th>
+                    <th className="celda-numero col-precio">Precio</th>
+                    <th className="celda-numero">Subtotal</th>
+                    <th>
+                      <span className="solo-lector">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carrito.map((item, index) => (
+                    <tr key={item.clientId}>
+                      <td className="texto-fuerte">{item.descripcionProducto}</td>
+                      <td className="celda-numero">{item.cantidad}</td>
+                      <td className="celda-numero col-precio">{formatoPesos(item.precioUnitario)}</td>
+                      <td className="celda-numero texto-fuerte">{formatoPesos(item.cantidad * item.precioUnitario)}</td>
+                      <td className="celda-numero">
+                        <button
+                          type="button"
+                          className="btn-peligro-borde btn-chico"
+                          onClick={() => quitarDelCarrito(index)}
+                          aria-label={`Quitar ${item.descripcionProducto}`}
+                        >
+                          Quitar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <form className="tarjeta cobros-panel" onSubmit={onSubmit}>
+          <div className="cobros-total">
+            <span>Total</span>
+            <strong>{formatoPesos(total)}</strong>
+          </div>
+
+          <div className="cobros-bloque">
+            <SelectorCliente value={cliente} onChange={setCliente} />
+            {cliente && saldoDisponible != null && (
+              <p className="cobros-saldo">
+                Cuenta corriente:{' '}
+                <span className={saldoDisponible < 0 ? 'saldo-deudor' : undefined}>{textoSaldo(saldoDisponible)}</span>
+              </p>
+            )}
+            {cliente && saldoDisponible != null && saldoDisponible > 0 && medioPago !== 'CUENTA_CORRIENTE' && (
+              <label>
+                Pagar con saldo (opcional)
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={Math.min(saldoDisponible, total)}
+                  step="0.01"
+                  value={montoSaldoAplicado}
+                  onChange={(e) => setMontoSaldoAplicado(e.target.value)}
+                />
+              </label>
+            )}
+            {montoSaldoAplicado && Number(montoSaldoAplicado) >= total && (
+              <p className="alerta">Se paga el total con saldo: la forma de pago no aplica.</p>
+            )}
+          </div>
+
+          <fieldset className="cobros-bloque cobros-medios">
+            <legend>Forma de pago</legend>
+            <div className="opciones-grandes">
+              {opcionesMedioPago.map((op) => (
+                <button
+                  key={op.valor}
+                  type="button"
+                  className="opcion-grande"
+                  aria-pressed={medioPago === op.valor}
+                  onClick={() => onCambiarMedioPago(op.valor)}
+                >
+                  {op.texto}
+                  {op.detalle && <small>{op.detalle}</small>}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          {esTarjeta && netoPorPosnet > 0 && porcentajeRecargo != null && (
+            <div className="cobro-posnet">
+              <span>Cobrar con el posnet</span>
+              <strong>{formatoPesos(netoPorPosnet + recargoPrevio)}</strong>
+              <small>
+                Precio {formatoPesos(netoPorPosnet)} + recargo {formatoPesos(recargoPrevio)}. El posnet se queda con el{' '}
+                {porcentajeRecargo}% y quedan {formatoPesos(netoPorPosnet)}, que es lo que se registra en caja.
+                {sesion?.rol === 'ADMIN' && (
+                  <>
+                    {' '}
+                    <Link to="/configuracion/recargos">Cambiar porcentajes</Link>
+                  </>
+                )}
+              </small>
+            </div>
+          )}
+          {faltaClienteParaCuenta && (
+            <p className="alerta alerta-aviso">Para vender en cuenta corriente, elegí o creá un cliente.</p>
+          )}
+          {medioPago === 'CUENTA_CORRIENTE' && cliente && (
+            <p className="alerta">El total se carga a la cuenta corriente de {cliente.nombre}.</p>
+          )}
+
+          <details className="cobros-descuento" open={Boolean(descuento)}>
+            <summary>Aplicar descuento</summary>
+            <label>
+              Descuento en pesos
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={descuento}
+                onChange={(e) => setDescuento(e.target.value)}
+              />
+            </label>
+            {descuento && Number(descuento) > 0 && (
+              <label>
+                Motivo del descuento
+                <input value={motivoDescuento} onChange={(e) => setMotivoDescuento(e.target.value)} required />
+              </label>
+            )}
+          </details>
+
+          {error && (
+            <p className="alerta alerta-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            className="cobros-confirmar"
+            disabled={enviando || carrito.length === 0 || faltaClienteParaCuenta}
+          >
+            {enviando && <span className="spinner" aria-hidden="true" />}
+            {enviando ? 'Registrando…' : carrito.length === 0 ? 'Registrar venta' : `Cobrar ${formatoPesos(totalACobrar)}`}
+          </button>
+        </form>
+      </div>
 
       {modalFacturaAbierto && resultado && (
         <ModalFacturacion

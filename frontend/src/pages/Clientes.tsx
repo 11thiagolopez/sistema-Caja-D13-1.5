@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   eliminarCliente,
   getCliente,
@@ -32,7 +33,13 @@ export function Clientes() {
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [creando, setCreando] = useState(false)
-  const [idAbierto, setIdAbierto] = useState<number | null>(null)
+  const [searchParams] = useSearchParams()
+  const idEnUrl = searchParams.get('id')
+  const [idAbierto, setIdAbierto] = useState<number | null>(() => (idEnUrl ? Number(idEnUrl) : null))
+  // El buscador de la barra de arriba abre la ficha del cliente elegido con ?id=.
+  useEffect(() => {
+    if (idEnUrl) setIdAbierto(Number(idEnUrl))
+  }, [idEnUrl])
 
   const cargar = useCallback(() => {
     setError(null)

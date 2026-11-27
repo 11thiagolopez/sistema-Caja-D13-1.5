@@ -73,9 +73,19 @@ export function Campanita({ rol }: { rol: Rol | undefined }) {
 
   return (
     <div className="campanita">
-      <button ref={botonRef} type="button" className="campanita-boton" onClick={abrir} aria-label={`${textos(rol).boton}: ${cantidad} sin leer`}>
-        {textos(rol).boton}
-        {cantidad > 0 && <span className="sidebar-contador">{cantidad}</span>}
+      <button
+        ref={botonRef}
+        type="button"
+        className="campanita-boton"
+        onClick={abrir}
+        title={textos(rol).boton}
+        aria-label={`${textos(rol).boton}: ${cantidad} sin leer`}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8" />
+          <path d="M10 20a2 2 0 004 0" />
+        </svg>
+        {cantidad > 0 && <span className="campanita-contador">{cantidad}</span>}
       </button>
       {abierta && (
         <>
