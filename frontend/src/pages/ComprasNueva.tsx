@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getProductos } from '../api/productos'
 import { getMarcas } from '../api/marcas'
@@ -266,7 +267,10 @@ export function ComprasNueva() {
 
   return (
     <div>
-      <h2>Agregar compra</h2>
+      <Link to="/compras" className="enlace-volver">
+        ← Volver a compras
+      </Link>
+      <h2>Nueva compra</h2>
 
       <form onSubmit={onSubmit}>
         <label>

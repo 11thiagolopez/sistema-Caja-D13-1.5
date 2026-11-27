@@ -12,7 +12,7 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 self.addEventListener('push', (event) => {
   const datos = event.data ? event.data.json() : null
   event.waitUntil(
-    self.registration.showNotification('Sistema D13', {
+    self.registration.showNotification('oNce', {
       body: datos ? datos.cuerpo : 'Tenés una petición nueva para aprobar.',
       icon: '/icon-192.png',
       // Cada aviso de trabajo con su propia etiqueta: con una etiqueta compartida (ej. por trabajo),

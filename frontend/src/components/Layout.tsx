@@ -1,87 +1,96 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiRequestError } from '../api/client'
 import { getSesionAbierta } from '../api/caja'
 import { getCotizacionActual } from '../api/cotizacion'
 import type { CotizacionResponse, Rol } from '../types/api'
 import { AbrirCajaModal } from './AbrirCajaModal'
+import { AccionesCajaContext, type ModalCaja } from './accionesCajaContexto'
 import { AutorizacionesProvider, useAutorizaciones } from './AutorizacionesPendientes'
+import { BuscadorGlobal } from './BuscadorGlobal'
 import { Campanita } from './Campanita'
 import { CerrarCajaModal } from './CerrarCajaModal'
+import { Logo, LogoIcono } from './Logo'
 import { RetiroModal } from './RetiroModal'
 import { ProveedoresModal } from './ProveedoresModal'
 import { CotizacionGateModal } from './CotizacionGateModal'
 
-type ModalKey = 'abrir-caja' | 'cerrar-caja' | 'retiro' | 'proveedores'
-
 interface NavItem {
   label: string
   to?: string
-  modal?: ModalKey
+  modal?: ModalCaja
   roles?: Rol[]
+  /** Otras rutas en las que el ítem queda marcado (ej. "Compras" también en /compras/nueva). */
+  tambienEn?: string[]
 }
 
 interface NavSection {
   label: string
-  roles?: Rol[]
   items: NavItem[]
 }
 
+// Las acciones que tienen botón dentro de su pantalla (abrir/cerrar caja, retiros, nueva compra)
+// no se repiten acá: el menú es para ir a un lugar, no para hacer algo.
 const SECCIONES: NavSection[] = [
   {
     label: 'Caja',
     items: [
-      { label: 'Abrir caja', modal: 'abrir-caja' },
-      { label: 'Cerrar caja', modal: 'cerrar-caja' },
-      { label: 'Retiros de dinero', modal: 'retiro' },
-      { label: 'Ver resumen del día', to: '/caja/resumen', roles: ['ADMIN'] },
+      { label: 'Cobros', to: '/ventas/nueva' },
+      { label: 'Resumen del día', to: '/caja/resumen', roles: ['ADMIN'] },
+      { label: 'Peticiones', to: '/autorizaciones', roles: ['ADMIN'] },
     ],
   },
   {
-    label: 'Compras',
-    roles: ['ADMIN'],
+    label: 'Ventas',
     items: [
-      { label: 'Agregar compra', to: '/compras/nueva' },
-      { label: 'Consultar compras', to: '/compras' },
-      { label: 'Cuenta corriente de proveedores', to: '/proveedores/cuenta-corriente' },
+      { label: 'Historial de ventas', to: '/ventas/historial', roles: ['ADMIN'] },
+      { label: 'Presupuestos', to: '/presupuestos' },
+      { label: 'Clientes', to: '/clientes', roles: ['ADMIN'] },
+      { label: 'Facturación', to: '/comprobantes', roles: ['ADMIN'] },
+    ],
+  },
+  {
+    label: 'Trabajos',
+    items: [
+      { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
+      { label: 'Técnicos', to: '/tecnicos', roles: ['ADMIN'] },
+      { label: 'Reporte de trabajos', to: '/reportes/trabajos', roles: ['ADMIN'] },
+    ],
+  },
+  {
+    label: 'Gestión',
+    items: [
+      { label: 'Productos', to: '/productos' },
+      { label: 'Compras', to: '/compras', roles: ['ADMIN'], tambienEn: ['/compras/nueva'] },
+      { label: 'Proveedores', modal: 'proveedores', roles: ['ADMIN'] },
+      { label: 'Cuenta corriente de proveedores', to: '/proveedores/cuenta-corriente', roles: ['ADMIN'] },
+      { label: 'Gastos', to: '/gastos', roles: ['ADMIN'] },
+      { label: 'Vendedores', to: '/vendedores', roles: ['ADMIN'] },
     ],
   },
   {
     label: 'Reportes',
-    roles: ['ADMIN'],
     items: [
-      { label: 'Gráficos y balance', to: '/reportes' },
-      { label: 'Ventas por vendedor', to: '/vendedores/ventas' },
-      { label: 'Comisiones', to: '/vendedores/comisiones' },
-      { label: 'Compras por proveedor', to: '/compras/pagos-proveedores' },
-      { label: 'Ventas por marca', to: '/reportes/marcas' },
-      { label: 'Ventas por forma de pago', to: '/reportes/forma-pago' },
+      { label: 'Gráficos y balance', to: '/reportes', roles: ['ADMIN'] },
+      { label: 'Ventas por vendedor', to: '/vendedores/ventas', roles: ['ADMIN'] },
+      { label: 'Comisiones', to: '/vendedores/comisiones', roles: ['ADMIN'] },
+      { label: 'Compras por proveedor', to: '/compras/pagos-proveedores', roles: ['ADMIN'] },
+      { label: 'Ventas por marca', to: '/reportes/marcas', roles: ['ADMIN'] },
+      { label: 'Ventas por forma de pago', to: '/reportes/forma-pago', roles: ['ADMIN'] },
     ],
   },
   {
-    label: 'Reportes de trabajos a domicilio',
-    roles: ['ADMIN'],
-    items: [
-      { label: 'Reporte de trabajos', to: '/reportes/trabajos' },
-    ],
+    label: 'Configuración',
+    items: [{ label: 'Recargos de tarjeta', to: '/configuracion/recargos', roles: ['ADMIN'] }],
   },
 ]
 
-const ENLACES_SUELTOS: NavItem[] = [
-  { label: 'Peticiones', to: '/autorizaciones', roles: ['ADMIN'] },
-  { label: 'Cobros', to: '/ventas/nueva' },
-  { label: 'Productos', to: '/productos' },
-  { label: 'Presupuestos', to: '/presupuestos' },
-  { label: 'Historial de ventas', to: '/ventas/historial', roles: ['ADMIN'] },
-  { label: 'Trabajo a domicilio', to: '/ventas/domicilio', roles: ['ADMIN'] },
-  { label: 'Clientes', to: '/clientes', roles: ['ADMIN'] },
-  { label: 'Vendedores', to: '/vendedores', roles: ['ADMIN'] },
-  { label: 'Técnicos', to: '/tecnicos', roles: ['ADMIN'] },
-  { label: 'Gastos', to: '/gastos', roles: ['ADMIN'] },
-  { label: 'Facturación', to: '/comprobantes', roles: ['ADMIN'] },
-  { label: 'Recargos de tarjeta', to: '/configuracion/recargos', roles: ['ADMIN'] },
-]
+const NOMBRE_ROL: Record<Rol, string> = {
+  ADMIN: 'Administrador',
+  VENDEDOR: 'Vendedor',
+  TECNICO: 'Técnico',
+}
 
 // En celular el menú flota sobre el contenido: arranca cerrado y se cierra solo al elegir una opción.
 function esCelular(): boolean {
@@ -90,6 +99,12 @@ function esCelular(): boolean {
 
 function puedeVer(roles: Rol[] | undefined, rol: Rol | undefined): boolean {
   return !roles || (rol != null && roles.includes(rol))
+}
+
+function iniciales(nombre: string | undefined): string {
+  if (!nombre) return '?'
+  const partes = nombre.trim().split(/\s+/)
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
 export function Layout() {
@@ -104,9 +119,11 @@ export function Layout() {
 function LayoutContenido() {
   const { sesion, logout } = useAuth()
   const navigate = useNavigate()
-  const [seccionAbierta, setSeccionAbierta] = useState<string | null>('Caja')
-  const [modalAbierto, setModalAbierto] = useState<ModalKey | null>(null)
+  const location = useLocation()
+  const [modalAbierto, setModalAbierto] = useState<ModalCaja | null>(null)
   const [cajaObligatoria, setCajaObligatoria] = useState(false)
+  const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null)
+  const [versionCaja, setVersionCaja] = useState(0)
   const [sidebarAbierta, setSidebarAbierta] = useState(() => !esCelular())
   const { peticiones } = useAutorizaciones()
 
@@ -135,11 +152,18 @@ function LayoutContenido() {
       })
   }, [esTecnico])
 
+  const consultarCaja = useCallback(() => {
+    return getSesionAbierta().then((sesionCaja) => {
+      setCajaAbierta(sesionCaja != null)
+      return sesionCaja
+    })
+  }, [])
+
   // Se dispara una sola vez al entrar a cualquier pantalla logueada: si no hay una sesión de
   // caja ABIERTA, fuerza el modal de "abrir caja" (ambos roles) antes de dejar hacer nada más.
   useEffect(() => {
     if (esTecnico) return
-    getSesionAbierta()
+    consultarCaja()
       .then((sesionCaja) => {
         if (!sesionCaja) {
           setCajaObligatoria(true)
@@ -148,7 +172,22 @@ function LayoutContenido() {
       .catch(() => {
         // Sin permiso o sin conexión: no se fuerza el modal de abrir caja (mismo motivo que arriba).
       })
-  }, [esTecnico])
+  }, [esTecnico, consultarCaja])
+
+  function cerrarModal() {
+    setModalAbierto(null)
+    setVersionCaja((v) => v + 1)
+    consultarCaja().catch(() => {})
+  }
+
+  const accionesCaja = useMemo(
+    () => ({
+      cajaAbierta,
+      version: versionCaja,
+      abrirModal: (modal: ModalCaja) => setModalAbierto(modal),
+    }),
+    [cajaAbierta, versionCaja],
+  )
 
   function onCotizacionCargada(cotizacion: CotizacionResponse) {
     setCotizacionObligatoria(false)
@@ -170,88 +209,70 @@ function LayoutContenido() {
     }
   }
 
-  function toggleSeccion(label: string) {
-    setSeccionAbierta((actual) => (actual === label ? null : label))
-  }
+  const secciones = SECCIONES.map((seccion) => ({
+    ...seccion,
+    items: seccion.items.filter((item) => puedeVer(item.roles, sesion?.rol)),
+  })).filter((seccion) => seccion.items.length > 0)
 
   return (
-    <div className="layout">
-      {!esTecnico && (
-      <aside className={`sidebar ${sidebarAbierta ? '' : 'sidebar-cerrada'}`}>
-        <div className="sidebar-marca">Sistema D13</div>
-        <nav>
-          {ENLACES_SUELTOS.filter((item) => puedeVer(item.roles, sesion?.rol)).map((item) => (
-            // end: /vendedores no tiene que quedar marcado en /vendedores/ventas, que es de Reportes.
-            <NavLink key={item.to} to={item.to!} end className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
-              {item.label}
-              {item.to === '/autorizaciones' && peticiones.length > 0 && (
-                <span className="sidebar-contador">{peticiones.length}</span>
-              )}
-            </NavLink>
-          ))}
-
-          {SECCIONES.filter((seccion) => puedeVer(seccion.roles, sesion?.rol)).map((seccion) => (
-            <div key={seccion.label} className="sidebar-seccion">
-              <button
-                type="button"
-                className="sidebar-seccion-titulo"
-                onClick={() => toggleSeccion(seccion.label)}
-                aria-expanded={seccionAbierta === seccion.label}
-              >
-                {seccion.label}
-                <span className="sidebar-seccion-flecha">{seccionAbierta === seccion.label ? '▾' : '▸'}</span>
-              </button>
-              {seccionAbierta === seccion.label && (
-                <div className="sidebar-seccion-items">
-                  {seccion.items
-                    .filter((item) => puedeVer(item.roles, sesion?.rol))
-                    .map((item) =>
-                      item.modal ? (
-                        <button
-                          key={item.label}
-                          type="button"
-                          className="sidebar-enlace sidebar-enlace-boton"
-                          onClick={() => {
-                            setModalAbierto(item.modal!)
-                            cerrarMenuEnCelular()
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      ) : (
-                        <NavLink key={item.to} to={item.to!} className="sidebar-enlace" onClick={cerrarMenuEnCelular}>
-                          {item.label}
-                        </NavLink>
-                      ),
-                    )}
-                </div>
-              )}
+    <AccionesCajaContext.Provider value={accionesCaja}>
+      <div className="layout">
+        {!esTecnico && (
+          <aside className={`sidebar ${sidebarAbierta ? '' : 'sidebar-cerrada'}`} aria-label="Menú principal">
+            <div className="sidebar-marca">
+              <Logo tamano={40} claro />
             </div>
-          ))}
+            <nav>
+              {secciones.map((seccion) => (
+                <div key={seccion.label} className="sidebar-seccion">
+                  <div className="sidebar-seccion-titulo">{seccion.label}</div>
+                  {seccion.items.map((item) =>
+                    item.modal ? (
+                      <button
+                        key={item.label}
+                        type="button"
+                        className="sidebar-enlace"
+                        onClick={() => {
+                          setModalAbierto(item.modal!)
+                          cerrarMenuEnCelular()
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ) : (
+                      // end: /vendedores no tiene que quedar marcado en /vendedores/ventas, que es de Reportes.
+                      <NavLink
+                        key={item.to}
+                        to={item.to!}
+                        end
+                        className={({ isActive }) =>
+                          `sidebar-enlace ${isActive || item.tambienEn?.includes(location.pathname) ? 'active' : ''}`
+                        }
+                        onClick={cerrarMenuEnCelular}
+                      >
+                        {item.label}
+                        {item.to === '/autorizaciones' && peticiones.length > 0 && (
+                          <span className="sidebar-contador" aria-label={`${peticiones.length} pendientes`}>
+                            {peticiones.length}
+                          </span>
+                        )}
+                      </NavLink>
+                    ),
+                  )}
+                </div>
+              ))}
+            </nav>
+          </aside>
+        )}
+        {!esTecnico && sidebarAbierta && (
+          <button type="button" className="sidebar-fondo" aria-label="Cerrar menú" onClick={() => setSidebarAbierta(false)} />
+        )}
 
-          {sesion?.rol === 'ADMIN' && (
-            <button
-              type="button"
-              className="sidebar-enlace sidebar-enlace-boton"
-              onClick={() => {
-                setModalAbierto('proveedores')
-                cerrarMenuEnCelular()
-              }}
-            >
-              Proveedores
-            </button>
-          )}
-        </nav>
-      </aside>
-      )}
-      {!esTecnico && sidebarAbierta && (
-        <button type="button" className="sidebar-fondo" aria-label="Cerrar menú" onClick={() => setSidebarAbierta(false)} />
-      )}
-
-      <div className="layout-contenido">
-        <header className="layout-topbar">
-          <div className="topbar-espaciador">
-            {!esTecnico && (
+        <div className="layout-contenido">
+          <header className="layout-topbar">
+            {esTecnico ? (
+              <LogoIcono tamano={36} />
+            ) : (
               <button
                 type="button"
                 className="sidebar-toggle"
@@ -259,55 +280,61 @@ function LayoutContenido() {
                 aria-label={sidebarAbierta ? 'Ocultar menú' : 'Mostrar menú'}
                 aria-expanded={sidebarAbierta}
               >
-                ☰
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
             )}
-          </div>
-          <h1 className="topbar-titulo">Sistema D13</h1>
-          <div className="topbar-usuario">
-            <span className="nav-usuario">
-              {sesion?.nombre} ({sesion?.rol})
-            </span>
-            {(sesion?.rol === 'ADMIN' || esTecnico) && <Campanita rol={sesion?.rol} />}
-            <button type="button" onClick={onLogout}>
-              Salir
-            </button>
-          </div>
-        </header>
-        {avisoCotizacion && (
-          <p className="aviso-cotizacion">
-            Cotización del día: USD ${avisoCotizacion.valorVenta.toFixed(2)}
-            <button type="button" onClick={() => setAvisoCotizacion(null)} aria-label="Cerrar aviso">
-              ×
-            </button>
-          </p>
-        )}
-        <main>
-          <Outlet />
-        </main>
-      </div>
+            {!esTecnico && <BuscadorGlobal rol={sesion?.rol} />}
+            <div className="topbar-usuario">
+              {(sesion?.rol === 'ADMIN' || esTecnico) && <Campanita rol={sesion?.rol} />}
+              <div className="topbar-perfil">
+                <span className="topbar-avatar" aria-hidden="true">
+                  {iniciales(sesion?.nombre)}
+                </span>
+                <span className="topbar-perfil-texto">
+                  <strong>{sesion?.nombre}</strong>
+                  <span>{sesion?.rol ? NOMBRE_ROL[sesion.rol] : ''}</span>
+                </span>
+              </div>
+              <button type="button" className="btn-suave btn-chico" onClick={onLogout}>
+                Salir
+              </button>
+            </div>
+          </header>
+          {avisoCotizacion && (
+            <p className="aviso-cotizacion" role="status">
+              Cotización del día: USD ${avisoCotizacion.valorVenta.toFixed(2)}
+              <button type="button" onClick={() => setAvisoCotizacion(null)} aria-label="Cerrar aviso">
+                ×
+              </button>
+            </p>
+          )}
+          <main id="contenido">
+            <Outlet />
+          </main>
+        </div>
 
-      {!esTecnico && (
-        cotizacionObligatoria ? (
-          <CotizacionGateModal onExito={onCotizacionCargada} />
-        ) : cajaObligatoria ? (
-          <AbrirCajaModal
-            onExito={() => {
-              setCajaObligatoria(false)
-              navigate('/ventas/nueva', { replace: true })
-            }}
-          />
-        ) : (
-          <>
-            {modalAbierto === 'abrir-caja' && (
-              <AbrirCajaModal onClose={() => setModalAbierto(null)} onExito={() => setModalAbierto(null)} />
-            )}
-            {modalAbierto === 'cerrar-caja' && <CerrarCajaModal onClose={() => setModalAbierto(null)} />}
-            {modalAbierto === 'retiro' && <RetiroModal onClose={() => setModalAbierto(null)} />}
-            {modalAbierto === 'proveedores' && <ProveedoresModal onClose={() => setModalAbierto(null)} />}
-          </>
-        )
-      )}
-    </div>
+        {!esTecnico &&
+          (cotizacionObligatoria ? (
+            <CotizacionGateModal onExito={onCotizacionCargada} />
+          ) : cajaObligatoria ? (
+            <AbrirCajaModal
+              onExito={() => {
+                setCajaObligatoria(false)
+                setCajaAbierta(true)
+                navigate('/ventas/nueva', { replace: true })
+              }}
+            />
+          ) : (
+            <>
+              {modalAbierto === 'abrir-caja' && <AbrirCajaModal onClose={cerrarModal} onExito={cerrarModal} />}
+              {modalAbierto === 'cerrar-caja' && <CerrarCajaModal onClose={cerrarModal} />}
+              {modalAbierto === 'retiro' && <RetiroModal onClose={cerrarModal} />}
+              {modalAbierto === 'proveedores' && <ProveedoresModal onClose={() => setModalAbierto(null)} />}
+            </>
+          ))}
+      </div>
+    </AccionesCajaContext.Provider>
   )
 }

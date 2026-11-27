@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   actualizarProducto,
@@ -51,7 +52,13 @@ export function Productos() {
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
 
-  const [filtroDescripcion, setFiltroDescripcion] = useState('')
+  const [searchParams] = useSearchParams()
+  const [filtroDescripcion, setFiltroDescripcion] = useState(() => searchParams.get('buscar') ?? '')
+  // El buscador de la barra de arriba trae el producto elegido en ?buscar=.
+  const buscarEnUrl = searchParams.get('buscar')
+  useEffect(() => {
+    if (buscarEnUrl != null) setFiltroDescripcion(buscarEnUrl)
+  }, [buscarEnUrl])
   const [filtroMarca, setFiltroMarca] = useState('')
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [filtroColorStock, setFiltroColorStock] = useState<ColorStock | ''>('')

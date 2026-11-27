@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getCompras, getProductosMasComprados } from '../api/compras'
 import { ApiRequestError } from '../api/client'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { hoyIso } from '../utils/date'
 import type { CompraResponse, ProductoComprasRankingDTO } from '../types/api'
 
 export function ComprasConsulta() {
+  const navigate = useNavigate()
   const [desde, setDesde] = useState(hoyIso().slice(0, 8) + '01')
   const [hasta, setHasta] = useState(hoyIso())
   const [compras, setCompras] = useState<CompraResponse[]>([])
@@ -49,7 +52,14 @@ export function ComprasConsulta() {
 
   return (
     <div>
-      <h2>Consultar compras</h2>
+      <EncabezadoPagina
+        titulo="Compras"
+        acciones={
+          <button type="button" onClick={() => navigate('/compras/nueva')}>
+            + Nueva compra
+          </button>
+        }
+      />
 
       <form onSubmit={onBuscar}>
         <label>

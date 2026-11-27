@@ -8,7 +8,9 @@ import { descargarVentaPdf, enviarComprobanteEmail, registrarVenta } from '../ap
 import { getSaldoCliente } from '../api/clientes'
 import { verPdfFactura } from '../api/facturas'
 import { ApiRequestError } from '../api/client'
+import { BotonesCaja, EstadoCaja } from '../components/AccionesCaja'
 import { useAutorizaciones } from '../components/AutorizacionesPendientes'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { BarcodeInput } from '../components/BarcodeInput'
 import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
@@ -218,7 +220,7 @@ export function RegistrarVenta() {
 
   return (
     <div>
-      <h2>Registrar venta</h2>
+      <EncabezadoPagina titulo="Cobros" etiqueta={<EstadoCaja />} acciones={<BotonesCaja />} />
 
       <section>
         <h3>Escanear código de barras</h3>

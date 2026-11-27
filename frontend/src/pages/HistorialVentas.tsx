@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ETIQUETA_MEDIO_PAGO } from '../utils/recargo'
 import { descargarVentaPdf, enviarComprobanteEmail, getVenta, getVentas } from '../api/ventas'
 import { resolverPeticion } from '../api/autorizaciones'
@@ -61,6 +61,27 @@ export function HistorialVentas() {
   useEffect(() => {
     getEmpleados().then(setEmpleados)
   }, [])
+
+  // El buscador de la barra de arriba y "Ver" en Últimas ventas llegan con ?venta=N: se muestra
+  // esa venta sola, con el detalle abierto.
+  const [searchParams] = useSearchParams()
+  const ventaEnUrl = searchParams.get('venta')
+  useEffect(() => {
+    if (!ventaEnUrl) return
+    const id = Number(ventaEnUrl)
+    setError(null)
+    setCargando(true)
+    getVenta(id)
+      .then((venta) => {
+        setVentas([venta])
+        setExpandidoId(venta.idVenta)
+        const dia = venta.fecha.slice(0, 10)
+        setDesde(dia)
+        setHasta(dia)
+      })
+      .catch((err) => setError(err instanceof ApiRequestError ? err.message : `No se encontró la venta #${id}`))
+      .finally(() => setCargando(false))
+  }, [ventaEnUrl])
 
   async function buscar(event?: FormEvent) {
     event?.preventDefault()
