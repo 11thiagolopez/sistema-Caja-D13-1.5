@@ -22,6 +22,8 @@ export async function cargarPushEndpoint(): Promise<void> {
   try {
     if (!('serviceWorker' in navigator)) return
     const registro = await navigator.serviceWorker.getRegistration('/sw.js')
+    // Que el navegador baje ya la versión nueva de sw.js si la hay (si no, la revisa cuando quiere).
+    registro?.update().catch(() => {})
     const suscripcion = await registro?.pushManager.getSubscription()
     setPushEndpoint(suscripcion?.endpoint ?? null)
   } catch {

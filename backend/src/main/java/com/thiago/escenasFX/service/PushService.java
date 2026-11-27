@@ -33,6 +33,7 @@ import com.thiago.escenasFX.model.SuscripcionPush;
 import com.thiago.escenasFX.repository.SuscripcionPushRepository;
 
 import nl.martijndwars.webpush.Notification;
+import nl.martijndwars.webpush.Urgency;
 
 /**
  * Dos formas de avisar, ambas Web Push estándar (la notificación llega aunque el sistema esté
@@ -209,9 +210,24 @@ public class PushService {
         if (!configurado()) {
             return;
         }
-        suscripcionRepo.findByEmpleado_IdEmpleado(destinatario.getIdEmpleado()).stream()
-            .filter(s -> endpointExcluido == null || !endpointExcluido.equals(s.getEndpoint()))
-            .forEach(s -> enviarConContenido(s, payloadJson));
+        for (SuscripcionPush s : suscripcionRepo.findByEmpleado_IdEmpleado(destinatario.getIdEmpleado())) {
+            if (endpointExcluido != null && endpointExcluido.equals(s.getEndpoint())) {
+                log.info("Push salteado para la suscripción #{}: es el dispositivo que hizo el cambio",
+                    s.getIdSuscripcion());
+            } else {
+                enviarConContenido(s, payloadJson);
+            }
+        }
+    }
+
+    // "fcm.googleapis.com" (Chrome/Android), "updates.push.services.mozilla.com" (Firefox),
+    // "web.push.apple.com" (iPhone)... alcanza para saber qué dispositivo es sin loguear el endpoint.
+    private static String servicioDePush(String endpoint) {
+        try {
+            return URI.create(endpoint).getHost();
+        } catch (RuntimeException e) {
+            return "?";
+        }
     }
 
     private void enviarConContenido(SuscripcionPush suscripcion, String payloadJson) {
@@ -222,15 +238,29 @@ public class PushService {
             return;
         }
         try {
-            Notification notification = new Notification(suscripcion.getEndpoint(), suscripcion.getP256dh(),
-                suscripcion.getAuth(), payloadJson);
+            // Urgencia alta: sin ella Android (Doze) retiene el aviso hasta que se desbloquea el
+            // celular. TTL de 1 hora: un aviso de un trabajo que llega al día siguiente no sirve.
+            Notification notification = Notification.builder()
+                .endpoint(suscripcion.getEndpoint())
+                .userPublicKey(suscripcion.getP256dh())
+                .userAuth(suscripcion.getAuth())
+                .payload(payloadJson)
+                .ttl(TIEMPO_DE_VIDA_SEGUNDOS)
+                .urgency(Urgency.HIGH)
+                .build();
             HttpResponse respuesta = webPushClient.enviar(notification);
             int status = respuesta.getStatusLine().getStatusCode();
             if (status == HTTP_NOT_FOUND || status == HTTP_GONE) {
+                log.info("Suscripción push #{} dada de baja por el navegador (HTTP {}): se borra",
+                    suscripcion.getIdSuscripcion(), status);
                 suscripcionRepo.delete(suscripcion);
             } else if (status >= 300) {
                 log.error("Push con contenido rechazado (HTTP {}) para la suscripción #{}", status,
                     suscripcion.getIdSuscripcion());
+            } else {
+                // Para poder ver en los logs de Railway a qué dispositivo salió cada aviso.
+                log.info("Push enviado a la suscripción #{} ({})", suscripcion.getIdSuscripcion(),
+                    servicioDePush(suscripcion.getEndpoint()));
             }
         } catch (Exception e) {
             log.error("No se pudo enviar un push con contenido: {}", e.getMessage(), e);
