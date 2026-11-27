@@ -28,8 +28,10 @@ import com.thiago.escenasFX.dto.FotoTrabajoResponse;
 import com.thiago.escenasFX.dto.NotaTrabajoRequest;
 import com.thiago.escenasFX.dto.NotaTrabajoResponse;
 import com.thiago.escenasFX.dto.TrabajoDomicilioRequest;
+import com.thiago.escenasFX.dto.UrlArchivoResponse;
 import com.thiago.escenasFX.dto.VentaRequest;
 import com.thiago.escenasFX.dto.VentaResponse;
+import com.thiago.escenasFX.dto.ArchivoTrabajoResponse;
 import com.thiago.escenasFX.model.Cliente;
 import com.thiago.escenasFX.model.DetalleVenta;
 import com.thiago.escenasFX.model.Empleado;
@@ -46,6 +48,7 @@ import com.thiago.escenasFX.service.HistorialClienteService;
 import com.thiago.escenasFX.service.NotaTrabajoJefeService;
 import com.thiago.escenasFX.service.PushService;
 import com.thiago.escenasFX.service.VentaService;
+import com.thiago.escenasFX.service.ArchivoTrabajoService;
 import com.thiago.escenasFX.service.ZonaNegocio;
 
 import jakarta.validation.Valid;
@@ -65,13 +68,15 @@ public class VentaController {
     private final FotoTrabajoService fotoTrabajoService;
     private final NotaTrabajoJefeService notaTrabajoJefeService;
     private final HistorialClienteService historialClienteService;
+    private final ArchivoTrabajoService archivoTrabajoService;
 
     public VentaController(VentaService ventaService, VentaRepository ventaRepo,
             EmpleadoRepository empleadoRepo, ProductoRepository productoRepo, ClienteRepository clienteRepo,
             PushService pushService, VentaConFacturacion ventaConFacturacion, NotaTrabajoRepository notaTrabajoRepo,
             FotoTrabajoService fotoTrabajoService, NotaTrabajoJefeService notaTrabajoJefeService,
-            HistorialClienteService historialClienteService) {
+            HistorialClienteService historialClienteService, ArchivoTrabajoService archivoTrabajoService) {
         this.historialClienteService = historialClienteService;
+        this.archivoTrabajoService = archivoTrabajoService;
         this.fotoTrabajoService = fotoTrabajoService;
         this.notaTrabajoJefeService = notaTrabajoJefeService;
         this.pushService = pushService;
@@ -237,6 +242,33 @@ public class VentaController {
     public ResponseEntity<Void> borrarFoto(@PathVariable Integer id, @PathVariable Integer idFoto,
             Authentication authentication) {
         fotoTrabajoService.borrar(id, idFoto, RolAutenticado.empleado(authentication, empleadoRepo), true);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Videos y audios adjuntos (ADMIN): mismos permisos que las fotos; el archivo vive en el bucket.
+    @GetMapping("/trabajo-domicilio/{id}/archivos")
+    public List<ArchivoTrabajoResponse> archivosDelTrabajo(@PathVariable Integer id) {
+        return archivoTrabajoService.listar(id);
+    }
+
+    @PostMapping("/trabajo-domicilio/{id}/archivos")
+    public ResponseEntity<List<ArchivoTrabajoResponse>> subirArchivo(@PathVariable Integer id,
+            @RequestParam("archivo") MultipartFile archivo, Authentication authentication) {
+        Venta venta = ventaService.obtenerTrabajo(id);
+        Empleado admin = RolAutenticado.empleado(authentication, empleadoRepo);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(archivoTrabajoService.subir(venta, admin, archivo, archivo.getSize(), true, null));
+    }
+
+    @GetMapping("/trabajo-domicilio/{id}/archivos/{idArchivo}/url")
+    public UrlArchivoResponse urlArchivo(@PathVariable Integer id, @PathVariable Integer idArchivo) {
+        return new UrlArchivoResponse(archivoTrabajoService.urlParaVer(id, idArchivo));
+    }
+
+    @DeleteMapping("/trabajo-domicilio/{id}/archivos/{idArchivo}")
+    public ResponseEntity<Void> borrarArchivo(@PathVariable Integer id, @PathVariable Integer idArchivo,
+            Authentication authentication) {
+        archivoTrabajoService.borrar(id, idArchivo, RolAutenticado.empleado(authentication, empleadoRepo), true);
         return ResponseEntity.noContent().build();
     }
 

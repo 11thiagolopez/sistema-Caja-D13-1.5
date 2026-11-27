@@ -40,6 +40,25 @@
     </properties>
 
     <dependencies>
+        <!-- Videos de trabajos a domicilio: Railway Storage Bucket (API compatible con S3). Sin el
+             cliente async (netty): todo se hace con el cliente sincrónico. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.29.52</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <!-- Spring ya trae su puente (spring-jcl); con los dos juntos avisa conflicto al arrancar. -->
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- API REST -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

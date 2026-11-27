@@ -80,18 +80,19 @@ public class GlobalExceptionHandler {
             .body(new ErrorResponse("Parámetro inválido: " + ex.getName()));
     }
 
-    // Fotos de trabajos: un archivo por encima de spring.servlet.multipart.max-file-size.
+    // Fotos y videos de trabajos: un archivo por encima de spring.servlet.multipart.max-file-size
+    // (las fotos tienen además su propio tope de 3 MB en FotoTrabajoService).
     @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> handleArchivoMuyGrande(
             org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-            .body(new ErrorResponse("La foto es demasiado grande (máximo 3 MB cada una)"));
+            .body(new ErrorResponse("El archivo es demasiado grande (videos: máximo 100 MB)"));
     }
 
     @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
     public ResponseEntity<ErrorResponse> handleFaltaArchivo(
             org.springframework.web.multipart.support.MissingServletRequestPartException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("No se recibió ninguna foto"));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("No se recibió ningún archivo"));
     }
 
     // Red de contención para cualquier excepción no mapeada arriba (NPE, error de driver JDBC,

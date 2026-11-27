@@ -139,21 +139,28 @@ class FotosTrabajoIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void tecnicoSinElegirAntesODespues_rechazaCon400_yLasDelJefeNoLlevanMomento() throws Exception {
+    void tecnicoSinMomento_quedaComoAdjunto_unMomentoInventado400_yLasDelJefeNoLlevanMomento() throws Exception {
         int id = crearTrabajo();
 
+        // "Adjuntar" del técnico (2026-11-27): sin antes/después, queda como adjunto (null).
         mockMvc.perform(multipart("/api/mis-trabajos/" + id + "/fotos")
                 .file(foto(JPEG))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFabian))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$[0].momento").doesNotExist());
+        mockMvc.perform(multipart("/api/mis-trabajos/" + id + "/fotos")
+                .file(foto(JPEG))
+                .param("momento", "DURANTE")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFabian))
             .andExpect(status().isBadRequest());
 
-        // El jefe no elige momento: aunque lo mande, sus fotos quedan como "del cliente" (null).
+        // El jefe no elige momento: aunque lo mande, sus fotos quedan como adjunto (null).
         mockMvc.perform(multipart("/api/ventas/trabajo-domicilio/" + id + "/fotos")
                 .file(foto(JPEG))
                 .param("momento", "ANTES")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$[0].momento").doesNotExist());
+            .andExpect(jsonPath("$[1].momento").doesNotExist());
     }
 
     @Test

@@ -45,6 +45,23 @@ export function mensajeConfirmacion(datos: {
   return `Hola${nombre ? ` ${nombre}` : ''}! Te confirmamos el turno para ${cuando}${donde}. Cualquier cambio avisanos por acá. D13 Distribuidora.`
 }
 
+// WhatsApp Web no funciona en el celular (manda a bajar la app): ahí se abre la app.
+export const ES_CELULAR = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+
+/** WhatsApp del local, que es el que tiene que estar abierto en WhatsApp Web para mandar la confirmación. */
+export const WHATSAPP_DEL_LOCAL = '11 2375-2626'
+
+/**
+ * En la PC abre WhatsApp Web (web.whatsapp.com), que manda desde la cuenta abierta en ESE navegador
+ * — la del local. Antes (wa.me) en la PC abría la app de escritorio instalada, que podía ser la
+ * personal. En el celular sigue siendo wa.me: abre la app de WhatsApp.
+ */
 export function linkWhatsapp(numero: string, mensaje: string): string {
-  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+  const texto = encodeURIComponent(mensaje)
+  return ES_CELULAR
+    ? `https://wa.me/${numero}?text=${texto}`
+    : `https://web.whatsapp.com/send?phone=${numero}&text=${texto}`
 }
+
+// Siempre la misma pestaña: cada confirmación reusa la de WhatsApp Web en vez de abrir otra.
+export const PESTANIA_WHATSAPP = 'whatsapp-web-d13'

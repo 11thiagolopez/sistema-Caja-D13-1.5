@@ -26,6 +26,9 @@ public class NotificacionTrabajoService {
     private static final Logger log = LoggerFactory.getLogger(NotificacionTrabajoService.class);
     private static final String ROL_ADMIN = "ADMIN";
     private static final int MAX_TEXTO = 255;
+    static final String TIPO_CAMBIO_TRABAJO = "CAMBIO_TRABAJO";
+    /** Cabecera con la que el frontend dice desde qué suscripción push (dispositivo) viene el pedido. */
+    static final String CABECERA_ENDPOINT_PUSH = "X-Push-Endpoint";
 
     private final NotificacionRepository notificacionRepo;
     private final EmpleadoRepository empleadoRepo;
@@ -55,6 +58,18 @@ public class NotificacionTrabajoService {
         }
     }
 
+    /**
+     * Lo que hace el jefe en un trabajo (crearlo, cambiarlo, nota, adjuntos, cobrarlo, eliminarlo),
+     * avisado a todos los ADMIN. El jefe y el empleado del local entran con el MISMO usuario ADMIN, así
+     * que el aviso no se le puede sacar "al autor": lo que se saltea es el dispositivo desde el que se
+     * hizo el cambio (ver {@link #endpointDelDispositivoActual()}). Así, si uno carga un trabajo, al
+     * otro le llega la notificación del navegador y no hace falta avisar por WhatsApp.
+     */
+    @Transactional
+    public void avisarCambioDelJefe(String texto, Venta venta) {
+        avisarATodosLosAdmin(TIPO_CAMBIO_TRABAJO, texto, venta);
+    }
+
     @Transactional(readOnly = true)
     public List<Notificacion> listar(Empleado empleado) {
         return notificacionRepo.findTop50ByEmpleado_IdEmpleadoOrderByCreadaEnDesc(empleado.getIdEmpleado());
@@ -74,6 +89,20 @@ public class NotificacionTrabajoService {
         notificacionRepo.save(notificacion);
     }
 
+    /**
+     * El dispositivo desde el que vino el pedido HTTP actual (su endpoint de push), o null si no
+     * mandó la cabecera o no hay pedido HTTP (ej. el recordatorio programado). A ese dispositivo no
+     * se le manda el push: el que hizo el cambio ya lo sabe. El aviso de la campanita sí queda.
+     */
+    static String endpointDelDispositivoActual() {
+        if (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+                instanceof org.springframework.web.context.request.ServletRequestAttributes atributos) {
+            String endpoint = atributos.getRequest().getHeader(CABECERA_ENDPOINT_PUSH);
+            return endpoint == null || endpoint.isBlank() ? null : endpoint;
+        }
+        return null;
+    }
+
     private void guardarYEnviar(Empleado destinatario, String tipo, String texto, Venta venta, String url) {
         String textoAcotado = texto.length() > MAX_TEXTO ? texto.substring(0, MAX_TEXTO - 1) + "…" : texto;
 
@@ -86,7 +115,7 @@ public class NotificacionTrabajoService {
 
         try {
             String payload = objectMapper.writeValueAsString(Map.of("tipo", tipo, "cuerpo", textoAcotado, "url", url));
-            pushService.avisarConContenido(destinatario, payload);
+            pushService.avisarConContenido(destinatario, payload, endpointDelDispositivoActual());
         } catch (Exception e) {
             log.error("No se pudo armar o mandar el push del aviso \"{}\" (#{}): {}", tipo,
                 notificacion.getIdNotificacion(), e.getMessage(), e);

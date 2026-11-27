@@ -187,6 +187,10 @@ filtrar en el cliente por `estado === "PENDIENTE_AUTORIZACION"`.
 | POST | `/api/ventas/trabajo-domicilio/{id}/fotos` | multipart, campo `fotos` (una o varias) | `201 FotoTrabajoResponse[]` (todas las del trabajo). Avisa al técnico |
 | GET | `/api/ventas/trabajo-domicilio/{id}/fotos/{idFoto}` | — | la imagen (JPG/PNG/WEBP) |
 | DELETE | `/api/ventas/trabajo-domicilio/{id}/fotos/{idFoto}` | — | 204 (el jefe borra cualquiera) |
+| GET | `/api/ventas/trabajo-domicilio/{id}/archivos` | — | `ArchivoTrabajoResponse[]` (videos y audios). Nuevo 2026-11-27 (sección 41) |
+| POST | `/api/ventas/trabajo-domicilio/{id}/archivos` | multipart, campo `archivo` (uno, hasta 100 MB) | `201 ArchivoTrabajoResponse[]` (todos los del trabajo). Máx. 5 videos / 20 audios. Avisa al técnico |
+| GET | `/api/ventas/trabajo-domicilio/{id}/archivos/{idArchivo}/url` | — | `{ url }`: link firmado al bucket, 2 horas, para `<video>`/`<audio src>` |
+| DELETE | `/api/ventas/trabajo-domicilio/{id}/archivos/{idArchivo}` | — | 204 (el jefe borra cualquiera) |
 
 `TrabajoDomicilioRequest`:
 ```ts
@@ -228,6 +232,18 @@ cliente es del jefe), y el detalle trae `fotos: FotoTrabajoResponse[]` (vacío e
 técnico: `POST /api/mis-trabajos/{id}/fotos` (multipart `fotos`, avisa a los ADMIN), `GET`/`DELETE
 /api/mis-trabajos/{id}/fotos/{idFoto}` (solo borra las suyas; subir/borrar exige el trabajo abierto).
 Ambas pantallas usan `components/FotosTrabajo.tsx` y comprimen antes de subir (`utils/comprimirFoto.ts`).
+
+**Adjuntos (2026-11-27, sección 41 de plan-migracion.md)**: el detalle trae también `archivos:
+ArchivoTrabajoResponse[]` (videos y audios). Técnico: `POST /api/mis-trabajos/{id}/archivos`
+(multipart `archivo` + `momento` opcional: sin momento = adjunto), `GET .../archivos/{idArchivo}/url`,
+`DELETE .../archivos/{idArchivo}` (solo los suyos, trabajo abierto). `momento` de las fotos del
+técnico también pasó a ser opcional. Ambas pantallas usan **`components/AdjuntosTrabajo.tsx`** (reemplaza
+a `FotosTrabajo.tsx`): botones Antes / Después / Adjuntar; las imágenes van a `/fotos` comprimidas y
+videos/audios a `/archivos` con `requestFormConProgreso` (XMLHttpRequest, % subido).
+
+**Cabecera `X-Push-Endpoint`** (2026-11-27): `api/client.ts` la manda en todos los pedidos con el
+endpoint de la suscripción push de este navegador, para que el backend no le mande a este mismo
+dispositivo el aviso `CAMBIO_TRABAJO` de lo que se hizo desde acá (jefe y local comparten el usuario ADMIN).
 
 **pantalla hecha en la Parte 4** (`pages/MisTrabajos.tsx`, rutas `/mis-trabajos` y `/mis-trabajos/:id`)
 

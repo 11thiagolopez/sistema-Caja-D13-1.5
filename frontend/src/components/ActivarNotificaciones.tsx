@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiRequestError } from '../api/client'
+import { ApiRequestError, setPushEndpoint } from '../api/client'
 import { getClavePublicaPush, guardarSuscripcionPush } from '../api/push'
 
 type Estado = 'cargando' | 'no-disponible' | 'bloqueadas' | 'inactivas' | 'activas'
@@ -65,6 +65,7 @@ export function ActivarNotificaciones() {
         throw new Error('El navegador no devolvió una suscripción válida')
       }
       await guardarSuscripcionPush(endpoint, keys.p256dh, keys.auth)
+      setPushEndpoint(endpoint)
       setEstado('activas')
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudieron activar las notificaciones')

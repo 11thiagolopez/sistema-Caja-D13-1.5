@@ -3410,3 +3410,111 @@ mantener X". El historial de a quién se le compró cada vez sigue en `compras`.
 
 Backend: **478 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. No probado en
 navegador.
+
+## 41. Adjuntos (fotos, videos y audios), avisos al jefe entre dispositivos y WhatsApp Web (2026-11-27)
+
+Pedidos del dueño, en dos tandas el mismo día: (1) poder subir videos además de fotos; (2) un botón
+**"Adjuntar"** además de Antes/Después, que admita también **audios** (lo que el cliente manda por
+WhatsApp para dar contexto); (3) que crear o cambiar un trabajo mande una **notificación del navegador**
+con lo que cambió — el jefe y el empleado del local entran con el **mismo usuario ADMIN** y hoy se
+avisan por WhatsApp; (4) el botón de confirmación del turno al cliente tiene que abrir **WhatsApp Web**
+(la cuenta del local, 11 2375-2626) y no la app de escritorio personal.
+
+### Adjuntos
+
+Reglas (decididas por el dueño): los suben el jefe y el técnico; el técnico solo borra lo suyo (el
+jefe cualquiera); **videos de hasta 100 MB, hasta 5 por trabajo**; audios hasta 20 por trabajo (pesan
+poco). Nada se toca con el trabajo bloqueado (`VentaService.estaBloqueado`).
+
+- **`momento`** (fotos y archivos): `null` = adjunto; `ANTES`/`DESPUES` = comprobante del técnico.
+  **Cambio respecto de la sección 39:** el técnico ya NO está obligado a elegir antes/después
+  ("Adjuntar" sube con `null`); un valor inventado sigue siendo 400. Al jefe se le ignora (siempre
+  `null`). Lógica en `FotoTrabajoService.normalizarMomento`, compartida con los archivos.
+- **Fotos**: igual que antes (comprimidas en el navegador, `bytea` en `fotos_trabajo`).
+- **Videos y audios** (`ArchivoTrabajo`, tabla `archivos_trabajo`): el archivo va a un **Railway
+  Storage Bucket** (API S3) que creó el dueño; en la base solo la referencia (`clave_archivo`, ej.
+  `trabajos/123/<uuid>.mp4`). `AlmacenamientoArchivos` con `S3AlmacenamientoArchivos` (AWS SDK v2) y
+  `MemoriaAlmacenamientoArchivos` (perfil demo y tests), elegido con `archivos.almacenamiento`.
+  - Tipo por los primeros bytes (`ArchivoTrabajoService.detectarTipo`): `ftyp` → MP4 / MOV ("qt") /
+    3GP / M4A ("M4A "); EBML → WEBM; `OggS` → OGG/OPUS (notas de voz de WhatsApp); `ID3` o sincronía
+    MPEG → MP3; ADTS → AAC; `RIFF....WAVE` → WAV. Una foto por `/archivos` es 400 (van por `/fotos`).
+  - Subida: pasa por el backend (multipart en disco temporal) y va al bucket en streaming **fuera de
+    una transacción**; después se guarda el registro y se avisa; si eso falla se borra del bucket.
+  - Ver: **link firmado** (presigned GET, 2 horas); el navegador lo reproduce directo del bucket
+    (`<video>`/`<audio>`, sin CORS). Borrar: primero el registro, después el bucket (si el bucket
+    falla queda un archivo huérfano logueado, nunca un registro roto).
+  - Variables: `BUCKET`, `ENDPOINT` (default `https://t3.storageapi.dev`), `REGION` (default
+    `auto`), `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `S3_PATH_STYLE` (default `false`). **`RAILWAY_BUCKET_NAME`
+    NO sirve para la API S3** (lo dice la doc de Railway): hay que usar `BUCKET`. Sin ellas el backend
+    arranca y los adjuntos responden 409 "no están configurados".
+  - `spring.servlet.multipart.max-file-size` 3MB → 100MB (max-request-size 105MB); las fotos siguen
+    con su tope de 3 MB en `FotoTrabajoService`.
+- Endpoints: jefe `GET/POST /api/ventas/trabajo-domicilio/{id}/archivos` (multipart, campo
+  `archivo`), `GET .../archivos/{idArchivo}/url` → `{url}`, `DELETE .../archivos/{idArchivo}`;
+  técnico `POST /api/mis-trabajos/{id}/archivos` (+ `momento` opcional), `GET .../url`, `DELETE`; la
+  lista viene en `MiTrabajoResponse.archivos`.
+- Frontend: **`components/AdjuntosTrabajo.tsx`** reemplaza a `FotosTrabajo.tsx` — una sola sección
+  "Fotos, videos y audios" agrupada en Adjuntos / Antes / Después. Botones: técnico "Antes",
+  "Después" (fotos o videos) y "Adjuntar" (fotos, videos o audios); jefe "Adjuntar". Al elegir, las
+  imágenes van comprimidas a `/fotos` y el resto de a uno a `/archivos` con barra de progreso
+  (`requestFormConProgreso`, XMLHttpRequest). Dos `<input type=file>` fijos (no uno con `accept`
+  cambiante): en iPhone el selector solo abre si el click sale directo del toque.
+
+### Avisos al jefe entre dispositivos (tipo `CAMBIO_TRABAJO`)
+
+`NotificacionTrabajoService.avisarCambioDelJefe(texto, venta)`: campanita + push a todos los ADMIN.
+Como comparten usuario, no se puede excluir "al autor": se excluye **el dispositivo** desde el que se
+hizo el cambio. El frontend manda en cada pedido la cabecera **`X-Push-Endpoint`** con el endpoint de
+la suscripción push de ese navegador (`api/client.ts`, cargado al arrancar en `main.tsx` y al activar
+las notificaciones); `PushService.avisarConContenido(destinatario, payload, endpointExcluido)` saltea
+esa suscripción. La campanita sí queda para todos.
+
+Qué avisa (`ResumenTrabajo`, foto del trabajo antes de editar vs. después de guardar):
+- Crear: "Nuevo trabajo #12 (Soldados 750): viernes 28/11 de 10:00 a 12:00 — Técnico: Fabián — descripción".
+- Editar: "Cambios en #12 (Soldados 750): fecha … → …; horario …; técnico Fabián → Juan; estado
+  Agendado → Terminado; artículos (total $… → $…); dirección/cliente/teléfono/descripción;
+  indicaciones al técnico". **Guardar sin cambios no avisa.**
+- Cobrar (al cerrar y cobrar o con "Cobrar" de un terminado), eliminar, reabrir, nota del jefe,
+  fotos/videos/audios que adjunta el jefe.
+
+Lo que hace el técnico ya avisaba a los ADMIN (sin cambios). `sw.js`: el `tag` de la notificación pasó
+a ser tipo + URL del trabajo, para que el aviso de un trabajo no tape el de otro.
+
+Para recibirlos, cada dispositivo tiene que tener las notificaciones activadas (botón en
+Autorizaciones, `ActivarNotificaciones.tsx`) y Railway tiene que tener `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`.
+
+### WhatsApp Web para la confirmación del turno
+
+`utils/whatsapp.ts`: en la PC el botón abre `https://web.whatsapp.com/send?phone=…&text=…` en una
+pestaña con nombre fijo (`whatsapp-web-d13`, se reusa en cada confirmación); en el celular sigue con
+`wa.me` (WhatsApp Web no anda en el celular). Debajo del botón: "en este navegador tiene que estar
+abierto el WhatsApp del local (11 2375-2626)". El remitente es la cuenta abierta en WhatsApp Web de
+ese navegador: no se puede elegir por link.
+
+### SQL PENDIENTE de aprobación del dueño
+
+Producción usa `ddl-auto=validate`: **hasta correrlo, el backend nuevo NO arranca contra Supabase —
+correrlo ANTES de deployar.** (Reemplaza al `videos_trabajo` que se había propuesto en la primera
+tanda; nunca se corrió.)
+```sql
+CREATE TABLE archivos_trabajo (
+    id_archivo     SERIAL PRIMARY KEY,
+    id_venta       INTEGER NOT NULL REFERENCES ventas(id_venta),
+    id_empleado    INTEGER NOT NULL REFERENCES empleados(id_empleado),
+    clave_archivo  VARCHAR(200) NOT NULL,
+    tipo_contenido VARCHAR(30)  NOT NULL,
+    tamanio_bytes  BIGINT       NOT NULL,
+    momento        VARCHAR(10),
+    creada_en      TIMESTAMP    NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_archivos_trabajo_venta ON archivos_trabajo(id_venta);
+```
+
+Tests nuevos: `ArchivosTrabajoIntegrationTest` (7), `S3AlmacenamientoArchivosTest` (3, sin red: links
+firmados virtual-hosted y path-style, y sin variables), `AvisosAlJefeIntegrationTest` (2: nuevo
+trabajo con datos; cambios de fecha y técnico, y guardar sin cambios no avisa), uno en `PushServiceTest`
+(saltea el dispositivo que hizo el cambio) y uno en `NotificacionTrabajoServiceTest` (lee
+`X-Push-Endpoint`). `FotosTrabajoIntegrationTest` actualizado (técnico sin momento = adjunto).
+Backend: **492 tests** verdes. Frontend: `tsc -b`, `oxlint` y `vite build` sin errores. **No probado
+contra el bucket real, ni en navegador, ni con un celular** (audios .opus en Safari de iPhone, MOV/HEVC
+en Chrome de Android, push entre dos dispositivos con el mismo usuario).

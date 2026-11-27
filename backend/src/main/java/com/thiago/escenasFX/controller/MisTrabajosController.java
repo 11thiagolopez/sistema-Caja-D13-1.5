@@ -21,12 +21,15 @@ import com.thiago.escenasFX.dto.MiTrabajoResponse;
 import com.thiago.escenasFX.dto.NotaTrabajoRequest;
 import com.thiago.escenasFX.dto.NotaTrabajoResponse;
 import com.thiago.escenasFX.dto.TrabajoTecnicoResponse;
+import com.thiago.escenasFX.dto.UrlArchivoResponse;
+import com.thiago.escenasFX.dto.ArchivoTrabajoResponse;
 import com.thiago.escenasFX.model.Empleado;
 import com.thiago.escenasFX.model.NotaTrabajo;
 import com.thiago.escenasFX.model.Venta;
 import com.thiago.escenasFX.repository.EmpleadoRepository;
 import com.thiago.escenasFX.service.FotoTrabajoService;
 import com.thiago.escenasFX.service.MisTrabajosService;
+import com.thiago.escenasFX.service.ArchivoTrabajoService;
 
 import jakarta.validation.Valid;
 
@@ -42,10 +45,12 @@ public class MisTrabajosController {
 
     private final MisTrabajosService misTrabajosService;
     private final FotoTrabajoService fotoTrabajoService;
+    private final ArchivoTrabajoService archivoTrabajoService;
     private final EmpleadoRepository empleadoRepo;
 
     public MisTrabajosController(MisTrabajosService misTrabajosService, FotoTrabajoService fotoTrabajoService,
-            EmpleadoRepository empleadoRepo) {
+            ArchivoTrabajoService archivoTrabajoService, EmpleadoRepository empleadoRepo) {
+        this.archivoTrabajoService = archivoTrabajoService;
         this.misTrabajosService = misTrabajosService;
         this.fotoTrabajoService = fotoTrabajoService;
         this.empleadoRepo = empleadoRepo;
@@ -54,9 +59,9 @@ public class MisTrabajosController {
     @GetMapping
     public List<MiTrabajoResponse> listar(Authentication authentication) {
         Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
-        // La lista no necesita notas ni fotos: se piden al abrir el detalle.
+        // La lista no necesita notas, fotos ni adjuntos: se piden al abrir el detalle.
         return misTrabajosService.listar(tecnico).stream()
-            .map(v -> new MiTrabajoResponse(TrabajoTecnicoResponse.de(v), List.of(), List.of()))
+            .map(v -> new MiTrabajoResponse(TrabajoTecnicoResponse.de(v), List.of(), List.of(), List.of()))
             .toList();
     }
 
@@ -108,11 +113,38 @@ public class MisTrabajosController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id}/archivos")
+    public ResponseEntity<List<ArchivoTrabajoResponse>> subirArchivo(@PathVariable Integer id,
+            @RequestParam("archivo") MultipartFile archivo, @RequestParam(required = false) String momento,
+            Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        Venta venta = misTrabajosService.obtenerAbierto(id, tecnico);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(archivoTrabajoService.subir(venta, tecnico, archivo, archivo.getSize(), false, momento));
+    }
+
+    @GetMapping("/{id}/archivos/{idArchivo}/url")
+    public UrlArchivoResponse urlArchivo(@PathVariable Integer id, @PathVariable Integer idArchivo,
+            Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        misTrabajosService.obtener(id, tecnico);
+        return new UrlArchivoResponse(archivoTrabajoService.urlParaVer(id, idArchivo));
+    }
+
+    @DeleteMapping("/{id}/archivos/{idArchivo}")
+    public ResponseEntity<Void> borrarArchivo(@PathVariable Integer id, @PathVariable Integer idArchivo,
+            Authentication authentication) {
+        Empleado tecnico = RolAutenticado.empleado(authentication, empleadoRepo);
+        misTrabajosService.obtenerAbierto(id, tecnico);
+        archivoTrabajoService.borrar(id, idArchivo, tecnico, false);
+        return ResponseEntity.noContent().build();
+    }
+
     private MiTrabajoResponse toResponse(Venta venta, Empleado tecnico) {
         List<NotaTrabajoResponse> notas = misTrabajosService.listarNotas(venta.getIdVenta(), tecnico)
             .stream().map(this::toResponse).toList();
         return new MiTrabajoResponse(TrabajoTecnicoResponse.de(venta), notas,
-            fotoTrabajoService.listar(venta.getIdVenta()));
+            fotoTrabajoService.listar(venta.getIdVenta()), archivoTrabajoService.listar(venta.getIdVenta()));
     }
 
     private NotaTrabajoResponse toResponse(NotaTrabajo nota) {

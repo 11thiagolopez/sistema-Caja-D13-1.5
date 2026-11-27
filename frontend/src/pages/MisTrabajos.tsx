@@ -8,7 +8,7 @@ import {
 } from '../api/misTrabajos'
 import { ApiRequestError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import { FotosTrabajo } from '../components/FotosTrabajo'
+import { AdjuntosTrabajo } from '../components/AdjuntosTrabajo'
 import { hoyIso } from '../utils/date'
 import { formatoDiaLargo, formatoFechaHora, formatoPesos } from '../utils/formato'
 import { estadoVisibleTrabajo, trabajoBloqueado } from '../utils/estadoTrabajo'
@@ -262,15 +262,17 @@ function Detalle({ id }: { id: number }) {
       </section>
 
       <section className="mi-trabajo-tarjeta">
-        <h3>Fotos</h3>
-        <FotosTrabajo
+        <h3>Fotos, videos y audios</h3>
+        <AdjuntosTrabajo
           lado="tecnico"
           idVenta={v.idVenta}
           fotos={trabajo.fotos}
-          onCambio={(fotos) => setTrabajo((actual) => (actual ? { ...actual, fotos } : actual))}
+          onCambioFotos={(fotos) => setTrabajo((actual) => (actual ? { ...actual, fotos } : actual))}
+          archivos={trabajo.archivos ?? []}
+          onCambioArchivos={(archivos) => setTrabajo((actual) => (actual ? { ...actual, archivos } : actual))}
           idEmpleadoActual={sesion?.idEmpleado}
           puedeSubir={!cerrado}
-          ayuda="Las que te pasa el jefe, y las tuyas: sacá una de antes de empezar y otra de cómo quedó, sirven de comprobante."
+          ayuda="Lo que te pasa el jefe y lo tuyo. Con Antes y Después sacá una foto o video de cómo estaba y de cómo quedó (sirven de comprobante); con Adjuntar sumás cualquier otra cosa, también audios."
         />
       </section>
 

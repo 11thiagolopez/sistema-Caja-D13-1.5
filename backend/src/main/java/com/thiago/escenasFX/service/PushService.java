@@ -197,10 +197,21 @@ public class PushService {
 
     /** Avisa a un empleado puntual (ej. Fabián) en todos sus dispositivos suscriptos. */
     public void avisarConContenido(Empleado destinatario, String payloadJson) {
+        avisarConContenido(destinatario, payloadJson, null);
+    }
+
+    /**
+     * Igual, salteando el dispositivo cuyo endpoint es {@code endpointExcluido} (el que hizo el
+     * cambio: no tiene sentido avisarle a uno mismo). Importa porque el jefe y el empleado del local
+     * comparten el mismo usuario ADMIN: lo que carga uno le tiene que llegar al otro, no a él.
+     */
+    public void avisarConContenido(Empleado destinatario, String payloadJson, String endpointExcluido) {
         if (!configurado()) {
             return;
         }
-        suscripcionRepo.findByEmpleado_IdEmpleado(destinatario.getIdEmpleado()).forEach(s -> enviarConContenido(s, payloadJson));
+        suscripcionRepo.findByEmpleado_IdEmpleado(destinatario.getIdEmpleado()).stream()
+            .filter(s -> endpointExcluido == null || !endpointExcluido.equals(s.getEndpoint()))
+            .forEach(s -> enviarConContenido(s, payloadJson));
     }
 
     private void enviarConContenido(SuscripcionPush suscripcion, String payloadJson) {

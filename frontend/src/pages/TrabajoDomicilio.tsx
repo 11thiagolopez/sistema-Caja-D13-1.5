@@ -20,10 +20,18 @@ import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { AgendaSemanal } from '../components/AgendaSemanal'
 import { HistorialCliente } from '../components/HistorialCliente'
 import { trabajosSuperpuestos } from '../utils/superposicion'
-import { linkWhatsapp, mensajeConfirmacion, numeroWhatsapp } from '../utils/whatsapp'
+import {
+  ES_CELULAR,
+  linkWhatsapp,
+  mensajeConfirmacion,
+  numeroWhatsapp,
+  PESTANIA_WHATSAPP,
+  WHATSAPP_DEL_LOCAL,
+} from '../utils/whatsapp'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
-import { FotosTrabajo } from '../components/FotosTrabajo'
+import { AdjuntosTrabajo } from '../components/AdjuntosTrabajo'
 import { getFotosTrabajo } from '../api/fotosTrabajo'
+import { getArchivosTrabajo } from '../api/archivosTrabajo'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
 import { verBlob } from '../utils/descargarBlob'
@@ -35,6 +43,7 @@ import type {
   EstadoTrabajo,
   EstadoVenta,
   FotoTrabajoResponse,
+  ArchivoTrabajoResponse,
   MedioPago,
   NotaTrabajoResponse,
   Producto,
@@ -104,6 +113,7 @@ export function TrabajoDomicilio() {
   const [observacionesTecnico, setObservacionesTecnico] = useState('')
   const [notas, setNotas] = useState<NotaTrabajoResponse[]>([])
   const [fotos, setFotos] = useState<FotoTrabajoResponse[]>([])
+  const [archivos, setArchivos] = useState<ArchivoTrabajoResponse[]>([])
   const [notaTexto, setNotaTexto] = useState('')
   const [agregandoNota, setAgregandoNota] = useState(false)
   // Vacío solo en trabajos cobrados antes de que se pidiera el medio de pago.
@@ -197,9 +207,11 @@ export function TrabajoDomicilio() {
     )
     setNotas([])
     setFotos([])
+    setArchivos([])
     if (venta.idVenta != null) {
       getNotasTrabajoDomicilio(venta.idVenta).then(setNotas).catch(() => {})
       getFotosTrabajo(venta.idVenta).then(setFotos).catch(() => {})
+      getArchivosTrabajo(venta.idVenta).then(setArchivos).catch(() => {})
     }
     setVista('trabajo')
   }
@@ -368,6 +380,7 @@ export function TrabajoDomicilio() {
     setObservacionesTecnico('')
     setNotas([])
     setFotos([])
+    setArchivos([])
     vaciarCarrito()
     setMensaje(null)
     setError(null)
@@ -679,18 +692,20 @@ export function TrabajoDomicilio() {
 
       {estadoVenta !== 'ANULADA' && (
         <section>
-          <h3>Fotos del trabajo</h3>
+          <h3>Fotos, videos y audios</h3>
           {idVenta == null ? (
-            <p className="peticion-detalle">Guardá el trabajo para poder agregarle fotos.</p>
+            <p className="peticion-detalle">Guardá el trabajo para poder adjuntarle fotos, videos o audios.</p>
           ) : (
-            <FotosTrabajo
+            <AdjuntosTrabajo
               lado="jefe"
               idVenta={idVenta}
               fotos={fotos}
-              onCambio={setFotos}
+              onCambioFotos={setFotos}
+              archivos={archivos}
+              onCambioArchivos={setArchivos}
               idEmpleadoActual={sesion?.idEmpleado}
               puedeSubir={!soloLectura}
-              ayuda="Subí las fotos que te mande el cliente para que el técnico sepa con qué se va a encontrar. Acá también ves las que suba él."
+              ayuda="Adjuntá lo que te mande el cliente (fotos, videos, notas de voz) para que el técnico sepa con qué se va a encontrar. Acá también ves lo que suba él."
             />
           )}
         </section>
@@ -730,19 +745,27 @@ export function TrabajoDomicilio() {
           />
         </label>
         {/* Confirmación al cliente en un toque (Etapa 3): abre WhatsApp con el mensaje armado, sin
-            usar la API. La manda el jefe, que es quien habla con el cliente. */}
+            usar la API. En la PC va por WhatsApp Web (la cuenta del local), siempre en la misma
+            pestaña; en el celular, la app. Sin rel="noopener" para que la pestaña se pueda reusar. */}
         {numeroCliente && fechaProgramada && (
-          <a
-            className="boton-whatsapp"
-            href={linkWhatsapp(
-              numeroCliente,
-              mensajeConfirmacion({ clienteNombre, fechaProgramada, horaDesde, horaHasta, direccionTrabajo }),
+          <>
+            <a
+              className="boton-whatsapp"
+              href={linkWhatsapp(
+                numeroCliente,
+                mensajeConfirmacion({ clienteNombre, fechaProgramada, horaDesde, horaHasta, direccionTrabajo }),
+              )}
+              target={ES_CELULAR ? '_blank' : PESTANIA_WHATSAPP}
+              rel={ES_CELULAR ? 'noreferrer' : undefined}
+            >
+              Confirmar turno por WhatsApp
+            </a>
+            {!ES_CELULAR && (
+              <small className="peticion-detalle">
+                Se abre en WhatsApp Web: en este navegador tiene que estar abierto el WhatsApp del local ({WHATSAPP_DEL_LOCAL}).
+              </small>
             )}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Confirmar turno por WhatsApp
-          </a>
+          </>
         )}
         {clienteTelefono.trim() && !numeroCliente && (
           <small className="peticion-detalle">
