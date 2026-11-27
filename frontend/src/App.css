@@ -834,10 +834,11 @@ section {
   gap: 2px;
   align-items: flex-start;
   width: 100%;
-  padding: 12px 14px;
-  border: none;
+  min-height: 72px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
   border-left: 5px solid var(--color-trabajo);
-  border-radius: 6px;
+  border-radius: var(--radio-tarjeta);
   background: var(--bg-alt);
   color: var(--text);
   text-align: left;
@@ -1939,12 +1940,13 @@ section {
 
 .cliente-tarjeta {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
   align-items: flex-start;
-  gap: 2px;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--bg-alt);
   color: var(--text);
   text-align: left;
@@ -1952,7 +1954,8 @@ section {
 }
 
 .cliente-tarjeta:hover {
-  border-color: var(--accent);
+  border-color: var(--azul);
+  background: var(--azul-suave);
 }
 
 .saldo-deudor {
@@ -1969,7 +1972,7 @@ section {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(14, 31, 61, 0.55);
   display: flex;
   justify-content: flex-end;
 }
@@ -1978,7 +1981,8 @@ section {
   width: min(100vw, 560px);
   height: 100%;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 20px 24px;
+  box-shadow: var(--sombra-2);
   background: var(--bg);
   border-left: 1px solid var(--border);
 }
@@ -2035,9 +2039,9 @@ section {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--bg-alt);
 }
 
@@ -2077,8 +2081,8 @@ section {
 .mi-trabajo-observaciones {
   padding: 8px 10px;
   border-left: 4px solid var(--accent);
-  border-radius: 4px;
-  background: var(--bg);
+  border-radius: var(--radio);
+  background: var(--azul-suave);
 }
 
 .texto-con-saltos {
@@ -2313,13 +2317,6 @@ section {
 }
 
 /* Trabajo que el jefe marcó Terminado: bloqueado, solo cobrar o reabrir. */
-.trabajo-terminado {
-  padding: 12px 14px;
-  border: 1px solid var(--ok);
-  border-left: 6px solid var(--ok);
-  border-radius: 8px;
-  background: var(--bg-alt);
-}
 
 .trabajo-terminado p {
   margin: 0;
@@ -2338,9 +2335,10 @@ section {
 .boton-whatsapp {
   display: inline-flex;
   align-items: center;
-  margin: -4px 0 12px;
-  padding: 6px 12px;
-  border-radius: 4px;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 18px;
+  border-radius: var(--radio);
   background: #1e7e34;
   color: #fff;
   font-size: 14px;
@@ -3022,4 +3020,457 @@ section {
   main .cobros-carrito {
     display: table;
   }
+}
+
+/* ---------- Vuelto (VueltoModal.tsx) ---------- */
+.vuelto {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vuelto label {
+  margin-bottom: 0;
+  font-size: 15px;
+}
+
+.vuelto input {
+  min-height: 52px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.vuelto input::placeholder {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.vuelto-total,
+.vuelto-resultado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radio);
+  font-variant-numeric: tabular-nums;
+}
+
+.vuelto-total {
+  background: var(--bg);
+}
+
+.vuelto-total strong {
+  font-size: 22px;
+  color: var(--text-h);
+}
+
+.vuelto-sugerencias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vuelto-sugerencias button {
+  flex: 1 1 90px;
+}
+
+.vuelto-resultado {
+  background: var(--ok-bg);
+  color: var(--ok-texto);
+}
+
+.vuelto-resultado strong {
+  font-size: 30px;
+  color: var(--ok);
+}
+
+.vuelto-resultado-falta {
+  background: var(--error-bg);
+  color: var(--error-texto);
+}
+
+.vuelto-resultado-falta strong {
+  color: var(--error);
+}
+
+.vuelto-dado {
+  padding: 10px 14px;
+  border-radius: var(--radio);
+  background: var(--ok-bg);
+  color: var(--ok-texto);
+  font-size: 15px;
+}
+
+.vuelto-dado strong {
+  font-size: 18px;
+}
+
+/* ---------- Historial de ventas ---------- */
+.historial-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.historial-fechas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.historial-fechas label {
+  margin-bottom: 0;
+}
+
+.historial-fechas .segmentado {
+  margin-left: auto;
+}
+
+.historial-tabla table {
+  min-width: 1000px;
+}
+
+.historial-tabla td {
+  vertical-align: top;
+}
+
+.celda-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--apagado);
+}
+
+.celda-pila {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.historial-autorizar {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.historial-tabla .fila-expandida td {
+  background: var(--azul-suave);
+  border-bottom-color: transparent;
+}
+
+.historial-tabla .fila-detalle > td {
+  padding: 4px 20px 20px;
+  background: var(--azul-suave);
+}
+
+.historial-tabla .fila-detalle:hover {
+  background: none;
+}
+
+.tabla-detalle {
+  border-radius: var(--radio);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.detalle-venta .comprobante-acciones {
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .historial-fechas .segmentado {
+    margin-left: 0;
+  }
+}
+
+/* ---------- Trabajo a domicilio ---------- */
+.trabajo-buscar-numero {
+  display: flex;
+  gap: 8px;
+}
+
+.trabajo-buscar-numero input {
+  width: 150px;
+}
+
+.trabajo-vista {
+  margin-bottom: 16px;
+}
+
+.boton-volver {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  color: var(--azul);
+}
+
+.boton-volver:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+
+.trabajo .encabezado-pagina-titulo .trabajo-estado {
+  max-width: none;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.trabajo-terminado {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trabajo-terminado p {
+  margin: 0;
+}
+
+.trabajo-cobrado-aviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trabajo-grilla {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.trabajo-principal {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.trabajo-principal > section,
+.trabajo > section.tarjeta {
+  margin-bottom: 0;
+}
+
+.trabajo > section.tarjeta {
+  margin-bottom: 20px;
+}
+
+.trabajo-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px;
+}
+
+.trabajo-seccion h3 {
+  margin: 0 0 12px;
+}
+
+.trabajo-seccion .agregar-producto {
+  margin-bottom: 14px;
+}
+
+.trabajo-precio-manual {
+  width: 130px;
+}
+
+.trabajo-whatsapp {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.franja-horaria > label {
+  flex: 1;
+}
+
+.trabajo-items .precio-editable {
+  width: 120px;
+  text-align: right;
+}
+
+.trabajo-items .precio-mostrador {
+  display: block;
+}
+
+.trabajo-lateral {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.trabajo-resumen {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+
+.trabajo-resumen > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-suave);
+}
+
+.trabajo-resumen dt small {
+  color: var(--apagado);
+}
+
+.trabajo-resumen dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trabajo-resumen-ganancia {
+  border-bottom: none !important;
+  color: var(--ok-texto);
+}
+
+.trabajo-lateral label {
+  margin-bottom: 0;
+}
+
+.trabajo-lateral-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trabajo-lateral-acciones button {
+  min-height: 48px;
+}
+
+@media (max-width: 1100px) {
+  .trabajo-grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trabajo-lateral {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .trabajo-buscar-numero {
+    width: 100%;
+  }
+
+  .trabajo-buscar-numero input {
+    flex: 1;
+  }
+
+  .trabajo-seccion {
+    padding: 16px;
+  }
+}
+
+/* ---------- Mis trabajos (técnico) ---------- */
+.trabajo-fila:hover:not(:disabled) {
+  background: var(--azul-suave);
+  border-color: var(--azul-suave-borde);
+  border-left-color: var(--color-trabajo);
+}
+
+.trabajo-fila span {
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.trabajo-fila .trabajo-fila-estado {
+  font-weight: 600;
+  color: var(--color-trabajo);
+}
+
+a.boton-grande {
+  background: var(--azul);
+  color: #fff;
+}
+
+a.boton-grande:hover {
+  background: var(--azul-hover);
+  color: #fff;
+}
+
+.mis-trabajos h3 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--apagado);
+}
+
+.mi-trabajo-tarjeta h3 {
+  font-size: 17px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-h);
+}
+
+/* ---------- Clientes ---------- */
+.clientes-buscar {
+  margin-bottom: 0;
+}
+
+.clientes-grilla {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.cliente-tarjeta {
+  align-items: flex-start;
+  font-weight: 400;
+}
+
+.cliente-tarjeta:hover:not(:disabled) {
+  background: var(--azul-suave);
+}
+
+.cliente-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--azul-suave);
+  color: var(--azul);
+  font-weight: 700;
+}
+
+.cliente-datos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cliente-datos strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cliente-datos small {
+  color: var(--apagado);
+}
+
+.cliente-datos .badge {
+  margin-top: 6px;
 }

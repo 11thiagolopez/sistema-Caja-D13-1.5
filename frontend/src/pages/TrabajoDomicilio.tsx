@@ -30,13 +30,14 @@ import {
 } from '../utils/whatsapp'
 import { CalendarioTrabajos } from '../components/CalendarioTrabajos'
 import { AdjuntosTrabajo } from '../components/AdjuntosTrabajo'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { getFotosTrabajo } from '../api/fotosTrabajo'
 import { getArchivosTrabajo } from '../api/archivosTrabajo'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
 import { verBlob } from '../utils/descargarBlob'
 import { estadoVisibleTrabajo } from '../utils/estadoTrabajo'
-import { formatoFechaHora } from '../utils/formato'
+import { formatoFechaHora, formatoPesos } from '../utils/formato'
 import type {
   DetalleVentaRequest,
   EmpleadoResponse,
@@ -549,16 +550,41 @@ export function TrabajoDomicilio() {
   if (vista === 'lista') {
     return (
       <div ref={raiz}>
-        <h2>Trabajos a domicilio</h2>
-        <section>
-          <button type="button" onClick={nuevoTrabajo}>
-            Nuevo trabajo
-          </button>
-        </section>
+        <EncabezadoPagina
+          titulo="Trabajos a domicilio"
+          acciones={
+            <>
+              <form
+                className="trabajo-buscar-numero"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (idBuscar) void cargarTrabajo(Number(idBuscar))
+                }}
+              >
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="Número de trabajo"
+                  placeholder="N° de trabajo"
+                  value={idBuscar}
+                  onChange={(e) => setIdBuscar(e.target.value)}
+                />
+                <button type="submit" className="btn-secundario" disabled={cargando || !idBuscar}>
+                  {cargando && <span className="spinner" aria-hidden="true" />}
+                  {cargando ? 'Buscando…' : 'Buscar'}
+                </button>
+              </form>
+              <button type="button" onClick={nuevoTrabajo}>
+                + Nuevo trabajo
+              </button>
+            </>
+          }
+        />
 
-        {mensaje && <p className="resultado">{mensaje}</p>}
+        {mensaje && <p className="alerta alerta-ok">{mensaje}</p>}
+        {error && <p className="alerta alerta-error">{error}</p>}
 
-        <div className="vista-agenda" role="group" aria-label="Vista de la agenda">
+        <div className="segmentado trabajo-vista" role="group" aria-label="Vista de la agenda">
           <button type="button" aria-pressed={vistaAgenda === 'semana'} onClick={() => elegirVistaAgenda('semana')}>
             Semana
           </button>
@@ -572,74 +598,64 @@ export function TrabajoDomicilio() {
         ) : (
           <CalendarioTrabajos fecha={fechaBuscar} onCambiarFecha={setFechaBuscar} onAbrir={abrirDesdeLista} />
         )}
-
-        <section>
-          <h3>Buscar por número</h3>
-          <input
-            type="number"
-            placeholder="N° de trabajo"
-            value={idBuscar}
-            onChange={(e) => setIdBuscar(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => idBuscar && cargarTrabajo(Number(idBuscar))}
-            disabled={cargando || !idBuscar}
-          >
-            {cargando && <span className="spinner" />}
-            {cargando ? 'Cargando...' : 'Buscar'}
-          </button>
-          {error && <p className="error">{error}</p>}
-        </section>
       </div>
     )
   }
 
   return (
-    <div ref={raiz}>
-      <button type="button" onClick={volverALista}>
-        ← Volver a la lista
+    <div ref={raiz} className="trabajo">
+      <button type="button" className="enlace-volver boton-volver" onClick={volverALista}>
+        ← Volver a la agenda
       </button>
 
-      <div className="trabajo-encabezado">
-        <h2>{idVenta ? `Trabajo #${idVenta}` : 'Nuevo trabajo'}</h2>
-        {estadoVisible && <span className={`trabajo-estado ${estadoVisible.clase}`}>{estadoVisible.etiqueta}</span>}
-      </div>
-      {fechaTrabajo && (
-        <p className="trabajo-detalle">
-          {estadoVenta === 'CONFIRMADA' ? 'Cobrado' : 'Cargado'} el {formatoFechaHora(fechaTrabajo)}
-        </p>
-      )}
-      {idVenta != null && estadoVenta !== 'ANULADA' && (
-        <p>
-          <button type="button" onClick={imprimirOrden} disabled={abriendoOrden}>
-            {abriendoOrden && <span className="spinner" />}
-            {abriendoOrden ? 'Abriendo...' : 'Imprimir orden de trabajo'}
-          </button>
-        </p>
-      )}
+      <EncabezadoPagina
+        titulo={idVenta ? `Trabajo #${idVenta}` : 'Nuevo trabajo'}
+        etiqueta={estadoVisible && <span className={`trabajo-estado ${estadoVisible.clase}`}>{estadoVisible.etiqueta}</span>}
+        subtitulo={
+          fechaTrabajo
+            ? `${estadoVenta === 'CONFIRMADA' ? 'Cobrado' : 'Cargado'} el ${formatoFechaHora(fechaTrabajo)}`
+            : undefined
+        }
+        acciones={
+          idVenta != null &&
+          estadoVenta !== 'ANULADA' && (
+            <>
+              {!terminado && (
+                <button type="button" className="btn-peligro-borde" onClick={eliminar} disabled={anulando || guardando}>
+                  {anulando && <span className="spinner" aria-hidden="true" />}
+                  Eliminar trabajo
+                </button>
+              )}
+              <button type="button" className="btn-secundario" onClick={imprimirOrden} disabled={abriendoOrden}>
+                {abriendoOrden && <span className="spinner" aria-hidden="true" />}
+                {abriendoOrden ? 'Abriendo…' : 'Imprimir orden'}
+              </button>
+            </>
+          )
+        }
+      />
 
       {terminado && (
-        <section className="trabajo-terminado">
+        <section className="trabajo-terminado alerta alerta-aviso">
           <p>
             <strong>Trabajo terminado.</strong> Ya no se pueden cambiar datos, artículos, precios, notas ni fotos. Cobralo
             con los ítems tal cual están, o reabrilo si hay que corregir algo.
           </p>
           <div className="comprobante-acciones">
             <label>
-              Medio de pago
+              Forma de pago
               <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
-                {!medioPago && <option value="">Elegí el medio de pago</option>}
+                {!medioPago && <option value="">Elegí la forma de pago</option>}
                 <option value="EFECTIVO">Efectivo</option>
                 <option value="TRANSFERENCIA">Transferencia</option>
                 <option value="TARJETA">Tarjeta</option>
               </select>
             </label>
             <button type="button" onClick={cobrarTerminado} disabled={guardando || !medioPago}>
-              {guardando && <span className="spinner" />}
+              {guardando && <span className="spinner" aria-hidden="true" />}
               Cerrar y cobrar
             </button>
-            <button type="button" className="boton-secundario" onClick={reabrir} disabled={guardando}>
+            <button type="button" className="btn-secundario" onClick={reabrir} disabled={guardando}>
               Reabrir
             </button>
           </div>
@@ -647,19 +663,311 @@ export function TrabajoDomicilio() {
       )}
 
       {estadoVenta === 'CONFIRMADA' && (
-        <section>
-          <p>Este trabajo ya se cobró, por eso no se puede editar.</p>
-          <button type="button" onClick={verComprobante} disabled={abriendoComprobante}>
-            {abriendoComprobante && <span className="spinner" />}
-            {abriendoComprobante ? 'Abriendo...' : 'Ver comprobante'}
+        <section className="alerta alerta-ok trabajo-cobrado-aviso">
+          <span>Este trabajo ya se cobró, por eso no se puede editar.</span>
+          <button type="button" className="btn-secundario btn-chico" onClick={verComprobante} disabled={abriendoComprobante}>
+            {abriendoComprobante && <span className="spinner" aria-hidden="true" />}
+            {abriendoComprobante ? 'Abriendo…' : 'Ver comprobante'}
           </button>
         </section>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="alerta alerta-error">{error}</p>}
+      {mensaje && <p className="alerta alerta-ok">{mensaje}</p>}
+
+      <div className="trabajo-grilla">
+        <fieldset className="trabajo-campos trabajo-principal" disabled={soloLectura}>
+          <section className="tarjeta trabajo-seccion">
+            <h3>Cliente y trabajo</h3>
+            <div className="formulario-grilla">
+              <label>
+                Fecha del trabajo
+                <input type="date" value={fechaProgramada} onChange={(e) => setFechaProgramada(e.target.value)} />
+              </label>
+              <div className="franja-horaria">
+                <label>
+                  Desde
+                  <input type="time" value={horaDesde} onChange={(e) => setHoraDesde(e.target.value)} />
+                </label>
+                <label>
+                  Hasta
+                  <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} />
+                </label>
+              </div>
+              <label>
+                Nombre del cliente
+                <input
+                  autoComplete="off"
+                  placeholder="Ej: Juan Pérez"
+                  value={clienteNombre}
+                  onChange={(e) => setClienteNombre(e.target.value)}
+                />
+              </label>
+              <label>
+                Teléfono
+                <input
+                  type="tel"
+                  autoComplete="off"
+                  placeholder="Ej: 11 2345-6789"
+                  value={clienteTelefono}
+                  onChange={(e) => setClienteTelefono(e.target.value)}
+                />
+              </label>
+            </div>
+            {/* Confirmación al cliente en un toque (Etapa 3): abre WhatsApp con el mensaje armado, sin
+                usar la API. En la PC va por WhatsApp Web (la cuenta del local), siempre en la misma
+                pestaña; en el celular, la app. Sin rel="noopener" para que la pestaña se pueda reusar. */}
+            {numeroCliente && fechaProgramada && (
+              <div className="trabajo-whatsapp">
+                <a
+                  className="boton-whatsapp"
+                  href={linkWhatsapp(
+                    numeroCliente,
+                    mensajeConfirmacion({ clienteNombre, fechaProgramada, horaDesde, horaHasta, direccionTrabajo }),
+                  )}
+                  target={ES_CELULAR ? '_blank' : PESTANIA_WHATSAPP}
+                  rel={ES_CELULAR ? 'noreferrer' : undefined}
+                >
+                  Confirmar turno por WhatsApp
+                </a>
+                {!ES_CELULAR && (
+                  <small className="peticion-detalle">
+                    Se abre en WhatsApp Web: en este navegador tiene que estar abierto el WhatsApp del local ({WHATSAPP_DEL_LOCAL}).
+                  </small>
+                )}
+              </div>
+            )}
+            {clienteTelefono.trim() && !numeroCliente && (
+              <small className="peticion-detalle">
+                Para el botón de WhatsApp cargá el teléfono con código de área (ej: 11 5555-1234).
+              </small>
+            )}
+            <label>
+              Dirección
+              <input
+                autoComplete="off"
+                placeholder="Ej: Av. Libertador 1450, entre San Martín y Belgrano, timbre 2B"
+                value={direccionTrabajo}
+                onChange={(e) => setDireccionTrabajo(e.target.value)}
+              />
+            </label>
+            <HistorialCliente telefono={clienteTelefono} direccion={direccionTrabajo} idVentaActual={idVenta} />
+            <label>
+              Descripción del trabajo
+              <textarea
+                placeholder="Ej: Cambio de cerradura puerta de entrada, cliente perdió las llaves"
+                value={descripcionTrabajo}
+                onChange={(e) => setDescripcionTrabajo(e.target.value)}
+              />
+            </label>
+            <label>
+              Observaciones para el técnico
+              <textarea
+                placeholder="Ej: tocar timbre del portero, llevar cerradura de doble paleta"
+                value={observacionesTecnico}
+                onChange={(e) => setObservacionesTecnico(e.target.value)}
+              />
+            </label>
+            <div className="formulario-grilla">
+              {!soloLectura && (
+                <label>
+                  Estado
+                  <select value={estadoTrabajo} onChange={(e) => setEstadoTrabajo(e.target.value as EstadoTrabajo)}>
+                    {ESTADOS.map((e) => (
+                      <option key={e.valor} value={e.valor}>
+                        {e.etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label>
+                Técnico asignado
+                <select value={idEmpleadoTecnico} onChange={(e) => setIdEmpleadoTecnico(e.target.value)}>
+                  <option value="">Sin asignar</option>
+                  {empleados
+                    .filter((e) => e.rol === 'TECNICO')
+                    .map((e) => (
+                      <option key={e.idEmpleado} value={e.idEmpleado}>
+                        {e.nombre} ({e.comision ?? 0}% comisión)
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="tarjeta trabajo-seccion">
+            <h3>Artículos y mano de obra</h3>
+            {!soloLectura && (
+              <>
+                <span className="cobros-buscar-titulo">Artículo del stock</span>
+                <BuscadorProductoCarrito
+                  productos={productos}
+                  datalistId="productos-datalist-domicilio"
+                  onAgregar={agregarProductoAlCarrito}
+                />
+                <span className="cobros-buscar-titulo">Mano de obra o servicio</span>
+                <div className="agregar-producto">
+                  <input
+                    className="buscador-producto-texto"
+                    aria-label="Descripción de la mano de obra"
+                    placeholder="Ej: Instalación de cerradura"
+                    value={manualDescripcion}
+                    onChange={(e) => setManualDescripcion(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    className="trabajo-precio-manual"
+                    aria-label="Precio de la mano de obra"
+                    min={0}
+                    step="0.01"
+                    placeholder="Precio"
+                    value={manualPrecio}
+                    onChange={(e) => setManualPrecio(e.target.value)}
+                  />
+                  <button type="button" onClick={agregarManoDeObra} disabled={!manualDescripcion.trim() || !manualPrecio}>
+                    Agregar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {carrito.length === 0 ? (
+              <p className="cobros-vacio">Todavía no hay artículos ni mano de obra.</p>
+            ) : (
+              <div className="tabla-scroll">
+                <table className="trabajo-items">
+                  <thead>
+                    <tr>
+                      <th>Descripción</th>
+                      <th>Tipo</th>
+                      <th className="celda-numero">Cantidad</th>
+                      <th className="celda-numero">Precio</th>
+                      <th className="celda-numero">Subtotal</th>
+                      {!soloLectura && (
+                        <th>
+                          <span className="solo-lector">Acciones</span>
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carrito.map((item, index) => (
+                      <tr key={item.clientId}>
+                        <td className="texto-fuerte">{item.descripcionProducto}</td>
+                        <td>
+                          <span className={`badge ${item.tipo === 'SERVICIO' ? 'badge-info' : ''}`}>
+                            {item.tipo === 'SERVICIO' ? 'Mano de obra' : 'Artículo'}
+                          </span>
+                        </td>
+                        <td className="celda-numero">{item.cantidad}</td>
+                        <td className="celda-numero">
+                          {soloLectura ? (
+                            formatoPesos(item.precioUnitario)
+                          ) : (
+                            // Editable: un artículo puede cobrarse en el domicilio distinto que en mostrador.
+                            // Solo cambia lo que se cobra; el costo (y por lo tanto la ganancia real) sale
+                            // siempre del producto.
+                            <input
+                              className="precio-editable"
+                              type="number"
+                              inputMode="decimal"
+                              min={0.01}
+                              step="0.01"
+                              aria-label={`Precio de ${item.descripcionProducto}`}
+                              value={Number.isNaN(item.precioUnitario) ? '' : item.precioUnitario}
+                              onChange={(e) => cambiarPrecio(index, e.target.value === '' ? Number.NaN : Number(e.target.value))}
+                            />
+                          )}
+                          {(() => {
+                            const precioMostrador = productos.find((p) => p.idProducto === item.idProducto)?.precioVenta
+                            return item.idProducto != null && precioMostrador != null && precioMostrador !== item.precioUnitario ? (
+                              <small className="precio-mostrador">Mostrador: {formatoPesos(precioMostrador)}</small>
+                            ) : null
+                          })()}
+                        </td>
+                        <td className="celda-numero texto-fuerte">
+                          {Number.isNaN(item.precioUnitario) ? '—' : formatoPesos(item.cantidad * item.precioUnitario)}
+                        </td>
+                        {!soloLectura && (
+                          <td className="celda-numero">
+                            <button
+                              type="button"
+                              className="btn-peligro-borde btn-chico"
+                              aria-label={`Quitar ${item.descripcionProducto}`}
+                              onClick={() => quitarDelCarrito(index)}
+                            >
+                              Quitar
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </fieldset>
+
+        <aside className="tarjeta trabajo-lateral">
+          <div className="cobros-total">
+            <span>Total del trabajo</span>
+            <strong>{formatoPesos(total)}</strong>
+          </div>
+          <dl className="trabajo-resumen">
+            <div>
+              <dt>Mano de obra</dt>
+              <dd>{formatoPesos(manoDeObraTotal)}</dd>
+            </div>
+            <div>
+              <dt>
+                Para el técnico{' '}
+                <small>({porcentajeTecnico != null ? `${porcentajeTecnico}% de la mano de obra` : 'sin asignar'})</small>
+              </dt>
+              <dd>{formatoPesos(comision)}</dd>
+            </div>
+            <div>
+              <dt>Para el negocio</dt>
+              <dd>{formatoPesos(total - comision)}</dd>
+            </div>
+            <div className="trabajo-resumen-ganancia">
+              <dt>Ganancia (restando el costo de los artículos)</dt>
+              <dd>{formatoPesos(gananciaNeta)}</dd>
+            </div>
+          </dl>
+
+          <fieldset className="trabajo-campos" disabled={soloLectura}>
+            <label>
+              Forma de pago
+              <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
+                {!medioPago && <option value="">Sin especificar</option>}
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="TARJETA">Tarjeta</option>
+              </select>
+            </label>
+          </fieldset>
+
+          {!soloLectura && (
+            <div className="trabajo-lateral-acciones">
+              <button type="button" onClick={() => guardar(true)} disabled={guardando}>
+                {guardando && <span className="spinner" aria-hidden="true" />}
+                Cerrar y cobrar
+              </button>
+              <button type="button" className="btn-secundario" onClick={() => guardar(false)} disabled={guardando}>
+                {guardando && <span className="spinner" aria-hidden="true" />}
+                Guardar borrador
+              </button>
+            </div>
+          )}
+        </aside>
+      </div>
 
       {idVenta != null && estadoVenta !== 'ANULADA' && (
-        <section>
+        <section className="tarjeta trabajo-seccion">
           <h3>Notas</h3>
           <div className="trabajo-notas">
             {notas.length === 0 && <p className="peticion-detalle">Todavía no hay notas.</p>}
@@ -676,13 +984,14 @@ export function TrabajoDomicilio() {
           {!soloLectura && (
             <form className="trabajo-nota-form" onSubmit={agregarNota}>
               <textarea
+                aria-label="Nota nueva"
                 value={notaTexto}
                 onChange={(e) => setNotaTexto(e.target.value)}
-                placeholder="Ej: llevá la escalera grande, el cliente pidió que llames antes de llegar..."
+                placeholder="Ej: llevá la escalera grande, el cliente pidió que llames antes de llegar…"
                 rows={2}
               />
               <button type="submit" disabled={agregandoNota || !notaTexto.trim()}>
-                {agregandoNota && <span className="spinner" />}
+                {agregandoNota && <span className="spinner" aria-hidden="true" />}
                 Agregar nota (le avisa al técnico)
               </button>
             </form>
@@ -691,7 +1000,7 @@ export function TrabajoDomicilio() {
       )}
 
       {estadoVenta !== 'ANULADA' && (
-        <section>
+        <section className="tarjeta trabajo-seccion">
           <h3>Fotos, videos y audios</h3>
           {idVenta == null ? (
             <p className="peticion-detalle">Guardá el trabajo para poder adjuntarle fotos, videos o audios.</p>
@@ -710,261 +1019,6 @@ export function TrabajoDomicilio() {
           )}
         </section>
       )}
-
-      <fieldset className="trabajo-campos" disabled={soloLectura}>
-      <section>
-        <h3>Cliente y trabajo</h3>
-        <label>
-          Fecha del trabajo
-          <input type="date" value={fechaProgramada} onChange={(e) => setFechaProgramada(e.target.value)} />
-        </label>
-        <div className="franja-horaria">
-          <label>
-            Desde
-            <input type="time" value={horaDesde} onChange={(e) => setHoraDesde(e.target.value)} />
-          </label>
-          <label>
-            Hasta
-            <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} />
-          </label>
-        </div>
-        <label>
-          Nombre del cliente
-          <input
-            placeholder="Ej: Juan Pérez"
-            value={clienteNombre}
-            onChange={(e) => setClienteNombre(e.target.value)}
-          />
-        </label>
-        <label>
-          Teléfono
-          <input
-            placeholder="Ej: 11 2345-6789"
-            value={clienteTelefono}
-            onChange={(e) => setClienteTelefono(e.target.value)}
-          />
-        </label>
-        {/* Confirmación al cliente en un toque (Etapa 3): abre WhatsApp con el mensaje armado, sin
-            usar la API. En la PC va por WhatsApp Web (la cuenta del local), siempre en la misma
-            pestaña; en el celular, la app. Sin rel="noopener" para que la pestaña se pueda reusar. */}
-        {numeroCliente && fechaProgramada && (
-          <>
-            <a
-              className="boton-whatsapp"
-              href={linkWhatsapp(
-                numeroCliente,
-                mensajeConfirmacion({ clienteNombre, fechaProgramada, horaDesde, horaHasta, direccionTrabajo }),
-              )}
-              target={ES_CELULAR ? '_blank' : PESTANIA_WHATSAPP}
-              rel={ES_CELULAR ? 'noreferrer' : undefined}
-            >
-              Confirmar turno por WhatsApp
-            </a>
-            {!ES_CELULAR && (
-              <small className="peticion-detalle">
-                Se abre en WhatsApp Web: en este navegador tiene que estar abierto el WhatsApp del local ({WHATSAPP_DEL_LOCAL}).
-              </small>
-            )}
-          </>
-        )}
-        {clienteTelefono.trim() && !numeroCliente && (
-          <small className="peticion-detalle">
-            Para el botón de WhatsApp cargá el teléfono con código de área (ej: 11 5555-1234).
-          </small>
-        )}
-        <label>
-          Dirección
-          <input
-            placeholder="Ej: Av. Libertador 1450, entre San Martín y Belgrano, timbre 2B"
-            value={direccionTrabajo}
-            onChange={(e) => setDireccionTrabajo(e.target.value)}
-          />
-        </label>
-        <HistorialCliente telefono={clienteTelefono} direccion={direccionTrabajo} idVentaActual={idVenta} />
-        <label>
-          Descripción del trabajo
-          <textarea
-            placeholder="Ej: Cambio de cerradura puerta de entrada, cliente perdió las llaves"
-            value={descripcionTrabajo}
-            onChange={(e) => setDescripcionTrabajo(e.target.value)}
-          />
-        </label>
-        <label>
-          Observaciones para el técnico
-          <textarea
-            placeholder="Ej: tocar timbre del portero, llevar cerradura de doble paleta"
-            value={observacionesTecnico}
-            onChange={(e) => setObservacionesTecnico(e.target.value)}
-          />
-        </label>
-        {!soloLectura && (
-          <label>
-            Estado
-            <select value={estadoTrabajo} onChange={(e) => setEstadoTrabajo(e.target.value as EstadoTrabajo)}>
-              {ESTADOS.map((e) => (
-                <option key={e.valor} value={e.valor}>
-                  {e.etiqueta}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          Técnico asignado
-          <select value={idEmpleadoTecnico} onChange={(e) => setIdEmpleadoTecnico(e.target.value)}>
-            <option value="">Sin asignar</option>
-            {empleados
-              .filter((e) => e.rol === 'TECNICO')
-              .map((e) => (
-                <option key={e.idEmpleado} value={e.idEmpleado}>
-                  {e.nombre} ({e.comision ?? 0}% comisión)
-                </option>
-              ))}
-          </select>
-        </label>
-      </section>
-
-      {!soloLectura && (
-        <>
-          <section>
-            <h3>Artículos utilizados</h3>
-            <BuscadorProductoCarrito
-              productos={productos}
-              datalistId="productos-datalist-domicilio"
-              onAgregar={agregarProductoAlCarrito}
-            />
-          </section>
-
-          <section>
-            <h3>Mano de obra / servicio</h3>
-            <div className="agregar-producto">
-              <input
-                placeholder="Descripción (ej: Instalación de cerradura)"
-                value={manualDescripcion}
-                onChange={(e) => setManualDescripcion(e.target.value)}
-              />
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Precio"
-                value={manualPrecio}
-                onChange={(e) => setManualPrecio(e.target.value)}
-              />
-              <button type="button" onClick={agregarManoDeObra} disabled={!manualDescripcion.trim() || !manualPrecio}>
-                Agregar mano de obra
-              </button>
-            </div>
-          </section>
-        </>
-      )}
-
-      <table>
-        <thead>
-          <tr>
-            <th>Descripción</th>
-            <th>Tipo</th>
-            <th>Cantidad</th>
-            <th>Precio unitario</th>
-            <th>Subtotal</th>
-            {!soloLectura && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {carrito.map((item, index) => (
-            <tr key={item.clientId}>
-              <td>{item.descripcionProducto}</td>
-              <td>{item.tipo === 'SERVICIO' ? 'Mano de obra' : 'Artículo'}</td>
-              <td>{item.cantidad}</td>
-              <td>
-                {soloLectura ? (
-                  item.precioUnitario.toFixed(2)
-                ) : (
-                  // Editable: un artículo puede cobrarse en el domicilio distinto que en mostrador.
-                  // Solo cambia lo que se cobra; el costo (y por lo tanto la ganancia real) sale
-                  // siempre del producto.
-                  <input
-                    className="precio-editable"
-                    type="number"
-                    min={0.01}
-                    step="0.01"
-                    aria-label={`Precio de ${item.descripcionProducto}`}
-                    value={Number.isNaN(item.precioUnitario) ? '' : item.precioUnitario}
-                    onChange={(e) => cambiarPrecio(index, e.target.value === '' ? Number.NaN : Number(e.target.value))}
-                  />
-                )}
-                {(() => {
-                  const precioMostrador = productos.find((p) => p.idProducto === item.idProducto)?.precioVenta
-                  return item.idProducto != null && precioMostrador != null && precioMostrador !== item.precioUnitario ? (
-                    <small className="precio-mostrador">Mostrador: {precioMostrador.toFixed(2)}</small>
-                  ) : null
-                })()}
-              </td>
-              <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
-              {!soloLectura && (
-                <td>
-                  <button type="button" onClick={() => quitarDelCarrito(index)}>
-                    Quitar
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <section>
-        <label>
-          Medio de pago
-          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as MedioPago)}>
-            {!medioPago && <option value="">Sin especificar</option>}
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA">Tarjeta</option>
-          </select>
-        </label>
-      </section>
-
-      <section>
-        <h3>Resumen</h3>
-        <ul>
-          <li>Total: {total.toFixed(2)}</li>
-          <li>Mano de obra: {manoDeObraTotal.toFixed(2)}</li>
-          <li>
-            Para el técnico ({porcentajeTecnico != null ? `${porcentajeTecnico}%` : 'sin asignar'} de la mano de obra):{' '}
-            {comision.toFixed(2)}
-          </li>
-          <li>Para el negocio: {(total - comision).toFixed(2)}</li>
-          <li>
-            <strong>Ganancia del negocio, restando el costo de los artículos: {gananciaNeta.toFixed(2)}</strong>
-          </li>
-        </ul>
-      </section>
-      </fieldset>
-
-      {!soloLectura && (
-        <div className="comprobante-acciones">
-          <button type="button" onClick={() => guardar(false)} disabled={guardando}>
-            {guardando && <span className="spinner" />}
-            Guardar borrador
-          </button>
-          <button type="button" onClick={() => guardar(true)} disabled={guardando}>
-            {guardando && <span className="spinner" />}
-            Cerrar y cobrar
-          </button>
-        </div>
-      )}
-
-      {idVenta && estadoVenta !== 'ANULADA' && !terminado && (
-        <div className="comprobante-acciones">
-          <button type="button" className="boton-rechazar" onClick={eliminar} disabled={anulando || guardando}>
-            {anulando && <span className="spinner" />}
-            Eliminar trabajo
-          </button>
-        </div>
-      )}
-
-      {mensaje && <p className="resultado">{mensaje}</p>}
     </div>
   )
 }

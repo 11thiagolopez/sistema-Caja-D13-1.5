@@ -9,6 +9,7 @@ import {
   registrarPagoCliente,
 } from '../api/clientes'
 import { ApiRequestError } from '../api/client'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { FormularioCliente } from '../components/FormularioCliente'
 import { Modal } from '../components/Modal'
 import { ModalFacturacion } from '../components/ModalFacturacion'
@@ -57,36 +58,55 @@ export function Clientes() {
     (c) => !texto || c.nombre.toLowerCase().includes(texto) || (c.docNro ?? '').includes(texto),
   )
 
+  const conDeuda = clientes.filter((c) => (c.saldo ?? 0) < 0).length
+
   return (
     <div>
-      <h2>Clientes</h2>
-      <div className="agregar-producto">
-        <label>
+      <EncabezadoPagina
+        titulo="Clientes"
+        subtitulo={
+          cargando
+            ? undefined
+            : `${clientes.length} clientes${conDeuda > 0 ? ` · ${conDeuda} con deuda en cuenta corriente` : ''}`
+        }
+        acciones={
+          <button type="button" onClick={() => setCreando(true)}>
+            + Nuevo cliente
+          </button>
+        }
+      />
+      <section className="tarjeta productos-filtros">
+        <label className="clientes-buscar">
           Buscar
           <input
-            placeholder="Nombre, razón social, CUIT o DNI"
+            type="search"
+            placeholder="Nombre, razón social, CUIT o DNI…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </label>
-        <button type="button" onClick={() => setCreando(true)}>
-          Nuevo cliente
-        </button>
-      </div>
+      </section>
 
-      {cargando && <p>Cargando...</p>}
-      {error && <p className="error">{error}</p>}
-      {!cargando && !error && visibles.length === 0 && <p>No hay clientes para mostrar.</p>}
+      {cargando && <p className="texto-apagado">Cargando…</p>}
+      {error && <p className="alerta alerta-error">{error}</p>}
+      {!cargando && !error && visibles.length === 0 && (
+        <p className="cobros-vacio">{clientes.length === 0 ? 'Todavía no hay clientes cargados.' : 'Ningún cliente coincide con la búsqueda.'}</p>
+      )}
 
       <div className="clientes-grilla">
         {visibles.map((c) => (
           <button type="button" key={c.idCliente} className="cliente-tarjeta" onClick={() => setIdAbierto(c.idCliente)}>
-            <strong>{c.nombre}</strong>
-            <small>{etiquetaDocumento(c.docTipo, c.docNro)}</small>
-            <small>{nombreCondicionIva(c.condicionIva)}</small>
-            {c.saldo != null && c.saldo !== 0 && (
-              <span className={c.saldo < 0 ? 'saldo-deudor' : 'saldo-a-favor'}>{textoSaldo(c.saldo)}</span>
-            )}
+            <span className="cliente-avatar" aria-hidden="true">
+              {c.nombre.trim().slice(0, 1).toUpperCase() || '?'}
+            </span>
+            <span className="cliente-datos">
+              <strong>{c.nombre}</strong>
+              <small>{etiquetaDocumento(c.docTipo, c.docNro)}</small>
+              <small>{nombreCondicionIva(c.condicionIva)}</small>
+              {c.saldo != null && c.saldo !== 0 && (
+                <span className={`badge ${c.saldo < 0 ? 'badge-error' : 'badge-ok'}`}>{textoSaldo(c.saldo)}</span>
+              )}
+            </span>
           </button>
         ))}
       </div>

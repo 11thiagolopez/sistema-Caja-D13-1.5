@@ -6,6 +6,7 @@ import { hoyIso } from '../utils/date'
 import { formatoPesos } from '../utils/formato'
 import { ETIQUETA_MEDIO_PAGO } from '../utils/recargo'
 import type { VentaResponse } from '../types/api'
+import { EstadoVenta } from './EstadoVenta'
 
 type Filtro = 'TODAS' | 'EFECTIVO' | 'TARJETA'
 
@@ -21,15 +22,6 @@ function pasaFiltro(v: VentaResponse, filtro: Filtro): boolean {
   if (filtro === 'EFECTIVO') return v.medioPago === 'EFECTIVO'
   if (filtro === 'TARJETA') return v.medioPago?.startsWith('TARJETA') ?? false
   return true
-}
-
-/** Estado de la venta con color y texto (nunca solo color). */
-function EstadoVenta({ venta }: { venta: VentaResponse }) {
-  if (venta.estado === 'ANULADA') return <span className="badge badge-error">Anulada</span>
-  if (venta.estado === 'PENDIENTE_AUTORIZACION') return <span className="badge badge-aviso">Pendiente</span>
-  if (venta.estado === 'EN_PROGRESO') return <span className="badge badge-aviso">En curso</span>
-  if (venta.estadoFactura === 'FACTURADA') return <span className="badge badge-info">Facturada</span>
-  return <span className="badge badge-ok">Cobrada</span>
 }
 
 function cliente(v: VentaResponse): string {

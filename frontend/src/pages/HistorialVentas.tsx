@@ -9,8 +9,11 @@ import { ApiRequestError } from '../api/client'
 import { BotonDescargarFactura } from '../components/BotonDescargarFactura'
 import { ModalFacturacion } from '../components/ModalFacturacion'
 import { ModalNotaCredito } from '../components/ModalNotaCredito'
-import { hoyIso } from '../utils/date'
-import { formatoFechaHora, numeroComprobante } from '../utils/formato'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { EstadoVenta } from '../components/EstadoVenta'
+import { hoyIso, restarDiasIso } from '../utils/date'
+import { estadoVisibleTrabajo } from '../utils/estadoTrabajo'
+import { formatoFechaHora, formatoPesos, numeroComprobante } from '../utils/formato'
 import { descargarBlob, verBlob } from '../utils/descargarBlob'
 import type {
   EmpleadoResponse,
@@ -29,6 +32,15 @@ const ESTADOS_TRABAJO: EstadoTrabajo[] = [
   'CERRADO_Y_COBRADO',
   'CANCELADO',
 ]
+const ETIQUETA_ESTADO_TRABAJO: Record<string, string> = {
+  AGENDADO: 'Agendado',
+  EN_CAMINO: 'En camino',
+  EN_CURSO: 'En curso',
+  TERMINADO: 'Terminado',
+  CERRADO_Y_COBRADO: 'Cerrado y cobrado',
+  CANCELADO: 'Cancelado',
+}
+
 
 export function HistorialVentas() {
   // Desde el 1° del mes actual, igual que el resto de las pantallas de reportes/consulta
@@ -176,217 +188,309 @@ export function HistorialVentas() {
     return matchTipo && matchTecnico && matchEstadoTrabajo && matchFactura
   })
 
+  function rangoRapido(rango: 'hoy' | 'semana' | 'mes') {
+    const hoy = hoyIso()
+    const nuevoDesde = rango === 'hoy' ? hoy : rango === 'semana' ? restarDiasIso(hoy, 6) : hoy.slice(0, 8) + '01'
+    setDesde(nuevoDesde)
+    setHasta(hoy)
+    setError(null)
+    setCargando(true)
+    getVentas(nuevoDesde, hoy)
+      .then(setVentas)
+      .catch((err) => setError(err instanceof ApiRequestError ? err.message : 'No se pudo cargar el historial'))
+      .finally(() => setCargando(false))
+  }
+
+  const hayFiltros = Boolean(filtroTecnico || filtroEstadoTrabajo || filtroFactura || filtroTipo !== 'TODAS')
+  const totalFiltrado = ventasFiltradas
+    .filter((v) => v.estado === 'CONFIRMADA')
+    .reduce((acc, v) => acc + v.totalVenta, 0)
+
   return (
-    <div>
-      <h2>Historial de ventas</h2>
-      <form onSubmit={buscar}>
-        <label>
-          Desde
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        </label>
-        <label>
-          Hasta
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        </label>
-        <button type="submit" disabled={cargando}>
-          {cargando && <span className="spinner" />}
-          {cargando ? 'Buscando...' : 'Buscar'}
-        </button>
-      </form>
+    <div className="historial">
+      <EncabezadoPagina
+        titulo="Historial de ventas"
+        subtitulo={
+          ventas.length > 0
+            ? `${ventasFiltradas.length} ventas · ${formatoPesos(totalFiltrado)} cobrado`
+            : 'Elegí un rango de fechas y tocá Buscar'
+        }
+      />
 
-      <div className="agregar-producto">
-        <label>
-          Facturación
-          <select value={filtroFactura} onChange={(e) => setFiltroFactura(e.target.value as '' | EstadoFactura)}>
-            <option value="">Todas</option>
-            <option value="SIN_FACTURAR">Sin facturar</option>
-            <option value="FACTURADA">Facturadas</option>
-          </select>
-        </label>
-        <label>
-          Tipo
-          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as 'TODAS' | TipoVenta)}>
-            <option value="TODAS">Todas</option>
-            <option value="MOSTRADOR">Mostrador</option>
-            <option value="DOMICILIO">Domicilio</option>
-          </select>
-        </label>
-        <label>
-          Técnico
-          <select value={filtroTecnico} onChange={(e) => setFiltroTecnico(e.target.value)}>
-            <option value="">Todos</option>
-            {empleados.map((e) => (
-              <option key={e.idEmpleado} value={e.idEmpleado}>
-                {e.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Estado del trabajo
-          <select value={filtroEstadoTrabajo} onChange={(e) => setFiltroEstadoTrabajo(e.target.value)}>
-            <option value="">Todos</option>
-            {ESTADOS_TRABAJO.map((estado) => (
-              <option key={estado} value={estado}>
-                {estado}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <section className="tarjeta historial-filtros">
+        <form onSubmit={buscar} className="historial-fechas">
+          <label>
+            Desde
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </label>
+          <label>
+            Hasta
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </label>
+          <button type="submit" disabled={cargando}>
+            {cargando && <span className="spinner" aria-hidden="true" />}
+            {cargando ? 'Buscando…' : 'Buscar'}
+          </button>
+          <div className="segmentado" role="group" aria-label="Rangos rápidos">
+            <button type="button" onClick={() => rangoRapido('hoy')}>
+              Hoy
+            </button>
+            <button type="button" onClick={() => rangoRapido('semana')}>
+              Últimos 7 días
+            </button>
+            <button type="button" onClick={() => rangoRapido('mes')}>
+              Este mes
+            </button>
+          </div>
+        </form>
 
-      {error && <p className="error">{error}</p>}
+        <div className="productos-filtros-fila">
+          <label>
+            Facturación
+            <select value={filtroFactura} onChange={(e) => setFiltroFactura(e.target.value as '' | EstadoFactura)}>
+              <option value="">Todas</option>
+              <option value="SIN_FACTURAR">Sin facturar</option>
+              <option value="FACTURADA">Facturadas</option>
+            </select>
+          </label>
+          <label>
+            Tipo
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as 'TODAS' | TipoVenta)}>
+              <option value="TODAS">Todas</option>
+              <option value="MOSTRADOR">Mostrador</option>
+              <option value="DOMICILIO">Trabajo a domicilio</option>
+            </select>
+          </label>
+          <label>
+            Técnico
+            <select value={filtroTecnico} onChange={(e) => setFiltroTecnico(e.target.value)}>
+              <option value="">Todos</option>
+              {empleados.map((e) => (
+                <option key={e.idEmpleado} value={e.idEmpleado}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Estado del trabajo
+            <select value={filtroEstadoTrabajo} onChange={(e) => setFiltroEstadoTrabajo(e.target.value)}>
+              <option value="">Todos</option>
+              {ESTADOS_TRABAJO.map((estado) => (
+                <option key={estado} value={estado}>
+                  {ETIQUETA_ESTADO_TRABAJO[estado]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {hayFiltros && (
+            <button
+              type="button"
+              className="btn-suave"
+              onClick={() => {
+                setFiltroFactura('')
+                setFiltroTipo('TODAS')
+                setFiltroTecnico('')
+                setFiltroEstadoTrabajo('')
+              }}
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      </section>
 
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Fecha</th>
-            <th>Tipo</th>
-            <th>Cliente / técnico</th>
-            <th>Medio de pago</th>
-            <th>Total</th>
-            <th>Descuento</th>
-            <th>Estado</th>
-            <th>Facturación</th>
-            <th>Detalle</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ventasFiltradas.map((venta) => (
-            <Fragment key={venta.idVenta}>
-              <tr>
-                <td>{venta.idVenta}</td>
-                <td>{formatoFechaHora(venta.fecha)}</td>
-                <td>
-                  {venta.tipoVenta === 'DOMICILIO' ? 'Domicilio' : 'Mostrador'}
-                  {venta.tipoVenta === 'DOMICILIO' && venta.estadoTrabajo ? ` (${venta.estadoTrabajo})` : ''}
-                </td>
-                <td>
-                  {venta.tipoVenta === 'DOMICILIO'
-                    ? `${venta.clienteNombre ?? '—'}${venta.nombreTecnico ? ` / ${venta.nombreTecnico}` : ''}`
-                    : (venta.nombreCliente ?? '—')}
-                </td>
-                <td>{ETIQUETA_MEDIO_PAGO[venta.medioPago] ?? venta.medioPago}</td>
-                <td>
-                  {venta.totalVenta.toFixed(2)}
-                  {venta.recargoTarjeta != null && venta.recargoTarjeta > 0 && (
-                    <small className="recargo-nota">Cobrado {venta.totalCobrado.toFixed(2)} con recargo</small>
-                  )}
-                </td>
-                <td>{venta.descuento.toFixed(2)}</td>
-                <td>
-                  {venta.estado}
-                  {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
-                    <Link to={`/ventas/domicilio?id=${venta.idVenta}`}> Abrir para editar</Link>
-                  )}
-                  {venta.estado === 'PENDIENTE_AUTORIZACION' && (
-                    <span className="confirmar-descuento">
-                      <button
-                        type="button"
-                        onClick={() => resolverDescuento(venta.idVenta, 'aprobar')}
-                        disabled={confirmandoId === venta.idVenta}
-                      >
-                        {confirmandoId === venta.idVenta && <span className="spinner" />}
-                        Aprobar
-                      </button>
-                      <button
-                        type="button"
-                        className="boton-rechazar"
-                        onClick={() => resolverDescuento(venta.idVenta, 'rechazar')}
-                        disabled={confirmandoId === venta.idVenta}
-                      >
-                        Rechazar
-                      </button>
-                    </span>
-                  )}
-                </td>
-                <td>
-                  {venta.estado === 'CONFIRMADA' && (
-                    <EstadoFacturacion venta={venta} onFacturar={() => setVentaAFacturar(venta)} />
-                  )}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => setExpandidoId((actual) => (actual === venta.idVenta ? null : venta.idVenta))}
-                  >
-                    {expandidoId === venta.idVenta ? 'Ocultar' : 'Ver'}
-                  </button>
-                </td>
-              </tr>
-              {expandidoId === venta.idVenta && (
+      {error && <p className="alerta alerta-error">{error}</p>}
+
+      <section className="tarjeta productos-tabla historial-tabla">
+        {ventasFiltradas.length === 0 ? (
+          <p className="cobros-vacio">
+            {cargando
+              ? 'Buscando ventas…'
+              : ventas.length === 0
+                ? 'No hay ventas en ese rango de fechas.'
+                : 'Ninguna venta coincide con los filtros.'}
+          </p>
+        ) : (
+          <div className="tabla-scroll">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={10}>
-                    <div className="detalle-venta">
-                      {venta.estado === 'CONFIRMADA' && (
-                        <>
-                          <div className="comprobante-acciones">
-                            <button type="button" onClick={() => ver(venta.idVenta)} disabled={viendoId === venta.idVenta}>
-                              {viendoId === venta.idVenta ? 'Abriendo...' : 'Ver comprobante'}
+                  <th>N°</th>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Cliente</th>
+                  <th>Forma de pago</th>
+                  <th className="celda-numero">Total</th>
+                  <th>Estado</th>
+                  <th>Facturación</th>
+                  <th>
+                    <span className="solo-lector">Detalle</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventasFiltradas.map((venta) => (
+                  <Fragment key={venta.idVenta}>
+                    <tr className={expandidoId === venta.idVenta ? 'fila-expandida' : undefined}>
+                      <td className="texto-apagado">#{venta.idVenta}</td>
+                      <td className="celda-codigo">{formatoFechaHora(venta.fecha)}</td>
+                      <td>
+                        {venta.tipoVenta === 'DOMICILIO' ? 'Domicilio' : 'Mostrador'}
+                        {venta.tipoVenta === 'DOMICILIO' && (
+                          <small className="celda-sub">{estadoVisibleTrabajo(venta).etiqueta}</small>
+                        )}
+                      </td>
+                      <td className="texto-fuerte">
+                        {venta.tipoVenta === 'DOMICILIO' ? (venta.clienteNombre ?? '—') : (venta.nombreCliente ?? 'Consumidor final')}
+                        {venta.tipoVenta === 'DOMICILIO' && venta.nombreTecnico && (
+                          <small className="celda-sub">Técnico: {venta.nombreTecnico}</small>
+                        )}
+                      </td>
+                      <td>{venta.medioPago ? (ETIQUETA_MEDIO_PAGO[venta.medioPago] ?? venta.medioPago) : '—'}</td>
+                      <td className="celda-numero">
+                        <span className={`texto-fuerte ${venta.estado === 'ANULADA' ? 'monto-anulado' : ''}`}>
+                          {formatoPesos(venta.totalVenta)}
+                        </span>
+                        {venta.descuento > 0 && <small className="celda-sub">Descuento {formatoPesos(venta.descuento)}</small>}
+                        {venta.recargoTarjeta != null && venta.recargoTarjeta > 0 && (
+                          <small className="celda-sub">Cobrado {formatoPesos(venta.totalCobrado)} con recargo</small>
+                        )}
+                      </td>
+                      <td>
+                        <EstadoVenta venta={venta} />
+                        {venta.tipoVenta === 'DOMICILIO' && venta.estado === 'EN_PROGRESO' && (
+                          <Link className="celda-sub" to={`/ventas/domicilio?id=${venta.idVenta}`}>
+                            Abrir para editar
+                          </Link>
+                        )}
+                        {venta.estado === 'PENDIENTE_AUTORIZACION' && (
+                          <span className="historial-autorizar">
+                            <button
+                              type="button"
+                              className="btn-exito btn-chico"
+                              onClick={() => resolverDescuento(venta.idVenta, 'aprobar')}
+                              disabled={confirmandoId === venta.idVenta}
+                            >
+                              {confirmandoId === venta.idVenta && <span className="spinner" aria-hidden="true" />}
+                              Aprobar
                             </button>
                             <button
                               type="button"
-                              onClick={() => descargar(venta.idVenta)}
-                              disabled={descargandoId === venta.idVenta}
+                              className="btn-peligro-borde btn-chico"
+                              onClick={() => resolverDescuento(venta.idVenta, 'rechazar')}
+                              disabled={confirmandoId === venta.idVenta}
                             >
-                              {descargandoId === venta.idVenta ? 'Descargando...' : 'Descargar'}
-                            </button>
-                            <button type="button" onClick={() => setVentaANotaCredito(venta)}>
-                              Nota de crédito
-                            </button>
-                          </div>
-                          <span className="confirmar-descuento">
-                            <input
-                              type="email"
-                              placeholder="Email del cliente"
-                              value={emails[venta.idVenta] ?? venta.clienteEmail ?? ''}
-                              onChange={(e) => setEmails((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => enviarPorMail(venta.idVenta)}
-                              disabled={enviandoEmailId === venta.idVenta || !(emails[venta.idVenta] ?? venta.clienteEmail)}
-                            >
-                              {enviandoEmailId === venta.idVenta
-                                ? 'Enviando...'
-                                : venta.comprobanteEnviadoPorEmail
-                                  ? 'Reenviar comprobante'
-                                  : 'Enviar comprobante'}
+                              Rechazar
                             </button>
                           </span>
-                          {venta.estadoFactura === 'FACTURADA' && venta.factura && <DetalleFactura factura={venta.factura} />}
-                        </>
-                      )}
-                      {/* Proveedor por producto vendido: si una venta falla o hay un reclamo, permite
-                          identificar rápido a qué proveedor corresponde cada producto sin tener que
-                          ir a buscarlo a Productos (ver DetalleVentaResponse.proveedorProducto). */}
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Producto</th>
-                            <th>Cantidad</th>
-                            <th>Proveedor</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {venta.detalles.map((detalle) => (
-                            <tr key={detalle.idDetalle}>
-                              <td>{detalle.descripcionProducto}</td>
-                              <td>{detalle.cantidad}</td>
-                              <td>{detalle.proveedorProducto || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+                        )}
+                      </td>
+                      <td>
+                        {venta.estado === 'CONFIRMADA' && (
+                          <EstadoFacturacion venta={venta} onFacturar={() => setVentaAFacturar(venta)} />
+                        )}
+                      </td>
+                      <td className="celda-numero">
+                        <button
+                          type="button"
+                          className="btn-suave btn-chico"
+                          aria-expanded={expandidoId === venta.idVenta}
+                          onClick={() => setExpandidoId((actual) => (actual === venta.idVenta ? null : venta.idVenta))}
+                        >
+                          {expandidoId === venta.idVenta ? 'Ocultar' : 'Ver'}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandidoId === venta.idVenta && (
+                      <tr className="fila-detalle">
+                        <td colSpan={9}>
+                          <div className="detalle-venta">
+                            {venta.estado === 'CONFIRMADA' && (
+                              <>
+                                <div className="comprobante-acciones">
+                                  <button
+                                    type="button"
+                                    className="btn-secundario btn-chico"
+                                    onClick={() => ver(venta.idVenta)}
+                                    disabled={viendoId === venta.idVenta}
+                                  >
+                                    {viendoId === venta.idVenta ? 'Abriendo…' : 'Ver comprobante'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secundario btn-chico"
+                                    onClick={() => descargar(venta.idVenta)}
+                                    disabled={descargandoId === venta.idVenta}
+                                  >
+                                    {descargandoId === venta.idVenta ? 'Descargando…' : 'Descargar'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-peligro-borde btn-chico"
+                                    onClick={() => setVentaANotaCredito(venta)}
+                                  >
+                                    Nota de crédito
+                                  </button>
+                                </div>
+                                <span className="confirmar-descuento">
+                                  <input
+                                    type="email"
+                                    aria-label="Email del cliente"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder="Email del cliente"
+                                    value={emails[venta.idVenta] ?? venta.clienteEmail ?? ''}
+                                    onChange={(e) => setEmails((actual) => ({ ...actual, [venta.idVenta]: e.target.value }))}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn-chico"
+                                    onClick={() => enviarPorMail(venta.idVenta)}
+                                    disabled={enviandoEmailId === venta.idVenta || !(emails[venta.idVenta] ?? venta.clienteEmail)}
+                                  >
+                                    {enviandoEmailId === venta.idVenta
+                                      ? 'Enviando…'
+                                      : venta.comprobanteEnviadoPorEmail
+                                        ? 'Reenviar comprobante'
+                                        : 'Enviar comprobante'}
+                                  </button>
+                                </span>
+                                {venta.estadoFactura === 'FACTURADA' && venta.factura && <DetalleFactura factura={venta.factura} />}
+                              </>
+                            )}
+                            {/* Proveedor por producto vendido: si una venta falla o hay un reclamo, permite
+                                identificar rápido a qué proveedor corresponde cada producto sin tener que
+                                ir a buscarlo a Productos (ver DetalleVentaResponse.proveedorProducto). */}
+                            <table className="tabla-detalle">
+                              <thead>
+                                <tr>
+                                  <th>Producto</th>
+                                  <th className="celda-numero">Cantidad</th>
+                                  <th>Proveedor</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {venta.detalles.map((detalle) => (
+                                  <tr key={detalle.idDetalle}>
+                                    <td>{detalle.descripcionProducto}</td>
+                                    <td className="celda-numero">{detalle.cantidad}</td>
+                                    <td>{detalle.proveedorProducto || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {ventaAFacturar && (
         <ModalFacturacion
@@ -414,26 +518,24 @@ interface EstadoFacturacionProps {
 function EstadoFacturacion({ venta, onFacturar }: EstadoFacturacionProps) {
   if (venta.estadoFactura === 'FACTURADA' && venta.factura) {
     return (
-      <>
-        <span className="etiqueta-factura etiqueta-facturada">Facturada</span>
-        <br />
-        {numeroComprobante(venta.factura.puntoVenta, venta.factura.numero)}
-      </>
+      <span className="celda-pila">
+        <span className="badge badge-info">Facturada</span>
+        <small className="celda-sub">{numeroComprobante(venta.factura.puntoVenta, venta.factura.numero)}</small>
+      </span>
     )
   }
   return (
-    <>
-      <span className="etiqueta-factura">Sin facturar</span>
-      <br />
+    <span className="celda-pila">
+      <span className="badge">Sin facturar</span>
       {venta.tieneNotaCredito ? (
-        <small>Tiene nota de crédito</small>
+        <small className="celda-sub">Tiene nota de crédito</small>
       ) : (
-        <button type="button" onClick={onFacturar}>
+        <button type="button" className="btn-chico" onClick={onFacturar}>
           {venta.factura?.estado === 'ERROR' ? 'Reintentar' : 'Facturar'}
         </button>
       )}
-      {venta.factura?.estado === 'ERROR' && <p className="error">{venta.factura.errorDetalle}</p>}
-    </>
+      {venta.factura?.estado === 'ERROR' && <small className="error">{venta.factura.errorDetalle}</small>}
+    </span>
   )
 }
 
@@ -479,7 +581,7 @@ function DetalleFactura({ factura }: { factura: FacturaFiscalResponse }) {
         {factura.clienteNombre ? ` a ${factura.clienteNombre}` : ' a Consumidor Final'}. CAE {factura.cae}
       </p>
       <span className="confirmar-descuento">
-        <button type="button" onClick={onVerPdf} disabled={abriendoPdf}>
+        <button type="button" className="btn-secundario btn-chico" onClick={onVerPdf} disabled={abriendoPdf}>
           {abriendoPdf && <span className="spinner" />}
           {abriendoPdf ? 'Abriendo...' : 'Ver PDF fiscal'}
         </button>
@@ -490,7 +592,7 @@ function DetalleFactura({ factura }: { factura: FacturaFiscalResponse }) {
           value={emailCliente}
           onChange={(e) => setEmailCliente(e.target.value)}
         />
-        <button type="button" onClick={onEnviarMail} disabled={enviandoMail || !emailCliente}>
+        <button type="button" className="btn-chico" onClick={onEnviarMail} disabled={enviandoMail || !emailCliente}>
           {enviandoMail && <span className="spinner" />}
           {enviandoMail ? 'Enviando...' : 'Enviar factura'}
         </button>
