@@ -32,7 +32,7 @@ export function ComisionesVendedores() {
     <div>
       <h2>Comisiones de vendedores</h2>
 
-      <form onSubmit={onBuscar}>
+      <form onSubmit={onBuscar} className="tarjeta filtros-fechas">
         <label>
           Desde
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />

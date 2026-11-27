@@ -44,7 +44,7 @@ export function VentasPorVendedor() {
     <div>
       <h2>Ventas por vendedor</h2>
 
-      <form onSubmit={onBuscar}>
+      <form onSubmit={onBuscar} className="tarjeta filtros-fechas">
         <label>
           Vendedor
           <select value={idEmpleado ?? ''} onChange={(e) => setIdEmpleado(Number(e.target.value))}>

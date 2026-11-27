@@ -480,7 +480,7 @@ button.sidebar-enlace:hover:not(:disabled) {
 .fila-stock-amarillo:hover,
 .fila-stock-naranja:hover,
 .fila-stock-rojo:hover {
-  filter: brightness(0.96);
+  box-shadow: inset 4px 0 0 var(--azul);
 }
 
 /* Filtros de Productos.tsx: "Más filtros" colapsable (proveedor, color de stock, marca) para no
@@ -929,11 +929,11 @@ section {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px 12px;
-  max-width: 640px;
-  margin-bottom: 8px;
-  padding: 12px;
+  max-width: none;
+  margin-bottom: 0;
+  padding: 18px;
   border: 1px solid var(--table-border);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--bg-alt);
 }
 
@@ -3473,4 +3473,92 @@ a.boton-grande:hover {
 
 .cliente-datos .badge {
   margin-top: 6px;
+}
+
+.productos-mas {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Técnicos ---------- */
+.tecnicos-ayuda p {
+  margin: 0;
+}
+
+.tecnicos-ayuda p + p {
+  margin-top: 6px;
+}
+
+.tecnicos-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.tecnico-fila > label {
+  flex: 1 1 140px;
+  margin-bottom: 0;
+}
+
+.checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+/* ---------- Pantallas generales (reportes, compras, presupuestos, etc.) ---------- */
+.layout-contenido main > div > h2:first-child {
+  margin-bottom: 24px;
+  font-size: 26px;
+}
+
+.filtros-fechas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+}
+
+.filtros-fechas > label {
+  margin-bottom: 0;
+}
+
+/* Las tablas que no están dentro de una tarjeta se ven como una. */
+.layout-contenido main table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radio-tarjeta);
+  overflow: hidden;
+}
+
+.layout-contenido main .tarjeta table,
+.layout-contenido main .grafico-tarjeta table {
+  border: none;
+  border-radius: 0;
+}
+
+.layout-contenido main tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Secciones sueltas (sin clase propia) dentro de una pantalla: tarjeta blanca. */
+.layout-contenido main > div > section:not([class]) {
+  padding: 20px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radio-tarjeta);
+}
+
+.layout-contenido main > div > section:not([class]) > h3:first-child {
+  margin-top: 0;
+}
+
+.presupuestos-vista {
+  margin-bottom: 20px;
 }

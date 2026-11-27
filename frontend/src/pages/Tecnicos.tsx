@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { actualizarTecnico, crearTecnico, desactivarEmpleado, getEmpleados } from '../api/empleados'
 import { ApiRequestError } from '../api/client'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { Modal } from '../components/Modal'
 import type { EmpleadoResponse, TecnicoRequest } from '../types/api'
 
 function textoError(err: unknown, porDefecto: string): string {
@@ -63,7 +65,7 @@ function FilaTecnico({ tecnico, onCambio }: { tecnico: EmpleadoResponse; onCambi
   }
 
   return (
-    <article className="tecnico-fila">
+    <article className="tarjeta tecnico-fila">
       <label>
         Nombre
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
@@ -110,11 +112,11 @@ function FilaTecnico({ tecnico, onCambio }: { tecnico: EmpleadoResponse; onCambi
           Guardar
         </button>
         {editandoAcceso && (
-          <button type="button" onClick={() => setEditandoAcceso(false)} disabled={guardando}>
+          <button type="button" className="btn-secundario" onClick={() => setEditandoAcceso(false)} disabled={guardando}>
             Cancelar
           </button>
         )}
-        <button type="button" className="boton-rechazar" onClick={darDeBaja} disabled={guardando}>
+        <button type="button" className="btn-peligro-borde" onClick={darDeBaja} disabled={guardando}>
           Dar de baja
         </button>
       </div>
@@ -134,6 +136,7 @@ export function Tecnicos() {
   const [password, setPassword] = useState('')
   const [agregando, setAgregando] = useState(false)
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
+  const [altaAbierta, setAltaAbierta] = useState(false)
 
   async function cargar() {
     setError(null)
@@ -160,6 +163,7 @@ export function Tecnicos() {
     }
     try {
       await crearTecnico(req)
+      setAltaAbierta(false)
       setNombre('')
       setComision('')
       setUsuario('')
@@ -172,80 +176,106 @@ export function Tecnicos() {
     }
   }
 
-  if (cargando) return <p>Cargando...</p>
-  if (error) return <p className="error">{error}</p>
+  if (cargando) return <p className="texto-apagado">Cargando…</p>
+  if (error) return <p className="alerta alerta-error">{error}</p>
 
   return (
     <div>
-      <h2>Técnicos</h2>
-      <p>
-        La comisión es el % de la mano de obra de cada trabajo que se lleva el técnico; el resto queda para el negocio.
-        Los artículos no pagan comisión. Si la cambiás, se aplica a los trabajos que se cobren desde ahora.
-      </p>
-      <p>
-        Un técnico con acceso entra al sistema (también desde el celular) y ve <strong>solo sus trabajos a domicilio</strong>:
-        los que le asignás desde la agenda. No ve caja, ventas, productos ni nada más. Desde ahí marca &quot;En camino&quot;,
-        &quot;En curso&quot; y &quot;Terminado&quot; y deja notas; vos te enterás por los avisos.
-      </p>
-
-      {tecnicos.length === 0 && <p>Todavía no hay técnicos.</p>}
-      {tecnicos.map((tecnico) => (
-        <FilaTecnico
-          key={`${tecnico.idEmpleado}-${tecnico.nombre}-${tecnico.comision}-${tecnico.usuario}`}
-          tecnico={tecnico}
-          onCambio={cargar}
-        />
-      ))}
-
-      <section>
-        <h3>Agregar técnico</h3>
-        <form onSubmit={agregar}>
-          <label>
-            Nombre
-            <input required value={nombre} onChange={(e) => setNombre(e.target.value)} />
-          </label>
-          <label>
-            Comisión % sobre la mano de obra
-            <input
-              required
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              placeholder="Ej: 50"
-              value={comision}
-              onChange={(e) => setComision(e.target.value)}
-            />
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" checked={conAcceso} onChange={(e) => setConAcceso(e.target.checked)} />
-            Puede entrar al sistema para ver y actualizar sus trabajos
-          </label>
-          {conAcceso && (
-            <>
-              <label>
-                Usuario
-                <input required autoComplete="off" value={usuario} onChange={(e) => setUsuario(e.target.value)} />
-              </label>
-              <label>
-                Contraseña
-                <input
-                  required
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-            </>
-          )}
-          {errorAlta && <p className="error">{errorAlta}</p>}
-          <button type="submit" disabled={agregando}>
-            {agregando && <span className="spinner" />}
-            {agregando ? 'Agregando...' : 'Agregar técnico'}
+      <EncabezadoPagina
+        titulo="Técnicos"
+        subtitulo={`${tecnicos.length} ${tecnicos.length === 1 ? 'técnico' : 'técnicos'}`}
+        acciones={
+          <button type="button" onClick={() => setAltaAbierta(true)}>
+            + Agregar técnico
           </button>
-        </form>
-      </section>
+        }
+      />
+      <div className="alerta tecnicos-ayuda">
+        <p>
+          La <strong>comisión</strong> es el % de la mano de obra de cada trabajo que se lleva el técnico; el resto queda
+          para el negocio. Los artículos no pagan comisión. Si la cambiás, se aplica a los trabajos que se cobren desde ahora.
+        </p>
+        <p>
+          Un técnico <strong>con acceso</strong> entra al sistema (también desde el celular) y ve solo sus trabajos a
+          domicilio. Desde ahí marca &quot;En camino&quot;, &quot;En curso&quot; y &quot;Terminado&quot; y deja notas; vos
+          te enterás por los avisos.
+        </p>
+      </div>
+
+      {tecnicos.length === 0 && <p className="cobros-vacio">Todavía no hay técnicos.</p>}
+      <div className="tecnicos-grilla">
+        {tecnicos.map((tecnico) => (
+          <FilaTecnico
+            key={`${tecnico.idEmpleado}-${tecnico.nombre}-${tecnico.comision}-${tecnico.usuario}`}
+            tecnico={tecnico}
+            onCambio={cargar}
+          />
+        ))}
+      </div>
+
+      {altaAbierta && (
+        <Modal title="Agregar técnico" onClose={() => setAltaAbierta(false)}>
+          <form onSubmit={agregar}>
+            <label>
+              Nombre
+              <input required value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            </label>
+            <label>
+              Comisión % sobre la mano de obra
+              <input
+                required
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step="0.01"
+                placeholder="Ej: 50"
+                value={comision}
+                onChange={(e) => setComision(e.target.value)}
+              />
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={conAcceso} onChange={(e) => setConAcceso(e.target.checked)} />
+              Puede entrar al sistema para ver y actualizar sus trabajos
+            </label>
+            {conAcceso && (
+              <div className="formulario-grilla">
+                <label>
+                  Usuario
+                  <input
+                    required
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={usuario}
+                    onChange={(e) => setUsuario(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Contraseña
+                  <input
+                    required
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+            {errorAlta && <p className="alerta alerta-error">{errorAlta}</p>}
+            <div className="formulario-acciones">
+              <button type="button" className="btn-secundario" onClick={() => setAltaAbierta(false)}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={agregando}>
+                {agregando && <span className="spinner" aria-hidden="true" />}
+                {agregando ? 'Agregando…' : 'Agregar técnico'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -45,6 +45,8 @@ const PRODUCTO_VACIO: ProductoRequest = {
   precioCompra: undefined,
   stockActual: 0,
 }
+const POR_PAGINA = 100
+
 
 export function Productos() {
   const { sesion } = useAuth()
@@ -125,6 +127,32 @@ export function Productos() {
     const matchColorStock = !filtroColorStock || colorStock(p.stockActual) === filtroColorStock
     return matchDescripcion && matchMarca && matchProveedor && matchColorStock
   })
+
+  // Con miles de productos, dibujar la tabla entera (decenas de miles de elementos) hacía que la
+  // pantalla tardara segundos en aparecer y en responder a la rueda del mouse. Se muestran de a
+  // POR_PAGINA y se suman más solos al llegar al final (o con el botón). Al cambiar un filtro,
+  // vuelve a empezar desde la primera página.
+  const claveFiltros = [filtroDescripcion, filtroMarca, filtroProveedor, filtroColorStock].join('|')
+  const [paginacion, setPaginacion] = useState({ clave: claveFiltros, cantidad: POR_PAGINA })
+  const cantidadVisible = paginacion.clave === claveFiltros ? paginacion.cantidad : POR_PAGINA
+  const productosVisibles = productosFiltrados.slice(0, cantidadVisible)
+  const quedan = productosFiltrados.length - productosVisibles.length
+  const finDeLista = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const marcador = finDeLista.current
+    if (!marcador || quedan <= 0) return
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          setPaginacion({ clave: claveFiltros, cantidad: cantidadVisible + POR_PAGINA })
+        }
+      },
+      { rootMargin: '600px' },
+    )
+    observador.observe(marcador)
+    return () => observador.disconnect()
+  }, [claveFiltros, cantidadVisible, quedan])
 
   // Mismo mecanismo que ComprasNueva.tsx (precioVenta = precioCompra × (1 + %/100), 100% = vender
   // al doble): acá no hay ARS/USD como en Compras (el alta de producto siempre fue en pesos), así
@@ -460,7 +488,7 @@ export function Productos() {
                 </tr>
               </thead>
               <tbody>
-                {productosFiltrados.map((producto) => (
+                {productosVisibles.map((producto) => (
                   <tr
                     key={producto.idProducto}
                     className={claseFilaStock(producto.stockActual)}
@@ -531,6 +559,17 @@ export function Productos() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {quedan > 0 && (
+          <div ref={finDeLista} className="productos-mas">
+            <button
+              type="button"
+              className="btn-suave"
+              onClick={() => setPaginacion({ clave: claveFiltros, cantidad: cantidadVisible + POR_PAGINA })}
+            >
+              Mostrar más ({quedan} {quedan === 1 ? 'producto' : 'productos'} más)
+            </button>
           </div>
         )}
       </section>

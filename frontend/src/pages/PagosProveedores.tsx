@@ -49,7 +49,7 @@ export function PagosProveedores() {
     <div>
       <h2>Pagos a proveedores</h2>
 
-      <form onSubmit={onBuscar}>
+      <form onSubmit={onBuscar} className="tarjeta filtros-fechas">
         <label>
           Proveedor
           <select value={idProveedor} onChange={(e) => setIdProveedor(e.target.value)}>
