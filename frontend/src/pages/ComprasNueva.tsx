@@ -9,6 +9,7 @@ import { getCotizacionActual } from '../api/cotizacion'
 import { ApiRequestError } from '../api/client'
 import { etiquetaProducto } from '../components/BuscadorProductoCarrito'
 import { hoyIso } from '../utils/date'
+import { formatoPesos } from '../utils/formato'
 import type {
   CompraItemRequest,
   MarcaResponse,
@@ -236,7 +237,7 @@ export function ComprasNueva() {
         items,
       })
       setMensaje(
-        `Compra #${compra.idCompra} registrada. Total: ${compra.totalCompra.toFixed(2)}` +
+        `Compra #${compra.idCompra} registrada. Total: ${formatoPesos(compra.totalCompra)}` +
           (compra.saldoPendiente > 0
             ? `. Quedó como deuda con ${compra.nombreProveedor}: se salda en Cuenta corriente de proveedores.`
             : ''),
@@ -272,7 +273,8 @@ export function ComprasNueva() {
       </Link>
       <h2>Nueva compra</h2>
 
-      <form onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} className="compra-form">
+        <div className="tarjeta compra-datos">
         <label>
           Fecha
           <input type="date" required max={hoyIso()} value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -309,8 +311,10 @@ export function ComprasNueva() {
             </select>
           </label>
         )}
+        </div>
 
-        <table>
+        <div className="tarjeta productos-tabla tabla-scroll">
+        <table className="tabla-compra">
           <thead>
             <tr>
               <th>Producto</th>
@@ -392,9 +396,9 @@ export function ComprasNueva() {
                         <option value="USD">USD</option>
                       </select>
                     </td>
-                    <td>{subtotalFila(fila).toFixed(2)}</td>
+                    <td className="celda-numero texto-fuerte">{formatoPesos(subtotalFila(fila))}</td>
                     <td>
-                      <button type="button" onClick={() => quitarFila(fila.id)}>
+                      <button type="button" className="btn-peligro-borde btn-chico" onClick={() => quitarFila(fila.id)}>
                         Quitar
                       </button>
                     </td>
@@ -460,6 +464,7 @@ export function ComprasNueva() {
             })}
           </tbody>
         </table>
+        </div>
         <datalist id="productos-compra-datalist">
           {productos.map((producto) => (
             <option key={producto.idProducto} value={etiquetaProducto(producto)} />
@@ -471,19 +476,19 @@ export function ComprasNueva() {
           ))}
         </datalist>
 
-        <button type="button" onClick={agregarFila}>
-          Agregar fila
+        <button type="button" className="btn-secundario" onClick={agregarFila}>
+          + Agregar otro producto
         </button>
 
         <p>
-          <strong>Total: {total.toFixed(2)}</strong>
+          <strong className="compra-total">Total: {formatoPesos(total)}</strong>
         </p>
 
-        {error && <p className="error">{error}</p>}
-        {mensaje && <p className="resultado">{mensaje}</p>}
+        {error && <p className="alerta alerta-error">{error}</p>}
+        {mensaje && <p className="alerta alerta-ok">{mensaje}</p>}
         <button type="submit" disabled={enviando}>
           {enviando && <span className="spinner" />}
-          {enviando ? 'Registrando...' : 'Registrar compra'}
+          {enviando ? 'Registrando…' : 'Registrar compra'}
         </button>
       </form>
     </div>

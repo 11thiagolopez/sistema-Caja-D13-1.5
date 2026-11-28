@@ -3703,3 +3703,136 @@ a.boton-grande:hover {
     text-align: left;
   }
 }
+
+/* ---------- Cuenta corriente de proveedores ---------- */
+.ccp-proveedor {
+  flex: 0 1 420px;
+}
+
+.ccp-saldo {
+  margin-bottom: 20px;
+  border-left: 5px solid var(--ok);
+}
+
+.ccp-saldo-deuda {
+  border-left-color: var(--error);
+}
+
+.ccp-saldo-deuda strong {
+  color: var(--error);
+}
+
+.ccp-saldo-ok strong {
+  color: var(--ok);
+}
+
+/* ---------- Nueva compra ---------- */
+.compra-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.compra-form > .tarjeta {
+  align-self: stretch;
+}
+
+.compra-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 16px;
+  padding: 18px 20px 4px;
+}
+
+.tabla-compra {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.tabla-compra input,
+.tabla-compra select {
+  width: 100%;
+  min-width: 0;
+}
+
+.tabla-compra th:nth-child(1) {
+  width: auto;
+}
+
+.tabla-compra th:nth-child(2) {
+  width: 90px;
+}
+
+.tabla-compra th:nth-child(4) {
+  width: 110px;
+}
+
+.tabla-compra th:nth-child(6) {
+  width: 120px;
+}
+
+.tabla-compra th:nth-child(7) {
+  width: 100px;
+}
+
+.tabla-compra .celda-precio-moneda {
+  display: table-cell;
+  white-space: nowrap;
+}
+
+.tabla-compra .celda-precio-moneda input {
+  display: inline-block;
+  width: calc(100% - 78px);
+}
+
+.tabla-compra .celda-precio-moneda select {
+  display: inline-block;
+  margin-left: 4px;
+  width: 72px;
+}
+
+.tabla-compra .agregar-producto {
+  flex-wrap: wrap;
+}
+
+.tabla-compra .agregar-producto input {
+  flex: 1 1 140px;
+  width: auto;
+}
+
+.compra-total {
+  font-size: 20px;
+}
+
+.tabla-compra th:nth-child(3),
+.tabla-compra th:nth-child(5) {
+  width: 190px;
+}
+
+.tabla-compra th:nth-child(2) {
+  width: 76px;
+}
+
+.tabla-compra th:nth-child(3),
+.tabla-compra th:nth-child(5) {
+  width: 168px;
+}
+
+.tabla-compra th:nth-child(4) {
+  width: 96px;
+}
+
+.tabla-compra th:nth-child(6) {
+  width: 104px;
+}
+
+.tabla-compra th:nth-child(7) {
+  width: 88px;
+}
+
+.tabla-compra th,
+.tabla-compra td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
