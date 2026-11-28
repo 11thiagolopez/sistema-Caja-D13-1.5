@@ -25,18 +25,29 @@ export function LogoIcono({ tamano = 40 }: { tamano?: number }) {
 /** La palabra "oNce". `claro` para fondo oscuro (menú, login). */
 export function LogoTexto({ tamano = 26, claro = false }: { tamano?: number; claro?: boolean }) {
   return (
+    // Todas letras de verdad (la N en azul, como los colores de Google): así quedan siempre sobre
+    // la misma línea. Antes la N era un dibujo aparte y no alineaba con "o" y "ce".
     <span className={`logo-texto ${claro ? 'logo-texto-claro' : ''}`} style={{ fontSize: tamano }}>
-      o
-      <svg
-        viewBox="0 0 64 72"
-        aria-hidden="true"
-        style={{ width: tamano * 0.65, height: tamano * 0.73 }}
-        fill={claro ? '#8FB0E8' : '#1F4E9C'}
-      >
-        <path d={TRAZO_N} />
-      </svg>
-      ce
+      o<span className="logo-texto-n">N</span>ce
     </span>
+  )
+}
+
+/**
+ * Marca del menú lateral: "SISTEMA D13" y debajo, alineado al final, "by" + el logo de oNce.
+ */
+export function MarcaSistema() {
+  return (
+    <div className="marca-sistema" role="img" aria-label="Sistema D13 by oNce">
+      <span className="marca-sistema-nombre" aria-hidden="true">
+        SISTEMA D13
+      </span>
+      <span className="marca-sistema-by" aria-hidden="true">
+        by
+        <LogoIcono tamano={18} />
+        <LogoTexto tamano={15} claro />
+      </span>
+    </div>
   )
 }
 

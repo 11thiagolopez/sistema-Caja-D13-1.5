@@ -21,8 +21,7 @@
 }
 
 .logo-texto {
-  display: inline-flex;
-  align-items: baseline;
+  display: inline-block;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -3835,4 +3834,37 @@ a.boton-grande:hover {
 .tabla-compra td {
   padding-left: 8px;
   padding-right: 8px;
+}
+
+/* ---------- Marca del menú: "SISTEMA D13" y "by oNce" ---------- */
+.logo-texto-n {
+  color: var(--azul);
+}
+
+.logo-texto-claro .logo-texto-n {
+  color: #8fb0e8;
+}
+
+.marca-sistema {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.marca-sistema-nombre {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.marca-sistema-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--navy-apagado);
 }
