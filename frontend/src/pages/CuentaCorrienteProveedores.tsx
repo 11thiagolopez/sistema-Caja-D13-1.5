@@ -10,7 +10,8 @@ import { getProductos } from '../api/productos'
 import { ApiRequestError } from '../api/client'
 import { BuscadorProductoCarrito } from '../components/BuscadorProductoCarrito'
 import { useCarrito } from '../hooks/useCarrito'
-import { formatoFechaHora } from '../utils/formato'
+import { EncabezadoPagina } from '../components/EncabezadoPagina'
+import { formatoFechaHora, formatoPesos } from '../utils/formato'
 import type {
   CuentaCorrienteProveedorResponse,
   DetalleDevolucionProveedorRequest,
@@ -82,7 +83,7 @@ export function CuentaCorrienteProveedores() {
       setCuenta(actualizada)
       setMontoPago('')
       setOrigenPago('')
-      setMensajePago(`Pago de $${monto.toFixed(2)} registrado.`)
+      setMensajePago(`Pago de ${formatoPesos(monto)} registrado.`)
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'No se pudo registrar el pago')
     } finally {
@@ -135,34 +136,37 @@ export function CuentaCorrienteProveedores() {
 
   return (
     <div>
-      <h2>Cuenta corriente de proveedores</h2>
+      <EncabezadoPagina titulo="Cuenta corriente de proveedores" subtitulo="Lo que le debemos a cada proveedor y cómo se fue pagando" />
 
-      <label>
-        Proveedor
-        <select
-          value={idProveedor}
-          onChange={(e) => onElegirProveedor(Number(e.target.value))}
-        >
-          <option value="">Elegir...</option>
-          {proveedores.map((p) => (
-            <option key={p.idProveedor} value={p.idProveedor}>
-              {p.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="tarjeta filtros-fechas">
+        <label className="ccp-proveedor">
+          Proveedor
+          <select value={idProveedor} onChange={(e) => onElegirProveedor(Number(e.target.value))}>
+            <option value="">Elegí un proveedor…</option>
+            {proveedores.map((p) => (
+              <option key={p.idProveedor} value={p.idProveedor}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="alerta alerta-error">{error}</p>}
+      {!cuenta && !error && <p className="cobros-vacio">Elegí un proveedor para ver su cuenta.</p>}
 
       {cuenta && (
         <>
-          <p>
-            <strong>
-              {cuenta.saldoPendiente >= 0
-                ? `Le debemos a ${cuenta.nombreProveedor}: $${cuenta.saldoPendiente.toFixed(2)}`
-                : `${cuenta.nombreProveedor} nos debe (a favor nuestro): $${Math.abs(cuenta.saldoPendiente).toFixed(2)}`}
-            </strong>
-          </p>
+          <div className={`reportes-tarjeta ccp-saldo ${cuenta.saldoPendiente > 0 ? 'ccp-saldo-deuda' : 'ccp-saldo-ok'}`}>
+            <span>
+              {cuenta.saldoPendiente > 0
+                ? `Le debemos a ${cuenta.nombreProveedor}`
+                : cuenta.saldoPendiente < 0
+                  ? `${cuenta.nombreProveedor} nos debe (a favor nuestro)`
+                  : `Estamos al día con ${cuenta.nombreProveedor}`}
+            </span>
+            <strong>{formatoPesos(Math.abs(cuenta.saldoPendiente))}</strong>
+          </div>
 
           <table>
             <thead>
@@ -185,7 +189,7 @@ export function CuentaCorrienteProveedores() {
                 <tr key={m.idMovimiento}>
                   <td>{formatoFechaHora(m.fecha)}</td>
                   <td>{m.tipo}</td>
-                  <td>${m.monto.toFixed(2)}</td>
+                  <td className="celda-numero texto-fuerte">{formatoPesos(m.monto)}</td>
                   <td>{m.medioPago ?? '—'}</td>
                   <td>{m.origen ?? '—'}</td>
                   <td>{m.descripcion ?? '—'}</td>
@@ -215,8 +219,8 @@ export function CuentaCorrienteProveedores() {
                       <tr key={c.idCompra}>
                         <td>{c.idCompra}</td>
                         <td>{c.fecha}</td>
-                        <td>${c.totalCompra.toFixed(2)}</td>
-                        <td>${c.saldoPendiente.toFixed(2)}</td>
+                        <td className="celda-numero">{formatoPesos(c.totalCompra)}</td>
+                        <td className="celda-numero texto-fuerte">{formatoPesos(c.saldoPendiente)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -294,8 +298,8 @@ export function CuentaCorrienteProveedores() {
                   <tr key={item.clientId}>
                     <td>{item.descripcionProducto}</td>
                     <td>{item.cantidad}</td>
-                    <td>{item.precioUnitario.toFixed(2)}</td>
-                    <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
+                    <td className="celda-numero">{formatoPesos(item.precioUnitario)}</td>
+                    <td className="celda-numero">{formatoPesos(item.cantidad * item.precioUnitario)}</td>
                     <td>
                       <button type="button" onClick={() => quitar(index)}>
                         Quitar
@@ -305,7 +309,7 @@ export function CuentaCorrienteProveedores() {
                 ))}
               </tbody>
             </table>
-            <p>Total a devolver: ${total.toFixed(2)}</p>
+            <p className="texto-fuerte">Total a devolver: {formatoPesos(total)}</p>
             <form onSubmit={onRegistrarDevolucion}>
               <label>
                 Motivo

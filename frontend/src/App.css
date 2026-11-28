@@ -21,8 +21,7 @@
 }
 
 .logo-texto {
-  display: inline-flex;
-  align-items: baseline;
+  display: inline-block;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -3561,4 +3560,311 @@ a.boton-grande:hover {
 
 .presupuestos-vista {
   margin-bottom: 20px;
+}
+
+/* ---------- Tabla de productos: entra entera en la PC y es tarjeta en el celular ---------- */
+.productos-tabla .tabla-productos {
+  min-width: 0;
+}
+
+.tabla-productos th,
+.tabla-productos td {
+  padding: 10px 12px;
+}
+
+.tabla-productos .celda-producto {
+  min-width: 180px;
+}
+
+.tabla-productos .producto-nombre {
+  display: block;
+  font-weight: 600;
+}
+
+.tabla-productos .celda-monto {
+  white-space: nowrap;
+}
+
+.tabla-productos .celda-acciones {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.btn-icono-peligro {
+  color: var(--error);
+  border-color: #e7b7b2;
+}
+
+.btn-icono-peligro:hover:not(:disabled) {
+  background: var(--error-bg);
+}
+
+.texto-solo-celular {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Cada producto es una tarjeta: nada queda escondido a la derecha. */
+  .tabla-productos,
+  .tabla-productos tbody {
+    display: block;
+    width: 100%;
+  }
+
+  main .tabla-productos {
+    display: block;
+    overflow: visible;
+  }
+
+  .tabla-productos thead {
+    display: none;
+  }
+
+  .tabla-productos tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tabla-productos td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+    padding: 6px 0;
+    border: none;
+    text-align: left;
+  }
+
+  .tabla-productos td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--apagado);
+  }
+
+  .tabla-productos .celda-producto {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .tabla-productos .celda-producto::before {
+    display: none;
+  }
+
+  .tabla-productos .producto-nombre {
+    font-size: 16px;
+  }
+
+  .tabla-productos .celda-monto,
+  .tabla-productos .celda-stock {
+    align-items: flex-start;
+  }
+
+  .tabla-productos .celda-acciones {
+    grid-column: 1 / -1;
+    width: auto;
+    padding-top: 10px;
+  }
+
+  .tabla-productos .productos-acciones {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .tabla-productos .productos-acciones .btn-icono {
+    flex: 1;
+    width: auto;
+    min-height: 44px;
+    gap: 8px;
+  }
+
+  .texto-solo-celular {
+    display: inline;
+  }
+
+  .tabla-productos .celda-editando input {
+    width: 100%;
+  }
+}
+
+.tabla-productos .celda-monto .celda-sub {
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .tabla-productos .celda-monto .celda-sub {
+    text-align: left;
+  }
+}
+
+/* ---------- Cuenta corriente de proveedores ---------- */
+.ccp-proveedor {
+  flex: 0 1 420px;
+}
+
+.ccp-saldo {
+  margin-bottom: 20px;
+  border-left: 5px solid var(--ok);
+}
+
+.ccp-saldo-deuda {
+  border-left-color: var(--error);
+}
+
+.ccp-saldo-deuda strong {
+  color: var(--error);
+}
+
+.ccp-saldo-ok strong {
+  color: var(--ok);
+}
+
+/* ---------- Nueva compra ---------- */
+.compra-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.compra-form > .tarjeta {
+  align-self: stretch;
+}
+
+.compra-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 16px;
+  padding: 18px 20px 4px;
+}
+
+.tabla-compra {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.tabla-compra input,
+.tabla-compra select {
+  width: 100%;
+  min-width: 0;
+}
+
+.tabla-compra th:nth-child(1) {
+  width: auto;
+}
+
+.tabla-compra th:nth-child(2) {
+  width: 90px;
+}
+
+.tabla-compra th:nth-child(4) {
+  width: 110px;
+}
+
+.tabla-compra th:nth-child(6) {
+  width: 120px;
+}
+
+.tabla-compra th:nth-child(7) {
+  width: 100px;
+}
+
+.tabla-compra .celda-precio-moneda {
+  display: table-cell;
+  white-space: nowrap;
+}
+
+.tabla-compra .celda-precio-moneda input {
+  display: inline-block;
+  width: calc(100% - 78px);
+}
+
+.tabla-compra .celda-precio-moneda select {
+  display: inline-block;
+  margin-left: 4px;
+  width: 72px;
+}
+
+.tabla-compra .agregar-producto {
+  flex-wrap: wrap;
+}
+
+.tabla-compra .agregar-producto input {
+  flex: 1 1 140px;
+  width: auto;
+}
+
+.compra-total {
+  font-size: 20px;
+}
+
+.tabla-compra th:nth-child(3),
+.tabla-compra th:nth-child(5) {
+  width: 190px;
+}
+
+.tabla-compra th:nth-child(2) {
+  width: 76px;
+}
+
+.tabla-compra th:nth-child(3),
+.tabla-compra th:nth-child(5) {
+  width: 168px;
+}
+
+.tabla-compra th:nth-child(4) {
+  width: 96px;
+}
+
+.tabla-compra th:nth-child(6) {
+  width: 104px;
+}
+
+.tabla-compra th:nth-child(7) {
+  width: 88px;
+}
+
+.tabla-compra th,
+.tabla-compra td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* ---------- Marca del menú: "SISTEMA D13" y "by oNce" ---------- */
+.logo-texto-n {
+  color: var(--azul);
+}
+
+.logo-texto-claro .logo-texto-n {
+  color: #8fb0e8;
+}
+
+.marca-sistema {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.marca-sistema-nombre {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.marca-sistema-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--navy-apagado);
 }

@@ -8,7 +8,7 @@ import { EncabezadoPagina } from '../components/EncabezadoPagina'
 import { claseFilaStock } from '../utils/stockColor'
 import { useCarrito } from '../hooks/useCarrito'
 import { hoyIso } from '../utils/date'
-import { formatoFechaHora } from '../utils/formato'
+import { formatoFechaHora, formatoPesos } from '../utils/formato'
 import { descargarBlob } from '../utils/descargarBlob'
 import type { DetallePresupuestoRequest, Producto, PresupuestoResponse } from '../types/api'
 
@@ -174,127 +174,200 @@ function NuevoPresupuesto({ idEmpleado }: { idEmpleado: number }) {
   }
 
   return (
-    <div>
-      <div className="agregar-producto">
-        <input
-          list="productos-datalist-presupuesto"
-          placeholder="Buscar producto por descripción o marca"
-          value={productoTexto}
-          onChange={(e) => setProductoTexto(e.target.value)}
-        />
-        <datalist id="productos-datalist-presupuesto">
-          {productos.map((producto) => (
-            <option key={producto.idProducto} value={etiquetaProducto(producto)} />
-          ))}
-        </datalist>
-        <input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
-        <button type="button" onClick={agregarAlCarrito} disabled={!productoSeleccionado}>
-          Agregar
-        </button>
-      </div>
-
-      <div className="agregar-producto">
-        <input
-          placeholder="Trabajo sin precio fijo (ej. Apertura de cerradura)"
-          value={manualDescripcion}
-          onChange={(e) => setManualDescripcion(e.target.value)}
-        />
-        <input
-          type="number"
-          min={1}
-          value={manualCantidad}
-          onChange={(e) => setManualCantidad(Number(e.target.value))}
-        />
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          placeholder="Precio"
-          value={manualPrecio}
-          onChange={(e) => setManualPrecio(e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={agregarItemManual}
-          disabled={!manualDescripcion.trim() || !manualPrecio}
-        >
-          Agregar ítem manual
-        </button>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Cantidad</th>
-            <th>Precio unitario</th>
-            <th>Subtotal</th>
-            <th>Stock actual</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {carrito.map((item, index) => (
-            <tr key={item.clientId} className={item.stockActual != null ? claseFilaStock(item.stockActual) : undefined}>
-              <td>{item.descripcionProducto}</td>
-              <td>{item.cantidad}</td>
-              <td>{item.precioUnitario.toFixed(2)}</td>
-              <td>{(item.cantidad * item.precioUnitario).toFixed(2)}</td>
-              <td>{item.stockActual ?? '—'}</td>
-              <td>
-                <button type="button" onClick={() => quitarDelCarrito(index)}>
-                  Quitar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        <strong>Total: {total.toFixed(2)}</strong>
-      </p>
-
-      <form onSubmit={onSubmit}>
-        <label>
-          Nombre del cliente
-          <input value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} required />
-        </label>
-        <label>
-          Email del cliente (opcional, necesario para enviarlo por mail)
-          <input type="email" value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} />
-        </label>
-        <label>
-          Teléfono del cliente (opcional)
-          <input value={clienteTelefono} onChange={(e) => setClienteTelefono(e.target.value)} />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={enviando || carrito.length === 0 || !clienteNombre}>
-          {enviando && <span className="spinner" />}
-          {enviando ? 'Guardando...' : 'Guardar presupuesto'}
-        </button>
-      </form>
-
+    <div className="cobros">
       {resultado && (
-        <div className="resultado">
-          <p>
-            Presupuesto #{resultado.idPresupuesto} guardado para {resultado.clienteNombre}. Total:{' '}
-            {resultado.totalPresupuesto.toFixed(2)}.
-          </p>
-          <button type="button" onClick={onDescargarPdf} disabled={descargandoPdf}>
-            {descargandoPdf && <span className="spinner" />}
-            {descargandoPdf ? 'Descargando...' : 'Descargar PDF'}
-          </button>
-          {resultado.clienteEmail && (
-            <button type="button" onClick={onEnviarEmail} disabled={enviandoEmail}>
-              {enviandoEmail && <span className="spinner" />}
-              {enviandoEmail ? 'Enviando...' : resultado.enviadoPorEmail ? 'Reenviar por email' : 'Enviar por email'}
+        <section className="tarjeta cobro-resultado" role="status">
+          <div className="cobro-resultado-titulo">
+            <strong>Presupuesto #{resultado.idPresupuesto} guardado</strong>
+            <span>
+              Para {resultado.clienteNombre} · Total {formatoPesos(resultado.totalPresupuesto)}
+            </span>
+          </div>
+          <div className="cobro-resultado-acciones">
+            <button type="button" onClick={onDescargarPdf} disabled={descargandoPdf}>
+              {descargandoPdf && <span className="spinner" aria-hidden="true" />}
+              {descargandoPdf ? 'Descargando…' : 'Descargar PDF'}
             </button>
-          )}
+            {resultado.clienteEmail && (
+              <button type="button" className="btn-secundario" onClick={onEnviarEmail} disabled={enviandoEmail}>
+                {enviandoEmail && <span className="spinner" aria-hidden="true" />}
+                {enviandoEmail ? 'Enviando…' : resultado.enviadoPorEmail ? 'Reenviar por email' : 'Enviar por email'}
+              </button>
+            )}
+          </div>
           {errorPdf && <p className="error">{errorPdf}</p>}
           {errorEmail && <p className="error">{errorEmail}</p>}
-          {mensajeEmail && <p className="resultado">{mensajeEmail}</p>}
-        </div>
+          {mensajeEmail && <p className="alerta alerta-ok">{mensajeEmail}</p>}
+        </section>
       )}
+
+      <div className="cobros-grilla">
+        <section className="tarjeta cobros-productos">
+          <header className="tarjeta-encabezado">
+            <h3>Productos y trabajos</h3>
+          </header>
+          <div className="cobros-carga">
+            <div className="cobros-buscar">
+              <span className="cobros-buscar-titulo">Producto del stock</span>
+              <div className="agregar-producto">
+                <input
+                  className="buscador-producto-texto"
+                  aria-label="Producto"
+                  list="productos-datalist-presupuesto"
+                  placeholder="Descripción o marca…"
+                  value={productoTexto}
+                  onChange={(e) => setProductoTexto(e.target.value)}
+                />
+                <datalist id="productos-datalist-presupuesto">
+                  {productos.map((producto) => (
+                    <option key={producto.idProducto} value={etiquetaProducto(producto)} />
+                  ))}
+                </datalist>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="buscador-producto-cantidad"
+                  aria-label="Cantidad"
+                  min={1}
+                  value={cantidad}
+                  onChange={(e) => setCantidad(Number(e.target.value))}
+                />
+                <button type="button" onClick={agregarAlCarrito} disabled={!productoSeleccionado}>
+                  Agregar
+                </button>
+              </div>
+            </div>
+            <div className="cobros-buscar">
+              <span className="cobros-buscar-titulo">Trabajo sin precio fijo</span>
+              <div className="agregar-producto">
+                <input
+                  className="buscador-producto-texto"
+                  aria-label="Descripción del trabajo"
+                  placeholder="Ej. Apertura de cerradura"
+                  value={manualDescripcion}
+                  onChange={(e) => setManualDescripcion(e.target.value)}
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="buscador-producto-cantidad"
+                  aria-label="Cantidad"
+                  min={1}
+                  value={manualCantidad}
+                  onChange={(e) => setManualCantidad(Number(e.target.value))}
+                />
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="trabajo-precio-manual"
+                  aria-label="Precio"
+                  min={0}
+                  step="0.01"
+                  placeholder="Precio"
+                  value={manualPrecio}
+                  onChange={(e) => setManualPrecio(e.target.value)}
+                />
+                <button type="button" onClick={agregarItemManual} disabled={!manualDescripcion.trim() || !manualPrecio}>
+                  Agregar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {carrito.length === 0 ? (
+            <p className="cobros-vacio">Agregá productos o trabajos para armar el presupuesto.</p>
+          ) : (
+            <div className="tabla-scroll">
+              <table className="cobros-carrito">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th className="celda-numero">Cantidad</th>
+                    <th className="celda-numero col-precio">Precio</th>
+                    <th className="celda-numero">Subtotal</th>
+                    <th className="celda-numero">Stock</th>
+                    <th>
+                      <span className="solo-lector">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carrito.map((item, index) => (
+                    <tr
+                      key={item.clientId}
+                      className={item.stockActual != null ? claseFilaStock(item.stockActual) : undefined}
+                    >
+                      <td className="texto-fuerte">{item.descripcionProducto}</td>
+                      <td className="celda-numero">{item.cantidad}</td>
+                      <td className="celda-numero col-precio">{formatoPesos(item.precioUnitario)}</td>
+                      <td className="celda-numero texto-fuerte">{formatoPesos(item.cantidad * item.precioUnitario)}</td>
+                      <td className="celda-numero">{item.stockActual ?? '—'}</td>
+                      <td className="celda-numero">
+                        <button
+                          type="button"
+                          className="btn-peligro-borde btn-chico"
+                          aria-label={`Quitar ${item.descripcionProducto}`}
+                          onClick={() => quitarDelCarrito(index)}
+                        >
+                          Quitar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <form className="tarjeta cobros-panel" onSubmit={onSubmit}>
+          <div className="cobros-total">
+            <span>Total del presupuesto</span>
+            <strong>{formatoPesos(total)}</strong>
+          </div>
+          <label>
+            Nombre del cliente
+            <input
+              autoComplete="off"
+              value={clienteNombre}
+              onChange={(e) => setClienteNombre(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Email (opcional, para enviarlo por mail)
+            <input
+              type="email"
+              autoComplete="off"
+              spellCheck={false}
+              value={clienteEmail}
+              onChange={(e) => setClienteEmail(e.target.value)}
+            />
+          </label>
+          <label>
+            Teléfono (opcional)
+            <input
+              type="tel"
+              autoComplete="off"
+              value={clienteTelefono}
+              onChange={(e) => setClienteTelefono(e.target.value)}
+            />
+          </label>
+          {error && (
+            <p className="alerta alerta-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            className="cobros-confirmar"
+            disabled={enviando || carrito.length === 0 || !clienteNombre}
+          >
+            {enviando && <span className="spinner" aria-hidden="true" />}
+            {enviando ? 'Guardando…' : 'Guardar presupuesto'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
@@ -369,7 +442,7 @@ function ConsultarPresupuestos() {
         </button>
       </form>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="alerta alerta-error">{error}</p>}
       {errorEmail && <p className="error">{errorEmail}</p>}
 
       {buscado && (
@@ -390,18 +463,19 @@ function ConsultarPresupuestos() {
               <Fragment key={p.idPresupuesto}>
                 <tr>
                   <td>
-                    <button type="button" onClick={() => setExpandidoId(expandidoId === p.idPresupuesto ? null : p.idPresupuesto)}>
+                    <button type="button" className="btn-suave btn-chico" aria-expanded={expandidoId === p.idPresupuesto} onClick={() => setExpandidoId(expandidoId === p.idPresupuesto ? null : p.idPresupuesto)}>
                       #{p.idPresupuesto}
                     </button>
                   </td>
                   <td>{formatoFechaHora(p.fecha)}</td>
                   <td>{p.clienteNombre}</td>
                   <td>{p.nombreEmpleado}</td>
-                  <td>{p.totalPresupuesto.toFixed(2)}</td>
-                  <td>{p.enviadoPorEmail ? 'Sí' : 'No'}</td>
+                  <td>{formatoPesos(p.totalPresupuesto)}</td>
+                  <td>{p.enviadoPorEmail ? <span className="badge badge-ok">Enviado</span> : <span className="badge">No enviado</span>}</td>
                   <td>
                     <button
                       type="button"
+                      className="btn-secundario btn-chico"
                       onClick={() => onDescargar(p.idPresupuesto)}
                       disabled={descargandoId === p.idPresupuesto}
                     >
@@ -410,6 +484,7 @@ function ConsultarPresupuestos() {
                     {p.clienteEmail && (
                       <button
                         type="button"
+                        className="btn-suave btn-chico"
                         onClick={() => onReenviar(p.idPresupuesto)}
                         disabled={enviandoEmailId === p.idPresupuesto}
                       >
@@ -435,8 +510,8 @@ function ConsultarPresupuestos() {
                             <tr key={i}>
                               <td>{d.descripcionProducto}</td>
                               <td>{d.cantidad}</td>
-                              <td>{d.precioUnitario.toFixed(2)}</td>
-                              <td>{d.subtotal.toFixed(2)}</td>
+                              <td>{formatoPesos(d.precioUnitario)}</td>
+                              <td>{formatoPesos(d.subtotal)}</td>
                             </tr>
                           ))}
                         </tbody>

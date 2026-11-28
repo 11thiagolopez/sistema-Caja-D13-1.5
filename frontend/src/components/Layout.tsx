@@ -11,7 +11,7 @@ import { AutorizacionesProvider, useAutorizaciones } from './AutorizacionesPendi
 import { BuscadorGlobal } from './BuscadorGlobal'
 import { Campanita } from './Campanita'
 import { CerrarCajaModal } from './CerrarCajaModal'
-import { Logo, LogoIcono } from './Logo'
+import { LogoIcono, MarcaSistema } from './Logo'
 import { RetiroModal } from './RetiroModal'
 import { ProveedoresModal } from './ProveedoresModal'
 import { CotizacionGateModal } from './CotizacionGateModal'
@@ -220,7 +220,7 @@ function LayoutContenido() {
         {!esTecnico && (
           <aside className={`sidebar ${sidebarAbierta ? '' : 'sidebar-cerrada'}`} aria-label="Menú principal">
             <div className="sidebar-marca">
-              <Logo tamano={40} claro />
+              <MarcaSistema />
             </div>
             <nav>
               {secciones.map((seccion) => (

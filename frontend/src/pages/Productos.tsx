@@ -330,23 +330,50 @@ export function Productos() {
     if (event.key === 'Escape') cancelarEdicion()
   }
 
-  function celdaEditable(
-    producto: Producto,
-    campo: CampoEditable,
-    valorMostrado: ReactNode,
-    tipo: 'text' | 'number',
-    paso?: string,
-    clase?: string,
-  ) {
-    if (!esAdmin) return <td className={clase}>{valorMostrado}</td>
+  // Celda de la tabla que el ADMIN edita tocándola. `etiqueta` se muestra en el celular, donde cada
+  // producto se ve como tarjeta (sin encabezados de columna); `debajo` agrega un dato en chico.
+  function celdaEditable({
+    producto,
+    campo,
+    valor,
+    tipo,
+    paso,
+    clase,
+    etiqueta,
+    debajo,
+  }: {
+    producto: Producto
+    campo: CampoEditable
+    valor: ReactNode
+    tipo: 'text' | 'number'
+    paso?: string
+    clase?: string
+    etiqueta: string
+    debajo?: ReactNode
+  }) {
+    const contenido = (
+      <>
+        {valor}
+        {debajo}
+      </>
+    )
+    if (!esAdmin) {
+      return (
+        <td className={clase} data-label={etiqueta}>
+          {contenido}
+        </td>
+      )
+    }
 
     const editando = celdaEditando?.id === producto.idProducto && celdaEditando.campo === campo
     if (editando) {
       return (
-        <td className={`celda-editando ${clase ?? ''}`}>
+        <td className={`celda-editando ${clase ?? ''}`} data-label={etiqueta}>
           <input
             type={tipo}
             step={paso}
+            inputMode={tipo === 'number' ? 'decimal' : undefined}
+            aria-label={etiqueta}
             min={campo === 'stockActual' ? 0 : undefined}
             autoFocus
             list={campo === 'proveedor' ? 'proveedores-edicion-datalist' : undefined}
@@ -363,10 +390,11 @@ export function Productos() {
     return (
       <td
         className={`celda-editable ${clase ?? ''}`}
+        data-label={etiqueta}
         onClick={() => empezarEdicion(producto, campo)}
         title="Tocar para editar"
       >
-        {guardandoId === producto.idProducto ? <span className="spinner" /> : valorMostrado}
+        {guardandoId === producto.idProducto ? <span className="spinner" aria-hidden="true" /> : contenido}
       </td>
     )
   }
@@ -375,7 +403,7 @@ export function Productos() {
   if (error) return <p className="alerta alerta-error">{error}</p>
 
   const hayFiltros = Boolean(filtroDescripcion || filtroMarca || filtroProveedor || filtroColorStock)
-  const precioUsd = (valor: number | null) => (valor != null ? <small>USD {valor.toFixed(2)}</small> : null)
+  const precioUsd = (valor: number | null) => (valor != null ? <small className="celda-sub">USD {valor.toFixed(2)}</small> : null)
 
   return (
     <div className="productos">
@@ -471,16 +499,15 @@ export function Productos() {
           </p>
         ) : (
           <div className="tabla-scroll">
-            <table>
+            <table className="tabla-productos">
               <thead>
                 <tr>
-                  <th>Descripción</th>
+                  <th>Producto</th>
                   <th>Marca</th>
                   <th>Proveedor</th>
-                  <th>Código interno</th>
-                  <th>Código de fábrica</th>
-                  <th className="celda-numero">Precio venta</th>
-                  <th className="celda-numero">Precio compra</th>
+                  <th>Cód. de fábrica</th>
+                  <th className="celda-numero">Venta</th>
+                  <th className="celda-numero">Compra</th>
                   <th className="celda-numero">Stock</th>
                   <th>
                     <span className="solo-lector">Acciones</span>
@@ -494,42 +521,61 @@ export function Productos() {
                     className={claseFilaStock(producto.stockActual)}
                     title={ETIQUETA_COLOR_STOCK[colorStock(producto.stockActual)]}
                   >
-                    {celdaEditable(producto, 'descripcion', producto.descripcion, 'text')}
-                    {celdaEditable(producto, 'marca', producto.marca ?? '—', 'text')}
-                    {celdaEditable(producto, 'proveedor', producto.proveedor || '—', 'text')}
-                    <td className="texto-apagado celda-codigo">{producto.codigoInterno}</td>
-                    {celdaEditable(producto, 'codigoFabrica', producto.codigoFabrica ?? '—', 'text', undefined, 'celda-codigo')}
-                    {celdaEditable(
+                    {celdaEditable({
                       producto,
-                      'precioVenta',
-                      <span className="celda-precio">
-                        <strong>{producto.precioVenta != null ? formatoPesos(producto.precioVenta) : '—'}</strong>
-                        {precioUsd(producto.precioVentaUsd)}
-                      </span>,
-                      'number',
-                      '0.01',
-                      'celda-numero',
-                    )}
-                    {celdaEditable(
+                      campo: 'descripcion',
+                      valor: <span className="producto-nombre">{producto.descripcion}</span>,
+                      tipo: 'text',
+                      clase: 'celda-producto',
+                      etiqueta: 'Producto',
+                      debajo: <small className="celda-sub">{producto.codigoInterno}</small>,
+                    })}
+                    {celdaEditable({ producto, campo: 'marca', valor: producto.marca ?? '—', tipo: 'text', etiqueta: 'Marca' })}
+                    {celdaEditable({
                       producto,
-                      'precioCompra',
-                      <span className="celda-precio">
-                        {producto.precioCompra != null ? formatoPesos(producto.precioCompra) : '—'}
-                        {precioUsd(producto.precioCompraUsd)}
-                      </span>,
-                      'number',
-                      '0.01',
-                      'celda-numero',
-                    )}
-                    {celdaEditable(
+                      campo: 'proveedor',
+                      valor: producto.proveedor || '—',
+                      tipo: 'text',
+                      etiqueta: 'Proveedor',
+                    })}
+                    {celdaEditable({
                       producto,
-                      'stockActual',
-                      <strong>{producto.stockActual}</strong>,
-                      'number',
-                      '1',
-                      'celda-numero',
-                    )}
-                    <td>
+                      campo: 'codigoFabrica',
+                      valor: producto.codigoFabrica ?? '—',
+                      tipo: 'text',
+                      clase: 'celda-codigo',
+                      etiqueta: 'Cód. de fábrica',
+                    })}
+                    {celdaEditable({
+                      producto,
+                      campo: 'precioVenta',
+                      valor: <strong>{producto.precioVenta != null ? formatoPesos(producto.precioVenta) : '—'}</strong>,
+                      tipo: 'number',
+                      paso: '0.01',
+                      clase: 'celda-numero celda-monto',
+                      etiqueta: 'Precio de venta',
+                      debajo: precioUsd(producto.precioVentaUsd),
+                    })}
+                    {celdaEditable({
+                      producto,
+                      campo: 'precioCompra',
+                      valor: producto.precioCompra != null ? formatoPesos(producto.precioCompra) : '—',
+                      tipo: 'number',
+                      paso: '0.01',
+                      clase: 'celda-numero celda-monto',
+                      etiqueta: 'Precio de compra',
+                      debajo: precioUsd(producto.precioCompraUsd),
+                    })}
+                    {celdaEditable({
+                      producto,
+                      campo: 'stockActual',
+                      valor: <strong>{producto.stockActual}</strong>,
+                      tipo: 'number',
+                      paso: '1',
+                      clase: 'celda-numero celda-stock',
+                      etiqueta: 'Stock',
+                    })}
+                    <td className="celda-acciones">
                       <div className="productos-acciones">
                         <button
                           type="button"
@@ -541,16 +587,25 @@ export function Productos() {
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z" />
                           </svg>
+                          <span className="texto-solo-celular">Etiqueta</span>
                         </button>
                         {esAdmin && (
                           <button
                             type="button"
-                            className="btn-peligro-borde btn-chico"
+                            className="btn-icono btn-icono-peligro"
                             onClick={() => onEliminar(producto)}
                             disabled={eliminandoId === producto.idProducto}
+                            aria-label={`Eliminar ${producto.descripcion}`}
+                            title="Eliminar producto"
                           >
-                            {eliminandoId === producto.idProducto && <span className="spinner" aria-hidden="true" />}
-                            {eliminandoId === producto.idProducto ? 'Eliminando…' : 'Eliminar'}
+                            {eliminandoId === producto.idProducto ? (
+                              <span className="spinner" aria-hidden="true" />
+                            ) : (
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                              </svg>
+                            )}
+                            <span className="texto-solo-celular">Eliminar</span>
                           </button>
                         )}
                       </div>
